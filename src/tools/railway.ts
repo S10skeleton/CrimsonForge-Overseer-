@@ -9,7 +9,6 @@ import type { ToolResult, RailwayData, AgentTool } from '../types/index.js'
 
 const RAILWAY_GRAPHQL_URL = 'https://backboard.railway.app/graphql/v2'
 const RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN!
-const _RAILWAY_PROJECT_ID = process.env.RAILWAY_PROJECT_ID!
 const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID!
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
@@ -63,7 +62,7 @@ async function fetchRailwayStatus(): Promise<{
       }
       errors?: Array<{ message: string }>
     }
-    const data: RailwayResponse = await res.json()
+    const data = (await res.json()) as RailwayResponse
 
     if (data.errors) {
       throw new Error(`GraphQL error: ${data.errors.map((e) => e.message).join(', ')}`)

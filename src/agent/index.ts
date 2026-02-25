@@ -62,6 +62,6 @@ When responding:
 - Suggest actions to fix problems
 - If something is unclear, ask for clarification or use tools to investigate`,
     availableTools: allAgentTools,
-    recentBriefing: briefing,
+    recentBriefing: _briefing,
   }
 }

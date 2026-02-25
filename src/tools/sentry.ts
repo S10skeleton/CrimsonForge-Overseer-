@@ -45,7 +45,7 @@ async function fetchSentryIssues(query: string): Promise<SentryIssueRaw[]> {
       throw new Error(`Sentry API error: ${res.statusText}`)
     }
 
-    return (await res.json()) as SentryIssueRaw[]
+    return ((await res.json()) as unknown) as SentryIssueRaw[]
   } catch (err) {
     console.error('Error fetching Sentry issues:', err)
     return []
