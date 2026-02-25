@@ -18,8 +18,8 @@ function validateEnvironment(): void {
     'SENTRY_ORG',
     'SENTRY_PROJECT',
     'RAILWAY_API_TOKEN',
-    'RAILWAY_PROJECT_ID',
-    'RAILWAY_SERVICE_ID',
+    'CF_PROJECT_ID',
+    'CF_SERVICE_ID',
   ]
 
   const missing = required.filter((key) => !process.env[key])

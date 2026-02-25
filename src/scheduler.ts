@@ -53,7 +53,7 @@ async function runSilentHealthCheck(): Promise<void> {
           severity: 'critical',
           tool: 'railway',
           message: 'Railway deployment is DOWN',
-          actionUrl: 'https://railway.app/project/' + process.env.RAILWAY_PROJECT_ID,
+          actionUrl: 'https://railway.app/project/' + process.env.CF_PROJECT_ID,
         })
       }
 
