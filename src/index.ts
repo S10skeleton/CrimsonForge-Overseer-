@@ -3,6 +3,7 @@
  * Validates environment and starts the scheduler
  */
 
+import { createServer } from 'http'
 import { startScheduler } from './scheduler.js'
 
 // ─── Environment Validation ────────────────────────────────────────────────
@@ -44,6 +45,15 @@ async function main(): Promise<void> {
 
   // Start the scheduler
   startScheduler()
+
+  // Minimal HTTP server so Railway's health check doesn't SIGTERM the process
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
+  createServer((_, res) => {
+    res.writeHead(200)
+    res.end('OK')
+  }).listen(port, () => {
+    console.log(`[health] Listening on port ${port}`)
+  })
 
   console.log('✅ Crimson Forge Ops is running.')
   console.log('   Monitoring tasks scheduled. Press Ctrl+C to exit.')
