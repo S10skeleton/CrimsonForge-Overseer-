@@ -13,6 +13,32 @@ const RAILWAY_SERVICE_ID = process.env.CF_SERVICE_ID!
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
 
+interface DeploymentEdge {
+  node?: {
+    id: string
+    status: string
+    createdAt: string
+  }
+}
+interface RailwayResponse {
+  data?: {
+    service?: {
+      id: string
+      name: string
+      deployments?: {
+        edges: DeploymentEdge[]
+      }
+    }
+  }
+  errors?: Array<{ message: string }>
+}
+
+function resolveStatus(deploymentStatus: string): string {
+  if (deploymentStatus === 'SUCCESS' || deploymentStatus === 'ACTIVE') return 'healthy'
+  if (deploymentStatus === 'FAILED' || deploymentStatus === 'CRASHED') return 'down'
+  return 'degraded'
+}
+
 async function fetchRailwayStatus(): Promise<{
   status: string
   latestDeploymentStatus: string | null
@@ -20,86 +46,81 @@ async function fetchRailwayStatus(): Promise<{
 }> {
   const query = `
     query {
-      deployments(input: { serviceId: "${RAILWAY_SERVICE_ID}", first: 1 }) {
-        edges {
-          node {
-            id
-            status
-            createdAt
+      service(id: "${RAILWAY_SERVICE_ID}") {
+        id
+        name
+        deployments(first: 1) {
+          edges {
+            node {
+              id
+              status
+              createdAt
+            }
           }
         }
       }
     }
   `
 
+  const res = await fetch(RAILWAY_GRAPHQL_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RAILWAY_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query }),
+    signal: AbortSignal.timeout(10_000),
+  })
+
+  const body = await res.text()
+
+  if (!res.ok) {
+    console.error(`[railway] HTTP ${res.status} from Railway API:`, body)
+    return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
+  }
+
+  let data: RailwayResponse
   try {
-    const res = await fetch(RAILWAY_GRAPHQL_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${RAILWAY_API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(10_000),
-    })
+    data = JSON.parse(body) as RailwayResponse
+  } catch {
+    console.error('[railway] Failed to parse Railway API response:', body)
+    return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
+  }
 
-    if (!res.ok) {
-      throw new Error(`Railway API error: ${res.statusText}`)
-    }
+  if (data.errors) {
+    console.error('[railway] GraphQL errors:', JSON.stringify(data.errors), '\nFull response:', body)
+    return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
+  }
 
-    interface DeploymentEdge {
-      node?: {
-        id: string
-        status: string
-        createdAt: string
-      }
-    }
-    interface RailwayResponse {
-      data?: {
-        deployments?: {
-          edges: DeploymentEdge[]
-        }
-      }
-      errors?: Array<{ message: string }>
-    }
-    const data = (await res.json()) as RailwayResponse
+  const deployment = data.data?.service?.deployments?.edges[0]?.node
 
-    if (data.errors) {
-      throw new Error(`GraphQL error: ${data.errors.map((e) => e.message).join(', ')}`)
-    }
+  if (!deployment) {
+    console.warn('[railway] No deployments found for service:', RAILWAY_SERVICE_ID)
+    return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
+  }
 
-    const deployment = data.data?.deployments?.edges[0]?.node
-
-    return {
-      status: deployment?.status === 'SUCCESS' ? 'healthy' : 'degraded',
-      latestDeploymentStatus: deployment?.status || null,
-      latestDeploymentAt: deployment?.createdAt || null,
-    }
-  } catch (err) {
-    console.error('Error fetching Railway status:', err)
-    return {
-      status: 'down',
-      latestDeploymentStatus: null,
-      latestDeploymentAt: null,
-    }
+  return {
+    status: resolveStatus(deployment.status),
+    latestDeploymentStatus: deployment.status,
+    latestDeploymentAt: deployment.createdAt,
   }
 }
 
 export async function runRailwayCheck(): Promise<ToolResult<RailwayData>> {
   try {
     const railwayStatus = await fetchRailwayStatus()
-
     return {
       tool: 'railway',
       success: true,
       timestamp: new Date().toISOString(),
       data: {
-        status: (railwayStatus.status as 'healthy' | 'degraded' | 'down' | 'unknown'),
+        status: railwayStatus.status as 'healthy' | 'degraded' | 'down' | 'unknown',
         latestDeploymentStatus: railwayStatus.latestDeploymentStatus,
         latestDeploymentAt: railwayStatus.latestDeploymentAt,
       },
     }
   } catch (err) {
+    console.error('[railway] Unexpected error in runRailwayCheck:', err)
     return {
       tool: 'railway',
       success: false,
