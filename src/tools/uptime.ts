@@ -16,7 +16,9 @@ const ENDPOINTS = [
 
 async function pingEndpoint(url: string): Promise<UptimeData> {
   const start = Date.now()
+  console.log(`[uptime] Checking: ${url}`)
   const res = await fetch(url, { signal: AbortSignal.timeout(20_000) })
+  console.log(`[uptime] Response: ${res.status} in ${Date.now() - start}ms`)
   return {
     url,
     status: res.ok ? 'healthy' : 'degraded',
@@ -28,12 +30,15 @@ async function pingEndpoint(url: string): Promise<UptimeData> {
 async function checkEndpoint(url: string): Promise<UptimeData> {
   try {
     return await pingEndpoint(url)
-  } catch {
+  } catch (err) {
+    console.log(`[uptime] Failed: ${err instanceof Error ? err.message : String(err)}`)
     // First attempt failed — wait 5s and retry once
+    console.log(`[uptime] First attempt failed, retrying in 5s...`)
     await new Promise((resolve) => setTimeout(resolve, 5_000))
     try {
       return await pingEndpoint(url)
-    } catch {
+    } catch (retryErr) {
+      console.log(`[uptime] Retry failed: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`)
       return { url, status: 'down', responseMs: null, statusCode: null }
     }
   }
