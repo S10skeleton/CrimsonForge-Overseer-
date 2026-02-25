@@ -14,7 +14,7 @@ import { allAgentTools } from '../tools/index.js'
  */
 export async function runAgent(
   userMessage: string,
-  recentBriefing?: MorningBriefing
+  _recentBriefing?: MorningBriefing
 ): Promise<string> {
   // TODO: Wire up Anthropic API here
   //
@@ -39,7 +39,7 @@ export async function runAgent(
 /**
  * Builds the context object for the AI agent
  */
-export function buildContext(briefing?: MorningBriefing): AgentContext {
+export function buildContext(_briefing?: MorningBriefing): AgentContext {
   return {
     systemPrompt: `You are the ops agent for Crimson Forge, an AI-powered 
 automotive shop management platform. You monitor infrastructure health, 

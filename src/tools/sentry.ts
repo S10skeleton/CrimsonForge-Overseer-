@@ -37,7 +37,7 @@ async function fetchSentryIssues(
       throw new Error(`Sentry API error: ${res.statusText}`)
     }
 
-    return await res.json()
+    return (await res.json()) as Array<{ id: string; title: string; level: string; count: number; firstSeen: string; lastSeen: string; permalink: string }>
   } catch (err) {
     console.error('Error fetching Sentry issues:', err)
     return []

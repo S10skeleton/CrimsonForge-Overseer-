@@ -56,12 +56,12 @@ export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
       shop_name: string
       last_activity_at: string | null
     }
-    const { data: silentShopsData } = await supabase.rpc<SilentShopRow>(
+    const { data: silentShopsData } = await supabase.rpc<SilentShopRow[]>(
       'get_silent_shops',
       { threshold_days: SILENT_SHOP_THRESHOLD_DAYS }
     )
 
-    const silentShops = (silentShopsData || []).map((row) => {
+    const silentShops = (silentShopsData || []).map((row: SilentShopRow) => {
       const lastActivity = row.last_activity_at
         ? new Date(row.last_activity_at)
         : null
