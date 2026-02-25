@@ -14,20 +14,28 @@ const ENDPOINTS = [
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
 
-async function checkEndpoint(url: string): Promise<UptimeData> {
+async function pingEndpoint(url: string): Promise<UptimeData> {
   const start = Date.now()
+  const res = await fetch(url, { signal: AbortSignal.timeout(20_000) })
+  return {
+    url,
+    status: res.ok ? 'healthy' : 'degraded',
+    responseMs: Date.now() - start,
+    statusCode: res.status,
+  }
+}
+
+async function checkEndpoint(url: string): Promise<UptimeData> {
   try {
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(10_000),
-    })
-    return {
-      url,
-      status: res.ok ? 'healthy' : 'degraded',
-      responseMs: Date.now() - start,
-      statusCode: res.status,
-    }
+    return await pingEndpoint(url)
   } catch {
-    return { url, status: 'down', responseMs: null, statusCode: null }
+    // First attempt failed — wait 5s and retry once
+    await new Promise((resolve) => setTimeout(resolve, 5_000))
+    try {
+      return await pingEndpoint(url)
+    } catch {
+      return { url, status: 'down', responseMs: null, statusCode: null }
+    }
   }
 }
 
