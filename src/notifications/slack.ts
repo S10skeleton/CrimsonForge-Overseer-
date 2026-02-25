@@ -131,7 +131,7 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
       message += '*SHOPS TO WATCH* 👀\n'
       for (const shop of briefing.supabase.data.silentShops) {
         const lastActivity = shop.lastActivityAt
-          ? new Date(shop.lastActivityAt).toLocaleDateString()
+          ? new Date(shop.lastActivityAt).toLocaleDateString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })
           : 'Never'
         message += `${shop.shopName} — ${shop.daysSilent} days silent (last: ${lastActivity})\n`
       }
@@ -189,7 +189,7 @@ export async function sendAlert(alert: Alert): Promise<void> {
   try {
     const emoji = alert.severity === 'critical' ? '🔴' : '⚠️'
     let message = `${emoji} ALERT — ${alert.tool.toUpperCase()} ISSUE\n`
-    message += `Detected: ${new Date().toLocaleTimeString()}\n\n`
+    message += `Detected: ${new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })}\n\n`
     message += `${alert.message}\n`
 
     if (alert.details) {
