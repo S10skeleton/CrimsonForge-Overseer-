@@ -14,9 +14,17 @@ const SENTRY_AUTH_TOKEN = process.env.SENTRY_AUTH_TOKEN!
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
 
-async function fetchSentryIssues(
-  query: string
-): Promise<Array<{ id: string; title: string; level: string; count: number; firstSeen: string; lastSeen: string; permalink: string }>> {
+interface SentryIssueRaw {
+  id: string
+  title: string
+  level: string
+  count: number
+  firstSeen: string
+  lastSeen: string
+  permalink: string
+}
+
+async function fetchSentryIssues(query: string): Promise<SentryIssueRaw[]> {
   try {
     const url = new URL(
       `${SENTRY_API_BASE}/projects/${SENTRY_ORG}/${SENTRY_PROJECT}/issues/`
@@ -37,7 +45,7 @@ async function fetchSentryIssues(
       throw new Error(`Sentry API error: ${res.statusText}`)
     }
 
-    return (await res.json()) as Array<{ id: string; title: string; level: string; count: number; firstSeen: string; lastSeen: string; permalink: string }>
+    return (await res.json()) as SentryIssueRaw[]
   } catch (err) {
     console.error('Error fetching Sentry issues:', err)
     return []

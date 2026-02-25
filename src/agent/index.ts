@@ -21,7 +21,7 @@ export async function runAgent(
   // Steps when implementing:
   // 1. npm install @anthropic-ai/sdk
   // 2. const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  // 3. Build context from recentBriefing + userMessage using buildContext()
+  // 3. Build context from _recentBriefing + userMessage using buildContext()
   // 4. Pass allAgentTools as tools parameter
   // 5. Handle tool_use responses by calling tool.execute()
   // 6. Loop until stop_reason === 'end_turn'
