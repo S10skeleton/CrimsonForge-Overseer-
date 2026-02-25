@@ -9,7 +9,7 @@ import type { ToolResult, RailwayData, AgentTool } from '../types/index.js'
 
 const RAILWAY_GRAPHQL_URL = 'https://backboard.railway.app/graphql/v2'
 const RAILWAY_API_TOKEN = process.env.RAILWAY_API_TOKEN!
-const RAILWAY_SERVICE_ID = process.env.RAILWAY_SERVICE_ID!
+const RAILWAY_SERVICE_ID = process.env.CF_SERVICE_ID!
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
 
