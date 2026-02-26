@@ -17,13 +17,13 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL!
 function getItemEmoji(status: string): string {
   switch (status) {
     case 'healthy':
-      return '✅'
+      return '\u2705'     // ✅
     case 'degraded':
-      return '⚠️'
+      return '\u26A0\uFE0F' // ⚠️
     case 'down':
-      return '🔴'
+      return '\uD83D\uDD34' // 🔴
     default:
-      return '❓'
+      return '\u2753'     // ❓
   }
 }
 
@@ -100,7 +100,8 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     if (briefing.supabase.success) {
       message += formatHealthItem(
         'Supabase',
-        briefing.supabase.data.connectionStatus
+        briefing.supabase.data.connectionStatus,
+        'connected'
       ) + '\n'
     } else {
       message += formatHealthItem('Supabase', 'down', 'Tool failed') + '\n'
