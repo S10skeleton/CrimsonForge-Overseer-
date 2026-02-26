@@ -166,14 +166,15 @@ async function runMorningBriefing(): Promise<void> {
 export function startScheduler(): void {
   console.log('[SCHEDULER] Starting cron jobs...')
 
+  const timezone = process.env.TIMEZONE || 'America/Denver'
+
   // Every 15 minutes: silent health check
-  cron.schedule('*/15 * * * *', runSilentHealthCheck)
+  cron.schedule('*/15 * * * *', runSilentHealthCheck, { timezone })
   console.log('[SCHEDULER] Scheduled: Silent health check every 15 minutes')
 
   // Every morning at specified hour: full briefing
-  const cronExpression = `0 ${MORNING_BRIEFING_HOUR} * * *`
-  cron.schedule(cronExpression, runMorningBriefing)
-  console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00`)
+  cron.schedule(`0 ${MORNING_BRIEFING_HOUR} * * *`, runMorningBriefing, { timezone })
+  console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00 (${timezone})`)
 }
 
 // Export functions for manual testing
