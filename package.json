@@ -8,7 +8,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "briefing": "tsx src/trigger-briefing.ts"
   },
   "keywords": [
     "crimson-forge",
@@ -20,6 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
+    "@sentry/node": "^10.40.0",
     "@supabase/supabase-js": "^2.38.0",
     "node-cron": "^3.0.2"
   },
