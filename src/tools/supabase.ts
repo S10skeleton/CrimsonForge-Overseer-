@@ -21,34 +21,42 @@ const SILENT_SHOP_THRESHOLD_DAYS = Number(
 
 export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
   try {
-    // Check connection
-    const connectionCheck = await supabase.from('shops').select('count').limit(1)
+    console.log('[supabase] Running shop activity queries...')
 
-    if (connectionCheck.error) {
-      throw new Error(`Database connection failed: ${connectionCheck.error.message}`)
+    // Check connection
+    const { error: connError } = await supabase.from('shops').select('count').limit(1)
+    if (connError) {
+      throw new Error(`Database connection failed: ${connError.message}`)
     }
+    console.log('[supabase] Connection: OK')
 
     // Get total shops
-    const { count: totalShops } = await supabase
+    const { count: totalShops, error: shopsError } = await supabase
       .from('shops')
       .select('*', { count: 'exact', head: true })
+    console.log('[supabase] Total shops:', totalShops, shopsError ? `ERROR: ${shopsError.message}` : 'OK')
 
     // Get active shops last 24h
-    const { data: activeShops } = await supabase.rpc(
-      'get_active_shops_last_24h'
-    )
+    const { data: activeShops, error: activeError } = await supabase.rpc('get_active_shops_last_24h')
+    console.log('[supabase] Active shops:', activeShops?.length ?? 0, activeError ? `ERROR: ${activeError.message}` : 'OK')
 
     // Get tickets created last 24h
-    const { count: ticketsCreatedLast24h } = await supabase
+    const { count: ticketsCreatedLast24h, error: ticketsError } = await supabase
       .from('tickets')
       .select('id', { count: 'exact', head: true })
       .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    console.log('[supabase] Tickets last 24h:', ticketsCreatedLast24h, ticketsError ? `ERROR: ${ticketsError.message}` : 'OK')
 
-    // Get AI sessions last 24h
-    const { count: aiSessionsLast24h } = await supabase
+    // Get AI sessions last 24h — table may not exist yet, degrade gracefully
+    const { count: aiSessionsLast24h, error: aiError } = await supabase
       .from('ai_sessions')
       .select('id', { count: 'exact', head: true })
       .gt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    if (aiError) {
+      console.log('[supabase] AI sessions: 0 (table unavailable:', aiError.message, ')')
+    } else {
+      console.log('[supabase] AI sessions:', aiSessionsLast24h, 'OK')
+    }
 
     // Get silent shops (no activity in N days)
     interface SilentShopRow {
@@ -56,9 +64,10 @@ export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
       shop_name: string
       last_activity_at: string | null
     }
-    const { data: silentShopsData } = await supabase.rpc('get_silent_shops', {
+    const { data: silentShopsData, error: silentError } = await supabase.rpc('get_silent_shops', {
       threshold_days: SILENT_SHOP_THRESHOLD_DAYS,
-    }) as { data: SilentShopRow[] | null }
+    }) as { data: SilentShopRow[] | null, error: { message: string } | null }
+    console.log('[supabase] Silent shops:', silentShopsData?.length ?? 0, silentError ? `ERROR: ${silentError.message}` : 'OK')
 
     const silentShops = (silentShopsData || []).map((row: SilentShopRow) => {
       const lastActivity = row.last_activity_at

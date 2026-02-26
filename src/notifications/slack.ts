@@ -12,22 +12,6 @@ const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL!
 // ─── Helper Functions ─────────────────────────────────────────────────────
 
 /**
- * Determines the overall status emoji
- */
-function getStatusEmoji(overallStatus: string): string {
-  switch (overallStatus) {
-    case 'healthy':
-      return '🟢'
-    case 'degraded':
-      return '🟡'
-    case 'down':
-      return '🔴'
-    default:
-      return '⚪'
-  }
-}
-
-/**
  * Determines status icon for individual items
  */
 function getItemEmoji(status: string): string {
@@ -62,9 +46,19 @@ function formatHealthItem(name: string, status: string, details?: string): strin
  */
 export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
   try {
-    const statusEmoji = getStatusEmoji(briefing.overallStatus)
-    const statusText =
-      briefing.overallStatus === 'healthy' ? 'ALL SYSTEMS GO' : 'ISSUES DETECTED'
+    // Only flag real issues — Railway unknown and email unavailable are not issues
+    const isUptimeDown =
+      briefing.uptime.success &&
+      Array.isArray(briefing.uptime.data) &&
+      briefing.uptime.data.some((e) => e.status === 'down')
+    const isSupabaseDown =
+      !briefing.supabase.success ||
+      briefing.supabase.data?.connectionStatus === 'down'
+    const hasNewErrors =
+      briefing.sentry.success && (briefing.sentry.data?.newIssueCount ?? 0) > 0
+    const hasRealIssues = isUptimeDown || isSupabaseDown || hasNewErrors
+    const statusEmoji = isUptimeDown || isSupabaseDown ? '🔴' : hasNewErrors ? '🟡' : '🟢'
+    const statusText = hasRealIssues ? 'ISSUES DETECTED' : 'ALL SYSTEMS GO'
     const date = new Date(briefing.timestamp)
     const timeStr = date.toLocaleTimeString('en-US', {
       hour: '2-digit',
@@ -85,22 +79,22 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     message += '*INFRASTRUCTURE*\n'
     if (briefing.uptime.success && Array.isArray(briefing.uptime.data)) {
       for (const endpoint of briefing.uptime.data) {
-        const details =
-          endpoint.responseMs !== null ? `${endpoint.responseMs}ms` : 'No response'
-        message += formatHealthItem(endpoint.url, endpoint.status, details) + '\n'
+        const displayName = (() => { try { return new URL(endpoint.url).hostname } catch { return endpoint.url } })()
+        const details = endpoint.responseMs !== null ? `${endpoint.responseMs}ms` : 'No response'
+        message += formatHealthItem(displayName, endpoint.status, details) + '\n'
       }
     } else {
       message += formatHealthItem('Uptime Check', 'down', 'Tool failed') + '\n'
     }
 
-    if (briefing.railway.success) {
+    if (briefing.railway.success && briefing.railway.data.status !== 'unknown') {
       message += formatHealthItem(
         'Railway API',
         briefing.railway.data.status,
         briefing.railway.data.latestDeploymentStatus || undefined
       ) + '\n'
     } else {
-      message += formatHealthItem('Railway API', 'down', 'Tool failed') + '\n'
+      message += '⚠️ Railway API — check unavailable\n'
     }
 
     if (briefing.supabase.success) {
