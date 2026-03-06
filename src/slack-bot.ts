@@ -3,7 +3,8 @@
  * Enables two-way conversation — listens for messages and routes to AI agent
  */
 
-import { App, LogLevel } from '@slack/bolt'
+import pkg from '@slack/bolt'
+const { App, LogLevel } = pkg
 import { runAgent } from './agent/index.js'
 import type { MorningBriefing } from './types/index.js'
 
