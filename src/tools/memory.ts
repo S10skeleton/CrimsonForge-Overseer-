@@ -10,8 +10,8 @@ import type { ToolResult, AgentTool } from '../types/index.js'
 // ─── Supabase client ──────────────────────────────────────────────────────
 
 function getClient() {
-  const url = process.env.SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const url = process.env.ELARA_SUPABASE_URL!
+  const key = process.env.ELARA_SUPABASE_KEY!
   return createClient(url, key)
 }
 

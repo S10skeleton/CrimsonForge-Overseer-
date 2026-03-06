@@ -28,6 +28,8 @@ function validateEnvironment(): void {
     'ANTHROPIC_API_KEY',
     'SLACK_BOT_TOKEN',
     'SLACK_APP_TOKEN',
+    'ELARA_SUPABASE_URL',
+    'ELARA_SUPABASE_KEY',
     'GOOGLE_CLIENT_ID',
     'GOOGLE_CLIENT_SECRET',
     'GOOGLE_REFRESH_TOKEN',

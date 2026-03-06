@@ -40,8 +40,8 @@ interface RuntimeMemory {
 // ─── Memory Loader ────────────────────────────────────────────────────────
 
 export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
-  const url = process.env.SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = process.env.ELARA_SUPABASE_URL
+  const key = process.env.ELARA_SUPABASE_KEY
 
   const empty: RuntimeMemory = {
     facts: [],

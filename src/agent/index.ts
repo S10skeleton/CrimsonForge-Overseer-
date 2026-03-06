@@ -37,7 +37,7 @@ export async function runAgent(userMessage: string, recentBriefing?: MorningBrie
     iterations++
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5-20251022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 2048,
       system: systemPrompt,
       tools,
@@ -140,7 +140,7 @@ Your voice. Direct. Warm. No preamble. No filler.`
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5-20251022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
