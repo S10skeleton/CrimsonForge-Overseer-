@@ -57,7 +57,7 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     const hasNewErrors =
       briefing.sentry.success && (briefing.sentry.data?.newIssueCount ?? 0) > 0
     const hasRealIssues = isUptimeDown || isSupabaseDown || hasNewErrors
-    const statusEmoji = isUptimeDown || isSupabaseDown ? '🔴' : hasNewErrors ? '🟡' : '🟢'
+    const statusEmoji = isUptimeDown || isSupabaseDown ? '\uD83D\uDD34' : hasNewErrors ? '\uD83D\uDFE1' : '\uD83D\uDFE2'
     const statusText = hasRealIssues ? 'ISSUES DETECTED' : 'ALL SYSTEMS GO'
     const date = new Date(briefing.timestamp)
     const timeStr = date.toLocaleTimeString('en-US', {
@@ -72,8 +72,8 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
       timeZone: process.env.TIMEZONE || 'America/Detroit',
     })
 
-    let message = `${statusEmoji} CRIMSON FORGE — ${statusText}\n`
-    message += `${dateStr} · ${timeStr}\n\n`
+    let message = `${statusEmoji} CRIMSON FORGE \u2014 ${statusText}\n`
+    message += `${dateStr} \u00B7 ${timeStr}\n\n`
 
     // Infrastructure section
     message += '*INFRASTRUCTURE*\n'
@@ -94,7 +94,7 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
         briefing.railway.data.latestDeploymentStatus || undefined
       ) + '\n'
     } else {
-      message += '⚠️ Railway API — check unavailable\n'
+      message += '\u26A0\uFE0F Railway API \u2014 check unavailable\n'
     }
 
     if (briefing.supabase.success) {
@@ -112,9 +112,9 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     // Activity section
     message += '*ACTIVITY (last 24h)*\n'
     if (briefing.supabase.success) {
-      message += `🏪 ${briefing.supabase.data.activeShopsLast24h} active shops\n`
-      message += `🎫 ${briefing.supabase.data.ticketsCreatedLast24h} tickets created\n`
-      message += `🤖 ${briefing.supabase.data.aiSessionsLast24h} AI sessions\n`
+      message += `\uD83C\uDFEA ${briefing.supabase.data.activeShopsLast24h} active shops\n`
+      message += `\uD83C\uDFAB ${briefing.supabase.data.ticketsCreatedLast24h} tickets created\n`
+      message += `\uD83E\uDD16 ${briefing.supabase.data.aiSessionsLast24h} AI sessions\n`
     } else {
       message += '_Activity data unavailable_\n'
     }
@@ -123,12 +123,12 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 
     // Shops to watch section
     if (briefing.supabase.success && briefing.supabase.data.silentShops.length > 0) {
-      message += '*SHOPS TO WATCH* 👀\n'
+      message += '*SHOPS TO WATCH* \uD83D\uDC40\n'
       for (const shop of briefing.supabase.data.silentShops) {
         const lastActivity = shop.lastActivityAt
           ? new Date(shop.lastActivityAt).toLocaleDateString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })
           : 'Never'
-        message += `${shop.shopName} — ${shop.daysSilent} days silent (last: ${lastActivity})\n`
+        message += `${shop.shopName} \u2014 ${shop.daysSilent} days silent (last: ${lastActivity})\n`
       }
       message += '\n'
     }
@@ -136,9 +136,9 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     // Support section
     message += '*SUPPORT*\n'
     if (briefing.email.success) {
-      message += `📬 ${briefing.email.data.unreadCount} unread emails\n`
+      message += `\uD83D\uDCEC ${briefing.email.data.unreadCount} unread emails\n`
     } else {
-      message += `⚠️ Email check unavailable\n`
+      message += `\u26A0\uFE0F Email check unavailable\n`
     }
 
     message += '\n'
@@ -147,23 +147,23 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
     message += '*ERRORS*\n'
     if (briefing.sentry.success) {
       if (briefing.sentry.data.newIssueCount === 0) {
-        message += '✅ No new Sentry issues\n'
+        message += '\u2705 No new Sentry issues\n'
       } else {
-        message += `⚠️ ${briefing.sentry.data.newIssueCount} new issues since yesterday\n`
+        message += `\u26A0\uFE0F ${briefing.sentry.data.newIssueCount} new issues since yesterday\n`
         message += `${briefing.sentry.data.unresolvedCount} unresolved total\n`
       }
     } else {
-      message += '⚠️ Sentry check unavailable\n'
+      message += '\u26A0\uFE0F Sentry check unavailable\n'
     }
 
     // Alerts section
     if (briefing.alerts.length > 0) {
       message += '\n*ALERTS*\n'
       for (const alert of briefing.alerts) {
-        const icon = alert.severity === 'critical' ? '🔴' : '⚠️'
+        const icon = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
         message += `${icon} ${alert.message}`
         if (alert.details) {
-          message += ` — ${alert.details}`
+          message += ` \u2014 ${alert.details}`
         }
         message += '\n'
       }
@@ -182,8 +182,8 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
  */
 export async function sendAlert(alert: Alert): Promise<void> {
   try {
-    const emoji = alert.severity === 'critical' ? '🔴' : '⚠️'
-    let message = `${emoji} ALERT — ${alert.tool.toUpperCase()} ISSUE\n`
+    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
+    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()} ISSUE\n`
     message += `Detected: ${new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })}\n\n`
     message += `${alert.message}\n`
 
@@ -204,7 +204,7 @@ export async function sendAlert(alert: Alert): Promise<void> {
 }
 
 /**
- * Posts a raw message to Slack webhook
+ * Posts a raw message to Slack webhook (low-level)
  */
 async function postToSlack(payload: Record<string, unknown>): Promise<void> {
   try {
@@ -224,4 +224,20 @@ async function postToSlack(payload: Record<string, unknown>): Promise<void> {
     console.error('Error posting to Slack:', err)
     // Log but don't throw — Slack being down should not crash the system
   }
+}
+
+/**
+ * Sends a raw pre-formatted message to Slack (used for AI-generated briefings)
+ */
+export async function sendRawMessage(text: string): Promise<void> {
+  await postToSlack({ text })
+}
+
+/**
+ * Sends a text response from the agent to a specific channel
+ */
+export async function sendAgentMessage(text: string, channelId?: string): Promise<void> {
+  const payload: Record<string, unknown> = { text }
+  if (channelId) payload.channel = channelId
+  await postToSlack(payload)
 }

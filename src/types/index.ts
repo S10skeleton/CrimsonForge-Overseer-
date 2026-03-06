@@ -78,7 +78,7 @@ export interface EmailData {
   lastCheckAt: string
 }
 
-// ─── GitHub Tool (scaffold) ───────────────────────────────────────────────
+// ─── GitHub Tool ──────────────────────────────────────────────────────────
 
 export interface GitHubData {
   status: HealthStatus
@@ -105,7 +105,7 @@ export interface Alert {
   actionUrl?: string
 }
 
-// ─── AI Agent Types (scaffold for future) ─────────────────────────────────
+// ─── AI Agent Types ────────────────────────────────────────────────────────
 
 /**
  * Tool definition format compatible with Anthropic's tool_use API
@@ -123,7 +123,7 @@ export interface AgentTool {
 }
 
 /**
- * Agent context passed with every Anthropic API call (future)
+ * Agent context passed with every Anthropic API call
  */
 export interface AgentContext {
   systemPrompt: string

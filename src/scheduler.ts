@@ -5,7 +5,9 @@
 
 import cron from 'node-cron'
 import { monitors } from './tools/index.js'
-import { sendBriefing, sendAlert } from './notifications/slack.js'
+import { sendBriefing, sendAlert, sendRawMessage } from './notifications/slack.js'
+import { generateAIBriefing } from './agent/index.js'
+import { setLastBriefing } from './slack-bot.js'
 import type { MorningBriefing, Alert } from './types/index.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
@@ -18,11 +20,9 @@ async function runSilentHealthCheck(): Promise<void> {
   console.log('[SCHEDULER] Running silent health check...')
 
   try {
-    // Run just uptime and railway checks (fastest tests)
     const uptimeResult = await monitors.uptime()
     const railwayResult = await monitors.railway()
 
-    // Check if any are down
     const isUptimeDown =
       uptimeResult.success &&
       Array.isArray(uptimeResult.data) &&
@@ -39,7 +39,6 @@ async function runSilentHealthCheck(): Promise<void> {
           .filter((e) => e.status === 'down')
           .map((e) => e.url)
           .join(', ')
-
         alerts.push({
           severity: 'critical',
           tool: 'uptime',
@@ -68,25 +67,25 @@ async function runSilentHealthCheck(): Promise<void> {
   }
 }
 
-// ─── Morning Briefing Job (8 AM daily) ────────────────────────────────────
+// ─── Morning Briefing Job ─────────────────────────────────────────────────
 
 async function runMorningBriefing(): Promise<void> {
   console.log('[SCHEDULER] Running morning briefing...')
 
   try {
-    // Run all monitors in parallel
-    const [uptime, supabase, sentry, railway, email] = await Promise.allSettled([
-      monitors.uptime(),
-      monitors.supabase(),
-      monitors.sentry(),
-      monitors.railway(),
-      monitors.email(),
-    ])
+    // Run all monitors in parallel (infrastructure + new integrations)
+    const [uptime, supabase, sentry, railway, email, gmail, calendar] =
+      await Promise.allSettled([
+        monitors.uptime(),
+        monitors.supabase(),
+        monitors.sentry(),
+        monitors.railway(),
+        monitors.email(),
+        monitors.gmail(),
+        monitors.calendar(),
+      ])
 
-    // Extract results, handling rejections
-    function getResult<T>(
-      result: PromiseSettledResult<T>
-    ): T & { success: boolean; error?: string } {
+    function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
       if (result.status === 'rejected') {
         return {
           success: false,
@@ -101,35 +100,35 @@ async function runMorningBriefing(): Promise<void> {
     const sentryResult = getResult(sentry)
     const railwayResult = getResult(railway)
     const emailResult = getResult(email)
+    const gmailResult = getResult(gmail)
+    const calendarResult = getResult(calendar)
 
     // Determine overall status
-    const statuses = [
-      (uptimeResult as { data?: Array<{ status: string }> }).data?.every((e: { status: string }) => e.status === 'healthy') ? 'healthy' : 'degraded',
-      (supabaseResult as { data?: { connectionStatus: string } }).data?.connectionStatus || 'unknown',
-      (railwayResult as { data?: { status: string } }).data?.status || 'unknown',
-    ].filter((s) => s !== 'unknown')
+    const isUptimeDown =
+      uptimeResult.success &&
+      Array.isArray(uptimeResult.data) &&
+      (uptimeResult.data as Array<{ status: string }>).some((e) => e.status === 'down')
+    const isSupabaseDown =
+      !supabaseResult.success ||
+      (supabaseResult.data as { connectionStatus?: string })?.connectionStatus === 'down'
+    const hasNewErrors =
+      sentryResult.success && ((sentryResult.data as { newIssueCount?: number })?.newIssueCount ?? 0) > 0
 
-    const hasDown = statuses.includes('down')
-    const hasDegraded = statuses.includes('degraded')
-    const overallStatus = hasDown ? 'down' : hasDegraded ? 'degraded' : 'healthy'
+    const overallStatus = isUptimeDown || isSupabaseDown ? 'down' : hasNewErrors ? 'degraded' : 'healthy'
 
     // Build alerts
     const alerts: Alert[] = []
 
-    // Check Sentry for new critical issues
-    if (
-      (sentryResult as { data?: { newIssueCount: number } }).data?.newIssueCount ?? 0 > 0
-    ) {
+    if (hasNewErrors) {
       alerts.push({
         severity: 'warning',
         tool: 'sentry',
-        message: `${(sentryResult as { data?: { newIssueCount: number } }).data?.newIssueCount} new error issues detected`,
+        message: `${(sentryResult.data as { newIssueCount?: number })?.newIssueCount} new error issues detected`,
         actionUrl: `https://sentry.io/organizations/${process.env.SENTRY_ORG}/issues/`,
       })
     }
 
-    // Check for silent shops
-    const silentShops = (supabaseResult as { data?: { silentShops: Array<{ daysSilent: number }> } }).data?.silentShops ?? []
+    const silentShops = (supabaseResult.data as { silentShops?: Array<{ daysSilent: number }> })?.silentShops ?? []
     if (silentShops.length > 0) {
       alerts.push({
         severity: 'info',
@@ -138,7 +137,7 @@ async function runMorningBriefing(): Promise<void> {
       })
     }
 
-    // Build full briefing
+    // Build the full briefing object
     const briefing: MorningBriefing = {
       timestamp: new Date().toISOString(),
       overallStatus,
@@ -150,12 +149,26 @@ async function runMorningBriefing(): Promise<void> {
       alerts,
     }
 
-    // Send to Slack
-    await sendBriefing(briefing)
+    // Store for the Slack bot's context
+    setLastBriefing(briefing)
 
-    // Log full results
-    console.log('[SCHEDULER] Morning briefing sent. Summary:')
-    console.log(JSON.stringify(briefing, null, 2))
+    // Try AI-enhanced briefing first
+    const gmailData = gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
+    const calendarData = calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
+
+    const aiBriefingText = await generateAIBriefing({ briefing, gmailData, calendarData })
+
+    if (aiBriefingText) {
+      // Post the AI-generated briefing
+      await sendRawMessage(aiBriefingText)
+      console.log('[SCHEDULER] AI morning briefing sent.')
+    } else {
+      // Fall back to the structured briefing if AI is unavailable
+      console.log('[SCHEDULER] AI unavailable — sending structured briefing.')
+      await sendBriefing(briefing)
+    }
+
+    console.log('[SCHEDULER] Morning briefing complete.')
   } catch (err) {
     console.error('[SCHEDULER] Error in morning briefing:', err)
   }
@@ -177,5 +190,4 @@ export function startScheduler(): void {
   console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00 (${timezone})`)
 }
 
-// Export functions for manual testing
 export { runSilentHealthCheck, runMorningBriefing }

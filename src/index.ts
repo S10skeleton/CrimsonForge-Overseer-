@@ -1,10 +1,11 @@
 /**
  * Entry point for Crimson Forge Ops
- * Validates environment and starts the scheduler
+ * Validates environment and starts the scheduler + Slack bot
  */
 
 import { createServer } from 'http'
 import { startScheduler } from './scheduler.js'
+import { startSlackBot } from './slack-bot.js'
 
 // ─── Environment Validation ────────────────────────────────────────────────
 
@@ -23,30 +24,47 @@ function validateEnvironment(): void {
     'CF_SERVICE_ID',
   ]
 
-  const missing = required.filter((key) => !process.env[key])
+  const optional = [
+    'ANTHROPIC_API_KEY',
+    'SLACK_BOT_TOKEN',
+    'SLACK_APP_TOKEN',
+    'GOOGLE_CLIENT_ID',
+    'GOOGLE_CLIENT_SECRET',
+    'GOOGLE_REFRESH_TOKEN',
+    'GOOGLE_CALENDAR_ID',
+    'GOOGLE_DRIVE_FOLDER_ID',
+  ]
 
+  const missing = required.filter((key) => !process.env[key])
   if (missing.length > 0) {
-    console.error('❌ Missing required environment variables:')
+    console.error('\u274C Missing required environment variables:')
     missing.forEach((key) => console.error(`   - ${key}`))
-    console.error('\nPlease set all required variables in .env or Railway environment.')
     process.exit(1)
   }
 
-  console.log('✅ All required environment variables are set.')
+  const missingOptional = optional.filter((key) => !process.env[key])
+  if (missingOptional.length > 0) {
+    console.log('\u2139\uFE0F  Optional features not configured:')
+    missingOptional.forEach((key) => console.log(`   - ${key}`))
+  }
+
+  console.log('\u2705 Environment validated.')
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log('🚀 Crimson Forge Ops — Starting...')
+  console.log('\uD83D\uDE80 Crimson Forge Ops \u2014 Starting...')
 
-  // Validate environment
   validateEnvironment()
 
-  // Start the scheduler
+  // Start the cron scheduler (health checks + morning briefing)
   startScheduler()
 
-  // Minimal HTTP server so Railway's health check doesn't SIGTERM the process
+  // Start the two-way Slack bot (optional — only if tokens are configured)
+  await startSlackBot()
+
+  // Minimal HTTP server for Railway health checks
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
   createServer((_, res) => {
     res.writeHead(200)
@@ -55,24 +73,19 @@ async function main(): Promise<void> {
     console.log(`[health] Listening on port ${port}`)
   })
 
-  console.log('✅ Crimson Forge Ops is running.')
-  console.log('   Monitoring tasks scheduled. Press Ctrl+C to exit.')
+  console.log('\u2705 Crimson Forge Ops is running.')
 }
 
-// ─── Error Handling ───────────────────────────────────────────────────────
-
 process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled rejection:', reason)
+  console.error('\u274C Unhandled rejection:', reason)
 })
 
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught exception:', err)
+  console.error('\u274C Uncaught exception:', err)
   process.exit(1)
 })
 
-// ─── Run ──────────────────────────────────────────────────────────────────
-
 main().catch((err) => {
-  console.error('❌ Failed to start:', err)
+  console.error('\u274C Failed to start:', err)
   process.exit(1)
 })

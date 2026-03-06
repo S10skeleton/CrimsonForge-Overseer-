@@ -1,6 +1,5 @@
 /**
- * Tool registry
- * Exports all tools for scheduler and AI agent use
+ * Tool registry — all tools available to Elara
  */
 
 import { runUptimeCheck, uptimeTool } from './uptime.js'
@@ -8,9 +7,13 @@ import { runSupabaseCheck, supabaseTool } from './supabase.js'
 import { runSentryCheck, sentryTool } from './sentry.js'
 import { runRailwayCheck, railwayTool } from './railway.js'
 import { runEmailCheck, emailTool } from './email.js'
-import { githubTool } from './github.js'
+import { githubTool, githubCommitsTool, githubStatusTool } from './github.js'
+import { runGmailCheck, gmailTool } from './gmail.js'
+import { runCalendarCheck, calendarTool } from './calendar.js'
+import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool } from './drive.js'
+import { memoryTools } from './memory.js'
 
-// ─── For Scheduler Use ────────────────────────────────────────────────────
+// ─── For Scheduler ────────────────────────────────────────────────────────
 
 export const monitors = {
   uptime: runUptimeCheck,
@@ -18,15 +21,32 @@ export const monitors = {
   sentry: runSentryCheck,
   railway: runRailwayCheck,
   email: runEmailCheck,
+  gmail: runGmailCheck,
+  calendar: runCalendarCheck,
+  drive: runDriveCheck,
 }
 
-// ─── For Future AI Agent Use ──────────────────────────────────────────────
+// ─── For Elara (AI Agent) ─────────────────────────────────────────────────
 
 export const allAgentTools = [
+  // Infrastructure monitoring
   uptimeTool,
   supabaseTool,
   sentryTool,
   railwayTool,
   emailTool,
-  githubTool,
+  // GitHub
+  githubCommitsTool,
+  githubStatusTool,
+  // Google workspace
+  gmailTool,
+  calendarTool,
+  driveTool,
+  driveSearchTool,
+  driveReadTool,
+  driveCreateDraftTool,
+  // Memory and learning
+  ...memoryTools,
 ]
+
+export { githubTool } // backwards compat

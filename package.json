@@ -1,7 +1,7 @@
 {
   "name": "crimson-forge-ops",
-  "version": "0.1.0",
-  "description": "Standalone monitoring and operations system for Crimson Forge",
+  "version": "0.3.0",
+  "description": "Elara — AI ops assistant for CrimsonForgePro",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -9,20 +9,24 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
-    "briefing": "tsx --env-file=.env src/trigger-briefing.ts"
+    "briefing": "tsx --env-file=.env src/trigger-briefing.ts",
+    "google-auth": "tsx --env-file=.env scripts/google-oauth-setup.ts"
   },
   "keywords": [
     "crimson-forge",
     "monitoring",
     "ops",
-    "scheduler"
+    "scheduler",
+    "elara"
   ],
   "author": "Crimson Forge",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
     "@sentry/node": "^10.40.0",
+    "@slack/bolt": "^3.19.0",
     "@supabase/supabase-js": "^2.38.0",
+    "googleapis": "^140.0.0",
     "node-cron": "^3.0.2"
   },
   "devDependencies": {
