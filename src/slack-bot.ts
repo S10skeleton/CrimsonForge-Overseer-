@@ -30,6 +30,10 @@ export async function startSlackBot(): Promise<void> {
     return
   }
 
+  // DEBUG — remove after confirming tokens are correct
+  console.log(`[SLACK BOT DEBUG] BOT_TOKEN: "${botToken.slice(0, 12)}..." length=${botToken.length} firstChar=${botToken.charCodeAt(0)}`)
+  console.log(`[SLACK BOT DEBUG] APP_TOKEN: "${appToken.slice(0, 12)}..." length=${appToken.length} firstChar=${appToken.charCodeAt(0)}`)
+
   const app = new App({
     token: botToken,
     appToken,
