@@ -6,8 +6,8 @@
 import type { ToolResult, AgentTool } from '../types/index.js'
 
 const GITHUB_TOKEN = () => process.env.GITHUB_TOKEN
-const GITHUB_OWNER = () => process.env.GITHUB_OWNER || 'clutch-cfp'
-const GITHUB_REPOS = () => (process.env.GITHUB_REPOS || 'crimson-forge,CrimsonForge-Overseer').split(',').map(r => r.trim())
+const GITHUB_OWNER = () => process.env.GITHUB_OWNER || 'S10skeleton'
+const GITHUB_REPOS = () => [process.env.GITHUB_REPO || 'CrimsonForgePro']
 
 function githubHeaders() {
   return {
