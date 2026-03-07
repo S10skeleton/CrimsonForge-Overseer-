@@ -19,9 +19,31 @@ export async function runDriveCheck(): Promise<ToolResult<DriveData>> {
     const auth = createOAuthClient()
     const drive = google.drive({ version: 'v3', auth })
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
-    const q = folderId ? `'${folderId}' in parents and trashed = false` : 'trashed = false'
-    const res = await drive.files.list({ q, fields: 'files(id,name,mimeType,modifiedTime,webViewLink)', orderBy: 'modifiedTime desc', pageSize: 25 })
-    const files: DriveFile[] = (res.data.files || []).map(f => ({ id: f.id||'', name: f.name||'', mimeType: f.mimeType||'', modifiedTime: f.modifiedTime||'', webViewLink: f.webViewLink||undefined }))
+    const fields = 'files(id,name,mimeType,modifiedTime,webViewLink)'
+
+    const toFile = (f: Record<string, string | undefined>): DriveFile => ({
+      id: f.id || '', name: f.name || '', mimeType: f.mimeType || '',
+      modifiedTime: f.modifiedTime || '', webViewLink: f.webViewLink || undefined,
+    })
+
+    if (folderId) {
+      // Two queries in parallel: folder itself + files inside it
+      const [folderRes, childrenRes] = await Promise.all([
+        drive.files.list({ q: `'${folderId}' in parents and trashed = false`, fields, orderBy: 'modifiedTime desc', pageSize: 25 }),
+        drive.files.list({ q: `'${folderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`, fields, orderBy: 'modifiedTime desc', pageSize: 25 }),
+      ])
+      const seen = new Set<string>()
+      const files: DriveFile[] = []
+      for (const f of [...(folderRes.data.files || []), ...(childrenRes.data.files || [])]) {
+        const id = f.id || ''
+        if (id && !seen.has(id)) { seen.add(id); files.push(toFile(f as Record<string, string | undefined>)) }
+      }
+      files.sort((a, b) => b.modifiedTime.localeCompare(a.modifiedTime))
+      return { tool: 'drive', success: true, timestamp, data: { recentFiles: files.slice(0, 30), checkedAt: timestamp } }
+    }
+
+    const res = await drive.files.list({ q: 'trashed = false', fields, orderBy: 'modifiedTime desc', pageSize: 25 })
+    const files: DriveFile[] = (res.data.files || []).map(f => toFile(f as Record<string, string | undefined>))
     return { tool: 'drive', success: true, timestamp, data: { recentFiles: files, checkedAt: timestamp } }
   } catch (err) { return { tool: 'drive', success: false, timestamp, data: { recentFiles: [], checkedAt: timestamp }, error: err instanceof Error ? err.message : 'Unknown' } }
 }
