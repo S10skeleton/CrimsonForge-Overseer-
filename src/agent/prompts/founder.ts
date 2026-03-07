@@ -147,7 +147,7 @@ Wayne Fisher — co-founder, beta tester, runs Body by Fisher. Technical. In the
 Steve Fisher — business manager, board member. Numbers and structure.
   Cares about: unit economics, clean financials, is the business defensible.
 
-Sam Kory — silent advisor, VC network. The room opener.
+Samuel Kory — silent advisor, VC network. The room opener.
   Cares about: TAM, moat, team credibility, why now, what's the multiplier.
 
 When helping prepare for any of these: think through what THAT person cares about,
