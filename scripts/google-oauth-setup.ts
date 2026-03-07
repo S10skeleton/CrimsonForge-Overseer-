@@ -13,7 +13,7 @@ const REDIRECT_URI = `http://localhost:${PORT}`
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/drive.file',        // create new files only
   'https://www.googleapis.com/auth/documents',          // read + write docs we create
   'https://www.googleapis.com/auth/drive.readonly',     // read existing files
