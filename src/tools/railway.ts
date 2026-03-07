@@ -44,12 +44,15 @@ async function fetchRailwayStatus(): Promise<{
   latestDeploymentStatus: string | null
   latestDeploymentAt: string | null
 }> {
+  // Fetch last 10 deployments so we can find the ACTIVE one, not just the
+  // most recent by creation time (which may be a crashed/failed deployment
+  // that was superseded by an older still-running one).
   const query = `
     query {
       service(id: "${RAILWAY_SERVICE_ID}") {
         id
         name
-        deployments(first: 1) {
+        deployments(first: 10) {
           edges {
             node {
               id
@@ -92,10 +95,19 @@ async function fetchRailwayStatus(): Promise<{
     return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
   }
 
-  const deployment = data.data?.service?.deployments?.edges[0]?.node
+  const edges = data.data?.service?.deployments?.edges ?? []
+
+  if (edges.length === 0) {
+    console.warn('[railway] No deployments found for service:', RAILWAY_SERVICE_ID)
+    return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
+  }
+
+  // Prefer the deployment that is currently ACTIVE — that's what's actually
+  // serving traffic. Fall back to the most recent entry only if none is ACTIVE.
+  const activeDeployment = edges.find(e => e.node?.status === 'ACTIVE')?.node
+  const deployment = activeDeployment ?? edges[0]?.node
 
   if (!deployment) {
-    console.warn('[railway] No deployments found for service:', RAILWAY_SERVICE_ID)
     return { status: 'unknown', latestDeploymentStatus: null, latestDeploymentAt: null }
   }
 
