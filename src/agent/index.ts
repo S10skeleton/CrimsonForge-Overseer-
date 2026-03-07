@@ -15,7 +15,11 @@ function getClient(): Anthropic | null {
 
 // ─── Main agent runner ────────────────────────────────────────────────────
 
-export async function runAgent(userMessage: string, recentBriefing?: MorningBriefing): Promise<string> {
+export async function runAgent(
+  userMessage: string,
+  recentBriefing?: MorningBriefing,
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+): Promise<string> {
   const client = getClient()
   if (!client) return `[Elara offline] Set ANTHROPIC_API_KEY to activate.`
 
@@ -28,7 +32,15 @@ export async function runAgent(userMessage: string, recentBriefing?: MorningBrie
     input_schema: t.input_schema as Anthropic.Tool['input_schema'],
   }))
 
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }]
+  const priorMessages: Anthropic.MessageParam[] = (history ?? []).map(m => ({
+    role: m.role,
+    content: m.content,
+  }))
+
+  const messages: Anthropic.MessageParam[] = [
+    ...priorMessages,
+    { role: 'user', content: userMessage },
+  ]
 
   let iterations = 0
   const MAX_ITERATIONS = 10

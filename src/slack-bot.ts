@@ -8,6 +8,32 @@ const { App, LogLevel } = pkg
 import { runAgent } from './agent/index.js'
 import type { MorningBriefing } from './types/index.js'
 
+// ─── Conversation History ─────────────────────────────────────────────────
+
+interface ConversationMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+// Keyed by thread_ts (or message ts for top-level DMs)
+const conversationHistory = new Map<string, ConversationMessage[]>()
+
+// Max messages to keep per thread (older messages pruned)
+const MAX_HISTORY = 20
+
+function getHistory(threadKey: string): ConversationMessage[] {
+  return conversationHistory.get(threadKey) ?? []
+}
+
+function appendHistory(threadKey: string, role: 'user' | 'assistant', content: string): void {
+  const history = getHistory(threadKey)
+  history.push({ role, content })
+  if (history.length > MAX_HISTORY) {
+    history.splice(0, history.length - MAX_HISTORY)
+  }
+  conversationHistory.set(threadKey, history)
+}
+
 // ─── State ────────────────────────────────────────────────────────────────
 
 let lastBriefing: MorningBriefing | undefined = undefined
@@ -54,26 +80,31 @@ export async function startSlackBot(): Promise<void> {
     try {
       console.log(`[SLACK BOT] Message received: "${text.slice(0, 80)}"`)
 
+      const msg = message as { ts: string; thread_ts?: string; channel: string }
+      const threadKey = msg.thread_ts ?? msg.ts
+      const history = getHistory(threadKey)
+
       // Show a typing indicator via the "thinking" message
       const thinkingMsg = await say({
         text: '_🤔 Checking..._',
-        thread_ts: (message as { ts: string }).ts,
+        thread_ts: msg.ts,
       })
 
-      const response = await runAgent(text, lastBriefing)
+      appendHistory(threadKey, 'user', text)
+      const response = await runAgent(text, lastBriefing, history)
+      appendHistory(threadKey, 'assistant', response)
 
       // Replace thinking indicator with response in same thread
       await say({
         text: response,
-        thread_ts: (message as { ts: string }).ts,
+        thread_ts: msg.ts,
       })
 
       // Delete thinking message (best effort)
       try {
-        const client = app.client
         if (thinkingMsg.ts) {
-          await client.chat.delete({
-            channel: (message as { channel: string }).channel,
+          await app.client.chat.delete({
+            channel: msg.channel,
             ts: thinkingMsg.ts as string,
           })
         }
@@ -99,8 +130,13 @@ export async function startSlackBot(): Promise<void> {
       return
     }
 
+    const threadKey = event.thread_ts ?? event.ts
+    const history = getHistory(threadKey)
+
     try {
-      const response = await runAgent(text, lastBriefing)
+      appendHistory(threadKey, 'user', text)
+      const response = await runAgent(text, lastBriefing, history)
+      appendHistory(threadKey, 'assistant', response)
       await say({ text: response, thread_ts: event.ts })
     } catch (err) {
       await say({
