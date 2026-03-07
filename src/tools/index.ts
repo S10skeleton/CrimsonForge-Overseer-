@@ -14,6 +14,7 @@ import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDr
 import { memoryTools } from './memory.js'
 import { contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
+import { listCheckinsTool, updateCheckinTool } from './checkins.js'
 
 // ─── For Scheduler ────────────────────────────────────────────────────────
 
@@ -55,6 +56,9 @@ export const allAgentTools = [
   sendEmailTool,
   // Memory and learning
   ...memoryTools,
+  // Check-ins
+  listCheckinsTool,
+  updateCheckinTool,
 ]
 
 export { githubTool } // backwards compat

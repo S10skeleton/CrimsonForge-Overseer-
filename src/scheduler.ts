@@ -8,6 +8,7 @@ import { monitors } from './tools/index.js'
 import { sendBriefing, sendAlert, sendRawMessage } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
+import { runCheckinDispatcher } from './jobs/checkins.js'
 import type { MorningBriefing, Alert } from './types/index.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
@@ -180,6 +181,14 @@ export function startScheduler(): void {
   console.log('[SCHEDULER] Starting cron jobs...')
 
   const timezone = process.env.TIMEZONE || 'America/Denver'
+
+  // Every minute: wellness check-in dispatcher (fires within randomized window)
+  cron.schedule('* * * * *', async () => {
+    try { await runCheckinDispatcher() } catch (err) {
+      console.error('[SCHEDULER] Error in check-in dispatcher:', err)
+    }
+  }, { timezone })
+  console.log('[SCHEDULER] Scheduled: Check-in dispatcher every minute')
 
   // Every 15 minutes: silent health check
   cron.schedule('*/15 * * * *', runSilentHealthCheck, { timezone })
