@@ -16,10 +16,8 @@ function githubHeaders() {
   }
 }
 
-// Uses GITHUB_REPOS env var (already set) — takes first repo in comma-separated list
 function getRepo(): string {
-  const repos = process.env.GITHUB_REPOS || 'S10skeleton/CrimsonForgePro'
-  return repos.split(',')[0].trim()
+  return process.env.GITHUB_REPO || 'S10skeleton/CrimsonForgePro'
 }
 
 // ─── Core logic ────────────────────────────────────────────────────────────

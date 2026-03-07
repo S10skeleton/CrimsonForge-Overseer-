@@ -13,16 +13,27 @@ function getSupabase() {
   )
 }
 
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+interface CheckinItem {
+  label: string
+  window_start_utc: string
+  window_end_utc: string
+  message: string
+  enabled: boolean
+  last_fired_at?: string
+}
+
 // ─── Core logic ────────────────────────────────────────────────────────────
 
-async function listCheckins(): Promise<unknown[]> {
-  const { data, error } = await getSupabase()
+async function listCheckins(): Promise<CheckinItem[]> {
+  const { data: row, error } = await getSupabase()
     .from('agent_routines')
-    .select('id, label, window_start_utc, window_end_utc, message, enabled, last_fired_at, metadata')
+    .select('items')
     .eq('routine_type', 'checkin')
-    .order('window_start_utc')
-  if (error) throw error
-  return data ?? []
+    .single()
+  if (error || !row) throw new Error('Could not load check-ins')
+  return row.items as CheckinItem[]
 }
 
 async function updateCheckin(params: {
@@ -31,17 +42,34 @@ async function updateCheckin(params: {
   window_end_utc?: string
   message?: string
   enabled?: boolean
-}): Promise<unknown> {
-  const { label, ...updates } = params
-  const { data, error } = await getSupabase()
+}): Promise<CheckinItem | undefined> {
+  const { data: row, error } = await getSupabase()
     .from('agent_routines')
-    .update(updates)
-    .eq('label', label)
+    .select('items')
     .eq('routine_type', 'checkin')
-    .select()
     .single()
-  if (error) throw error
-  return data
+  if (error || !row) throw new Error('Could not load check-ins')
+
+  const items = row.items as CheckinItem[]
+  const updated = items.map((item) =>
+    item.label === params.label
+      ? {
+          ...item,
+          ...(params.window_start_utc && { window_start_utc: params.window_start_utc }),
+          ...(params.window_end_utc && { window_end_utc: params.window_end_utc }),
+          ...(params.message !== undefined && { message: params.message }),
+          ...(params.enabled !== undefined && { enabled: params.enabled }),
+        }
+      : item
+  )
+
+  const { error: updateError } = await getSupabase()
+    .from('agent_routines')
+    .update({ items: updated, updated_at: new Date().toISOString() })
+    .eq('routine_type', 'checkin')
+  if (updateError) throw updateError
+
+  return updated.find((i) => i.label === params.label)
 }
 
 // ─── AgentTool definitions ─────────────────────────────────────────────────

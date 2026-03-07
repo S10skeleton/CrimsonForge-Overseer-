@@ -63,6 +63,17 @@ function windowLengthMinutes(windowStart: string, windowEnd: string): number {
   return diff || 30
 }
 
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+interface CheckinItem {
+  label: string
+  window_start_utc: string  // "HH:MM"
+  window_end_utc: string    // "HH:MM"
+  message: string
+  enabled: boolean
+  last_fired_at?: string
+}
+
 // ─── Dispatcher ────────────────────────────────────────────────────────────
 
 export async function runCheckinDispatcher(): Promise<void> {
@@ -71,16 +82,20 @@ export async function runCheckinDispatcher(): Promise<void> {
 
   const supabase = getSupabase()
 
-  const { data: routines, error } = await supabase
+  // All check-ins live in a single row as a JSONB items array
+  const { data: row, error } = await supabase
     .from('agent_routines')
-    .select('*')
+    .select('items')
     .eq('routine_type', 'checkin')
-    .eq('enabled', true)
+    .single()
 
-  if (error || !routines) return
+  if (error || !row?.items) return
+
+  const routines: CheckinItem[] = row.items
 
   for (const routine of routines) {
-    if (firedToday(routine.last_fired_at)) continue
+    if (!routine.enabled) continue
+    if (firedToday(routine.last_fired_at ?? null)) continue
     if (!isInWindow(routine.window_start_utc, routine.window_end_utc)) continue
 
     // Probabilistic firing: ~1 chance per minute spreads the exact fire time
@@ -99,10 +114,17 @@ export async function runCheckinDispatcher(): Promise<void> {
         text: routine.message,
       })
 
+      // Update last_fired_at inside the JSONB array
+      const updatedItems = routines.map((r) =>
+        r.label === routine.label
+          ? { ...r, last_fired_at: new Date().toISOString() }
+          : r
+      )
+
       await supabase
         .from('agent_routines')
-        .update({ last_fired_at: new Date().toISOString() })
-        .eq('id', routine.id)
+        .update({ items: updatedItems, updated_at: new Date().toISOString() })
+        .eq('routine_type', 'checkin')
 
       console.log(`\u2705 [CHECKIN] Fired: ${routine.label}`)
     } catch (err) {
