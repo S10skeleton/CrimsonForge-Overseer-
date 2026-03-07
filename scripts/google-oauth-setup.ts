@@ -18,6 +18,7 @@ const SCOPES = [
   'https://www.googleapis.com/auth/documents',          // read + write docs we create
   'https://www.googleapis.com/auth/drive.readonly',     // read existing files
   'https://www.googleapis.com/auth/documents.readonly',
+  'https://www.googleapis.com/auth/contacts.readonly',  // read contacts for email lookup
 ]
 
 async function main() {
@@ -36,7 +37,7 @@ async function main() {
   })
 
   console.log('\n\uD83D\uDD10 ELARA \u2014 GOOGLE AUTH SETUP\n')
-  console.log('Scopes: Gmail (read), Calendar (read), Drive (create new files), Docs (read + write drafts)\n')
+  console.log('Scopes: Gmail (read), Calendar (read), Drive (read/write drafts), Contacts (read)\n')
   console.log('Opening auth URL. If it does not open automatically, paste this in your browser:\n')
   console.log(authUrl)
   console.log('\nWaiting for authorization on http://localhost:' + PORT + ' ...\n')

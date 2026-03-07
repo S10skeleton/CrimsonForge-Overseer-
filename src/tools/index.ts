@@ -12,6 +12,8 @@ import { runGmailCheck, gmailTool } from './gmail.js'
 import { runCalendarCheck, calendarTool } from './calendar.js'
 import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool } from './drive.js'
 import { memoryTools } from './memory.js'
+import { contactsSearchTool } from './contacts.js'
+import { sendEmailTool } from './send-email.js'
 
 // ─── For Scheduler ────────────────────────────────────────────────────────
 
@@ -45,6 +47,9 @@ export const allAgentTools = [
   driveSearchTool,
   driveReadTool,
   driveCreateDraftTool,
+  // Contacts + outbound email
+  contactsSearchTool,
+  sendEmailTool,
   // Memory and learning
   ...memoryTools,
 ]
