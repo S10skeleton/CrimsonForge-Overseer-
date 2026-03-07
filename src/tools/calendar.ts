@@ -133,3 +133,222 @@ export const calendarTool: AgentTool = {
   },
   execute: async () => runCalendarCheck(),
 }
+
+// ─── Create Event ──────────────────────────────────────────────────────────
+
+async function createCalendarEvent(params: {
+  summary: string
+  description?: string
+  start: string
+  end: string
+  attendees?: string[]
+  location?: string
+}): Promise<{ id: string; htmlLink: string; summary: string }> {
+  const auth = createOAuthClient()
+  const calendar = google.calendar({ version: 'v3', auth })
+  const tz = process.env.TIMEZONE || 'America/Denver'
+
+  const res = await calendar.events.insert({
+    calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+    requestBody: {
+      summary: params.summary,
+      description: params.description,
+      location: params.location,
+      start: { dateTime: params.start, timeZone: tz },
+      end: { dateTime: params.end, timeZone: tz },
+      attendees: params.attendees?.map((email) => ({ email })),
+    },
+    sendUpdates: params.attendees?.length ? 'all' : 'none',
+  })
+
+  return {
+    id: res.data.id!,
+    htmlLink: res.data.htmlLink!,
+    summary: res.data.summary!,
+  }
+}
+
+export const createCalendarEventTool: AgentTool = {
+  name: 'create_calendar_event',
+  description:
+    'Create a new Google Calendar event. Use for scheduling meetings, deadlines, or reminders. Always confirm event details with the user before creating unless all details were explicitly provided.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string', description: 'Event title' },
+      description: { type: 'string', description: 'Optional event description or notes' },
+      start: {
+        type: 'string',
+        description: 'Start time in ISO 8601 format with timezone offset, e.g. "2026-03-11T09:00:00-07:00"',
+      },
+      end: {
+        type: 'string',
+        description: 'End time in ISO 8601 format with timezone offset',
+      },
+      attendees: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Optional attendee email addresses — invites will be sent automatically',
+      },
+      location: { type: 'string', description: 'Optional location or video call link' },
+    },
+    required: ['summary', 'start', 'end'],
+  },
+  execute: async (input) => {
+    try {
+      const result = await createCalendarEvent(input as {
+        summary: string
+        description?: string
+        start: string
+        end: string
+        attendees?: string[]
+        location?: string
+      })
+      return {
+        tool: 'create_calendar_event',
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: result,
+      }
+    } catch (err) {
+      return {
+        tool: 'create_calendar_event',
+        success: false,
+        timestamp: new Date().toISOString(),
+        data: {},
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  },
+}
+
+// ─── Update Event ──────────────────────────────────────────────────────────
+
+async function updateCalendarEvent(params: {
+  eventId: string
+  summary?: string
+  description?: string
+  start?: string
+  end?: string
+  location?: string
+}): Promise<{ id: string; htmlLink: string; summary: string }> {
+  const auth = createOAuthClient()
+  const calendar = google.calendar({ version: 'v3', auth })
+  const tz = process.env.TIMEZONE || 'America/Denver'
+  const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary'
+
+  const existing = await calendar.events.get({ calendarId, eventId: params.eventId })
+
+  const updated = {
+    ...existing.data,
+    ...(params.summary && { summary: params.summary }),
+    ...(params.description && { description: params.description }),
+    ...(params.location && { location: params.location }),
+    ...(params.start && { start: { dateTime: params.start, timeZone: tz } }),
+    ...(params.end && { end: { dateTime: params.end, timeZone: tz } }),
+  }
+
+  const res = await calendar.events.update({
+    calendarId,
+    eventId: params.eventId,
+    requestBody: updated,
+  })
+
+  return {
+    id: res.data.id!,
+    htmlLink: res.data.htmlLink!,
+    summary: res.data.summary!,
+  }
+}
+
+export const updateCalendarEventTool: AgentTool = {
+  name: 'update_calendar_event',
+  description:
+    'Update an existing Google Calendar event by event ID. Get the event ID from check_calendar first.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      eventId: { type: 'string', description: 'Google Calendar event ID' },
+      summary: { type: 'string', description: 'New event title' },
+      description: { type: 'string', description: 'New event description' },
+      start: { type: 'string', description: 'New start time in ISO 8601 format' },
+      end: { type: 'string', description: 'New end time in ISO 8601 format' },
+      location: { type: 'string', description: 'New location or video call link' },
+    },
+    required: ['eventId'],
+  },
+  execute: async (input) => {
+    try {
+      const result = await updateCalendarEvent(input as {
+        eventId: string
+        summary?: string
+        description?: string
+        start?: string
+        end?: string
+        location?: string
+      })
+      return {
+        tool: 'update_calendar_event',
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: result,
+      }
+    } catch (err) {
+      return {
+        tool: 'update_calendar_event',
+        success: false,
+        timestamp: new Date().toISOString(),
+        data: {},
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  },
+}
+
+// ─── Delete Event ──────────────────────────────────────────────────────────
+
+async function deleteCalendarEvent(params: {
+  eventId: string
+}): Promise<{ deleted: boolean; eventId: string }> {
+  const auth = createOAuthClient()
+  const calendar = google.calendar({ version: 'v3', auth })
+
+  await calendar.events.delete({
+    calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+    eventId: params.eventId,
+  })
+
+  return { deleted: true, eventId: params.eventId }
+}
+
+export const deleteCalendarEventTool: AgentTool = {
+  name: 'delete_calendar_event',
+  description:
+    'Delete a Google Calendar event by event ID. Always confirm with the user before deleting.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      eventId: { type: 'string', description: 'Google Calendar event ID' },
+    },
+    required: ['eventId'],
+  },
+  execute: async (input) => {
+    try {
+      const result = await deleteCalendarEvent(input as { eventId: string })
+      return {
+        tool: 'delete_calendar_event',
+        success: true,
+        timestamp: new Date().toISOString(),
+        data: result,
+      }
+    } catch (err) {
+      return {
+        tool: 'delete_calendar_event',
+        success: false,
+        timestamp: new Date().toISOString(),
+        data: {},
+        error: err instanceof Error ? err.message : 'Unknown error',
+      }
+    }
+  },
+}

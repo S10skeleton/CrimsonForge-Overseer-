@@ -9,7 +9,7 @@ import { runRailwayCheck, railwayTool } from './railway.js'
 import { runEmailCheck, emailTool } from './email.js'
 import { githubTool, githubCommitsTool, githubStatusTool } from './github.js'
 import { runGmailCheck, gmailTool } from './gmail.js'
-import { runCalendarCheck, calendarTool } from './calendar.js'
+import { runCalendarCheck, calendarTool, createCalendarEventTool, updateCalendarEventTool, deleteCalendarEventTool } from './calendar.js'
 import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool } from './drive.js'
 import { memoryTools } from './memory.js'
 import { contactsSearchTool } from './contacts.js'
@@ -43,6 +43,9 @@ export const allAgentTools = [
   // Google workspace
   gmailTool,
   calendarTool,
+  createCalendarEventTool,
+  updateCalendarEventTool,
+  deleteCalendarEventTool,
   driveTool,
   driveSearchTool,
   driveReadTool,
