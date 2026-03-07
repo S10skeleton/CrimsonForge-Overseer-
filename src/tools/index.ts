@@ -12,9 +12,12 @@ import { runGmailCheck, gmailTool } from './gmail.js'
 import { runCalendarCheck, calendarTool, createCalendarEventTool, updateCalendarEventTool, deleteCalendarEventTool } from './calendar.js'
 import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool } from './drive.js'
 import { memoryTools } from './memory.js'
-import { contactsSearchTool } from './contacts.js'
+import { listContactsTool, contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
 import { listCheckinsTool, updateCheckinTool } from './checkins.js'
+import { stripeMetricsTool } from './stripe.js'
+import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
+import { webSearchTool } from './search.js'
 
 // ─── For Scheduler ────────────────────────────────────────────────────────
 
@@ -52,6 +55,7 @@ export const allAgentTools = [
   driveReadTool,
   driveCreateDraftTool,
   // Contacts + outbound email
+  listContactsTool,
   contactsSearchTool,
   sendEmailTool,
   // Memory and learning
@@ -59,6 +63,14 @@ export const allAgentTools = [
   // Check-ins
   listCheckinsTool,
   updateCheckinTool,
+  // Revenue
+  stripeMetricsTool,
+  // GitHub Issues
+  listIssuesTool,
+  createIssueTool,
+  closeIssueTool,
+  // Web search
+  webSearchTool,
 ]
 
 export { githubTool } // backwards compat
