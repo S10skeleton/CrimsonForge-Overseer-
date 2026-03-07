@@ -135,11 +135,54 @@ export async function getRepoStatus(repo: string): Promise<ToolResult<RepoStatus
 
 export async function checkAllRepos(): Promise<ToolResult<RepoStatus[]>> {
   const timestamp = new Date().toISOString()
-  const results = await Promise.allSettled(GITHUB_REPOS().map(r => getRepoStatus(r)))
-  const statuses: RepoStatus[] = results
-    .filter(r => r.status === 'fulfilled' && (r as PromiseFulfilledResult<ToolResult<RepoStatus>>).value.success)
-    .map(r => (r as PromiseFulfilledResult<ToolResult<RepoStatus>>).value.data)
-  return { tool: 'github_all_repos', success: true, timestamp, data: statuses }
+
+  if (!GITHUB_TOKEN()) {
+    return { tool: 'github_all_repos', success: false, timestamp, data: [], error: 'GITHUB_TOKEN not set' }
+  }
+
+  const repos = GITHUB_REPOS()
+  if (repos.length === 0 || (repos.length === 1 && repos[0] === '')) {
+    return { tool: 'github_all_repos', success: false, timestamp, data: [], error: 'GITHUB_REPOS not configured' }
+  }
+
+  const results = await Promise.allSettled(repos.map(r => getRepoStatus(r)))
+
+  const statuses: RepoStatus[] = []
+  const errors: string[] = []
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]
+    const repoName = repos[i]
+    if (r.status === 'fulfilled') {
+      if (r.value.success) {
+        statuses.push(r.value.data)
+      } else {
+        errors.push(`${repoName}: ${r.value.error || 'unknown error'}`)
+        console.error(`[github] Repo failed: ${repoName} —`, r.value.error)
+      }
+    } else {
+      errors.push(`${repoName}: ${r.reason}`)
+      console.error(`[github] Repo rejected: ${repoName} —`, r.reason)
+    }
+  }
+
+  if (statuses.length === 0) {
+    return {
+      tool: 'github_all_repos',
+      success: false,
+      timestamp,
+      data: [],
+      error: `All repos failed: ${errors.join(' | ')}`,
+    }
+  }
+
+  return {
+    tool: 'github_all_repos',
+    success: true,
+    timestamp,
+    data: statuses,
+    ...(errors.length > 0 ? { error: `Partial failure: ${errors.join(' | ')}` } : {}),
+  }
 }
 
 export const githubCommitsTool: AgentTool = {
