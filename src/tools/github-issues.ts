@@ -17,7 +17,7 @@ function githubHeaders() {
 }
 
 function getRepo(): string {
-  return process.env.GITHUB_REPO || 'S10skeleton/CrimsonForgePro'
+  return `${process.env.GITHUB_OWNER}/${process.env.GITHUB_REPO}`
 }
 
 // ─── Core logic ────────────────────────────────────────────────────────────
