@@ -74,7 +74,7 @@ export async function runCheckinDispatcher(): Promise<void> {
   const { data: routines, error } = await supabase
     .from('agent_routines')
     .select('*')
-    .eq('type', 'checkin')
+    .eq('routine_type', 'checkin')
     .eq('enabled', true)
 
   if (error || !routines) return

@@ -19,7 +19,7 @@ async function listCheckins(): Promise<unknown[]> {
   const { data, error } = await getSupabase()
     .from('agent_routines')
     .select('id, label, window_start_utc, window_end_utc, message, enabled, last_fired_at, metadata')
-    .eq('type', 'checkin')
+    .eq('routine_type', 'checkin')
     .order('window_start_utc')
   if (error) throw error
   return data ?? []
@@ -37,7 +37,7 @@ async function updateCheckin(params: {
     .from('agent_routines')
     .update(updates)
     .eq('label', label)
-    .eq('type', 'checkin')
+    .eq('routine_type', 'checkin')
     .select()
     .single()
   if (error) throw error
