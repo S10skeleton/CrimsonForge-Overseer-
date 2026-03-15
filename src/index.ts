@@ -78,6 +78,23 @@ async function main(): Promise<void> {
   console.log('\u2705 Crimson Forge Ops is running.')
 }
 
+// ─── Graceful Shutdown ────────────────────────────────────────────────────
+
+let isShuttingDown = false
+
+process.on('SIGTERM', () => {
+  if (isShuttingDown) return
+  isShuttingDown = true
+  console.log('[SHUTDOWN] SIGTERM received. Draining in-flight requests...')
+
+  // Give in-flight Anthropic/Supabase calls up to 15 seconds to finish
+  // before Railway force-kills the process
+  setTimeout(() => {
+    console.log('[SHUTDOWN] Drain window elapsed. Exiting cleanly.')
+    process.exit(0)
+  }, 15_000)
+})
+
 process.on('unhandledRejection', (reason) => {
   console.error('\u274C Unhandled rejection:', reason)
 })

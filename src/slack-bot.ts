@@ -17,9 +17,16 @@ interface ConversationMessage {
 
 // Keyed by thread_ts (or message ts for top-level DMs)
 const conversationHistory = new Map<string, ConversationMessage[]>()
+const conversationLastSeen = new Map<string, number>()
 
 // Max messages to keep per thread (older messages pruned)
 const MAX_HISTORY = 20
+
+// Max number of threads to hold in memory at once
+const MAX_THREADS = 200
+
+// Threads not seen for this many ms are eligible for eviction (24 hours)
+const THREAD_TTL_MS = 24 * 60 * 60 * 1000
 
 function getHistory(threadKey: string): ConversationMessage[] {
   return conversationHistory.get(threadKey) ?? []
@@ -32,6 +39,27 @@ function appendHistory(threadKey: string, role: 'user' | 'assistant', content: s
     history.splice(0, history.length - MAX_HISTORY)
   }
   conversationHistory.set(threadKey, history)
+  conversationLastSeen.set(threadKey, Date.now())
+
+  // Evict stale threads if we're over the thread cap
+  if (conversationHistory.size > MAX_THREADS) {
+    const now = Date.now()
+    for (const [key, lastSeen] of conversationLastSeen.entries()) {
+      if (now - lastSeen > THREAD_TTL_MS) {
+        conversationHistory.delete(key)
+        conversationLastSeen.delete(key)
+      }
+    }
+    // If still over cap after TTL eviction, evict oldest threads
+    if (conversationHistory.size > MAX_THREADS) {
+      const sorted = [...conversationLastSeen.entries()].sort((a, b) => a[1] - b[1])
+      const toEvict = sorted.slice(0, conversationHistory.size - MAX_THREADS)
+      for (const [key] of toEvict) {
+        conversationHistory.delete(key)
+        conversationLastSeen.delete(key)
+      }
+    }
+  }
 }
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────
@@ -143,6 +171,14 @@ export async function startSlackBot(): Promise<void> {
     }
 
     const threadKey = event.thread_ts ?? event.ts
+
+    // Skip if a request for this thread is already in-flight
+    if (activeRequests.has(threadKey)) {
+      console.log(`[SLACK BOT] Skipping mention — request already in-flight for thread ${threadKey}`)
+      return
+    }
+    activeRequests.add(threadKey)
+
     const history = getHistory(threadKey)
 
     try {
@@ -155,6 +191,8 @@ export async function startSlackBot(): Promise<void> {
         text: `\u26A0\uFE0F Error: ${err instanceof Error ? err.message : 'Unknown'}`,
         thread_ts: event.ts,
       })
+    } finally {
+      activeRequests.delete(threadKey)
     }
   })
 
