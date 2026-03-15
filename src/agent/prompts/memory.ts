@@ -94,7 +94,6 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
       supabase
         .from('agent_knowledge')
         .select('section_key, label, content, updated_at')
-        .eq('active', true)
         .order('section_key', { ascending: true }),
     ])
 
