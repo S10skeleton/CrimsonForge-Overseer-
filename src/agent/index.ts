@@ -104,6 +104,7 @@ export async function generateAIBriefing(data: {
   briefing: MorningBriefing
   gmailData?: { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }
   calendarData?: { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }
+  twilioData?: { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean }
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
@@ -131,6 +132,10 @@ export async function generateAIBriefing(data: {
     ? data.gmailData.messages.slice(0, 5).map(m => `• From: ${m.from}\n  Subject: ${m.subject}\n  Preview: ${m.snippet.slice(0, 100)}`).join('\n')
     : 'No unread emails.'
 
+  const twilioSummary = data.twilioData
+    ? `${data.twilioData.sent} sent, ${data.twilioData.delivered} delivered, ${data.twilioData.failed} failed (${(data.twilioData.failureRate * 100).toFixed(1)}% failure rate)${data.twilioData.thresholdBreached ? ' ⚠️ THRESHOLD BREACHED' : ''}`
+    : 'Twilio not configured.'
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
@@ -143,6 +148,8 @@ ${calSummary}
 
 UNREAD EMAILS (${data.gmailData?.unreadCount ?? 0} total):
 ${emailSummary}
+
+SMS (TWILIO): ${twilioSummary}
 
 Write the morning briefing for Slack in your voice as Elara. Include:
 1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)

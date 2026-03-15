@@ -14,15 +14,27 @@ const ENDPOINTS = [
 
 // ─── Core Logic ───────────────────────────────────────────────────────────
 
+const RESPONSE_TIME_WARNING_MS = 3000   // P1 threshold per runbook
+
 async function pingEndpoint(url: string): Promise<UptimeData> {
   const start = Date.now()
   console.log(`[uptime] Checking: ${url}`)
   const res = await fetch(url, { signal: AbortSignal.timeout(20_000) })
-  console.log(`[uptime] Response: ${res.status} in ${Date.now() - start}ms`)
+  const responseMs = Date.now() - start
+  console.log(`[uptime] Response: ${res.status} in ${responseMs}ms`)
+
+  let status: 'healthy' | 'degraded' | 'down' = 'healthy'
+  if (!res.ok) {
+    status = 'degraded'
+  } else if (responseMs > RESPONSE_TIME_WARNING_MS) {
+    status = 'degraded'
+    console.log(`[uptime] SLOW RESPONSE: ${url} took ${responseMs}ms (threshold: ${RESPONSE_TIME_WARNING_MS}ms)`)
+  }
+
   return {
     url,
-    status: res.ok ? 'healthy' : 'degraded',
-    responseMs: Date.now() - start,
+    status,
+    responseMs,
     statusCode: res.status,
   }
 }

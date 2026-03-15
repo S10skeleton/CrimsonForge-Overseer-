@@ -5,7 +5,7 @@
 
 import cron from 'node-cron'
 import { monitors } from './tools/index.js'
-import { sendBriefing, sendAlert, sendRawMessage } from './notifications/slack.js'
+import { sendBriefing, sendAlert, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
@@ -29,10 +29,15 @@ async function runSilentHealthCheck(): Promise<void> {
       Array.isArray(uptimeResult.data) &&
       uptimeResult.data.some((e) => e.status === 'down')
 
+    const isUptimeSlow =
+      uptimeResult.success &&
+      Array.isArray(uptimeResult.data) &&
+      uptimeResult.data.some((e) => e.status === 'degraded' && e.responseMs !== null && e.responseMs > 3000)
+
     const isRailwayDown =
       railwayResult.success && railwayResult.data.status === 'down'
 
-    if (isUptimeDown || isRailwayDown) {
+    if (isUptimeDown || isRailwayDown || isUptimeSlow) {
       const alerts: Alert[] = []
 
       if (isUptimeDown) {
@@ -48,6 +53,19 @@ async function runSilentHealthCheck(): Promise<void> {
         })
       }
 
+      if (isUptimeSlow) {
+        const slowEndpoints = (uptimeResult.data as Array<{ url: string; status: string; responseMs: number | null }>)
+          .filter((e) => e.status === 'degraded' && e.responseMs !== null && e.responseMs > 3000)
+          .map((e) => `${e.url} (${e.responseMs}ms)`)
+          .join(', ')
+        alerts.push({
+          severity: 'warning',
+          tool: 'uptime',
+          message: 'Slow response time detected (>3s)',
+          details: slowEndpoints,
+        })
+      }
+
       if (isRailwayDown) {
         alerts.push({
           severity: 'critical',
@@ -59,6 +77,10 @@ async function runSilentHealthCheck(): Promise<void> {
 
       for (const alert of alerts) {
         await sendAlert(alert)
+        // P0 = critical severity — also SMS Clutch directly
+        if (alert.severity === 'critical') {
+          await sendSMSAlert(`${alert.message}${alert.details ? ` — ${alert.details}` : ''}`)
+        }
       }
     } else {
       console.log('[SCHEDULER] Silent health check passed. No alerts needed.')
@@ -75,7 +97,7 @@ async function runMorningBriefing(): Promise<void> {
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
-    const [uptime, supabase, sentry, railway, email, gmail, calendar] =
+    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio] =
       await Promise.allSettled([
         monitors.uptime(),
         monitors.supabase(),
@@ -84,6 +106,7 @@ async function runMorningBriefing(): Promise<void> {
         monitors.email(),
         monitors.gmail(),
         monitors.calendar(),
+        monitors.twilio(),
       ])
 
     function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
@@ -103,6 +126,7 @@ async function runMorningBriefing(): Promise<void> {
     const emailResult = getResult(email)
     const gmailResult = getResult(gmail)
     const calendarResult = getResult(calendar)
+    const twilioResult = getResult(twilio)
 
     // Determine overall status
     const isUptimeDown =
@@ -138,6 +162,18 @@ async function runMorningBriefing(): Promise<void> {
       })
     }
 
+    const twilioData = twilioResult.success
+      ? (twilioResult.data as { thresholdBreached: boolean; failureRate: number; failed: number })
+      : null
+
+    if (twilioData?.thresholdBreached) {
+      alerts.push({
+        severity: 'warning',
+        tool: 'twilio',
+        message: `SMS failure rate ${(twilioData.failureRate * 100).toFixed(1)}% exceeds 5% threshold (${twilioData.failed} failed messages)`,
+      })
+    }
+
     // Build the full briefing object
     const briefing: MorningBriefing = {
       timestamp: new Date().toISOString(),
@@ -157,7 +193,11 @@ async function runMorningBriefing(): Promise<void> {
     const gmailData = gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
     const calendarData = calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
 
-    const aiBriefingText = await generateAIBriefing({ briefing, gmailData, calendarData })
+    const twilioSummary = twilioResult.success
+      ? (twilioResult.data as { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean })
+      : undefined
+
+    const aiBriefingText = await generateAIBriefing({ briefing, gmailData, calendarData, twilioData: twilioSummary })
 
     if (aiBriefingText) {
       // Post the AI-generated briefing

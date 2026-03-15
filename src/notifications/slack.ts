@@ -234,6 +234,53 @@ export async function sendRawMessage(text: string): Promise<void> {
 }
 
 /**
+ * Send an SMS alert directly to Clutch via Twilio.
+ * Only fires on P0 (critical) alerts.
+ * Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, CLUTCH_PHONE_NUMBER.
+ */
+export async function sendSMSAlert(message: string): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const fromNumber = process.env.TWILIO_FROM_NUMBER
+  const toNumber = process.env.CLUTCH_PHONE_NUMBER
+
+  if (!accountSid || !authToken || !fromNumber || !toNumber) {
+    console.log('[SMS ALERT] Twilio not fully configured — skipping SMS alert.')
+    return
+  }
+
+  try {
+    const body = new URLSearchParams({
+      From: fromNumber,
+      To: toNumber,
+      Body: `🚨 CFP P0: ${message}`,
+    })
+
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+        signal: AbortSignal.timeout(10_000),
+      }
+    )
+
+    if (!response.ok) {
+      const err = await response.text()
+      console.error(`[SMS ALERT] Failed to send SMS: ${err}`)
+    } else {
+      console.log(`[SMS ALERT] P0 SMS sent to Clutch.`)
+    }
+  } catch (err) {
+    console.error('[SMS ALERT] Error sending SMS:', err)
+  }
+}
+
+/**
  * Sends a text response from the agent to a specific channel
  */
 export async function sendAgentMessage(text: string, channelId?: string): Promise<void> {
