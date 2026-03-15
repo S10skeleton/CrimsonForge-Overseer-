@@ -112,6 +112,14 @@ export async function generateAIBriefing(data: {
   const tz = process.env.TIMEZONE || 'America/Denver'
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz })
 
+  const shopStatuses = data.briefing.supabase?.data?.shopStatuses ?? []
+  const shopSummary = shopStatuses.length > 0
+    ? shopStatuses.map(s => {
+        const status = s.daysSinceActive >= 3 ? 'SILENT' : s.ticketsLast24h > 0 ? 'ACTIVE' : 'QUIET'
+        return `${s.shopName}: ${status} (${s.ticketsLast24h} tickets today, ${s.daysSinceActive}d since last activity${s.isNewShop ? ', NEW SHOP' : ''})`
+      }).join(' | ')
+    : 'No shops yet'
+
   const infraSummary = {
     overallStatus: data.briefing.overallStatus,
     activeShops: data.briefing.supabase?.data?.activeShopsLast24h ?? 'N/A',
@@ -119,6 +127,7 @@ export async function generateAIBriefing(data: {
     aiSessions: data.briefing.supabase?.data?.aiSessionsLast24h ?? 'N/A',
     newErrors: data.briefing.sentry?.data?.newIssueCount ?? 0,
     alerts: data.briefing.alerts,
+    shopBreakdown: shopSummary,
   }
 
   const calSummary = data.calendarData?.todayEvents?.length

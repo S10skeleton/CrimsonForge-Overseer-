@@ -109,29 +109,55 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 
     message += '\n'
 
-    // Activity section
-    message += '*ACTIVITY (last 24h)*\n'
-    if (briefing.supabase.success) {
-      message += `\uD83C\uDFEA ${briefing.supabase.data.activeShopsLast24h} active shops\n`
-      message += `\uD83C\uDFAB ${briefing.supabase.data.ticketsCreatedLast24h} tickets created\n`
-      message += `\uD83E\uDD16 ${briefing.supabase.data.aiSessionsLast24h} AI sessions\n`
+    // Per-shop status section
+    message += '*SHOP STATUS*\n'
+    if (briefing.supabase.success && briefing.supabase.data.shopStatuses.length > 0) {
+      const tz = process.env.TIMEZONE || 'America/Denver'
+
+      for (const shop of briefing.supabase.data.shopStatuses) {
+        // Determine shop status emoji
+        let shopEmoji = '\uD83D\uDFE2'  // 🟢
+        if (shop.isNewShop && shop.ticketsLast24h === 0 && shop.daysSinceSignup <= 1) {
+          shopEmoji = '\uD83D\uDD34'    // 🔴 brand new, no tickets yet
+        } else if (shop.daysSinceActive >= 3) {
+          shopEmoji = '\uD83D\uDD34'    // 🔴 gone silent
+        } else if (shop.daysSinceActive >= 1 && shop.ticketsLast24h === 0) {
+          shopEmoji = '\uD83D\uDFE1'    // 🟡 no tickets today
+        }
+
+        let shopLine = `${shopEmoji} ${shop.shopName.padEnd(24)}`
+
+        if (shop.isNewShop && shop.daysSinceSignup <= 1) {
+          shopLine += ` \u2014 Day ${shop.daysSinceSignup + 1} onboarding`
+          if (shop.ticketsLast24h === 0) shopLine += ' \u00B7 no tickets yet \u26A0\uFE0F'
+        } else if (shop.ticketsLast24h > 0) {
+          shopLine += ` \u2014 ${shop.ticketsLast24h} ticket${shop.ticketsLast24h > 1 ? 's' : ''} today`
+          if (shop.lastTicketAt) {
+            const lastTime = new Date(shop.lastTicketAt).toLocaleTimeString('en-US', {
+              hour: '2-digit', minute: '2-digit', timeZone: tz,
+            })
+            shopLine += ` \u00B7 last: ${lastTime}`
+          }
+        } else {
+          shopLine += ` \u2014 0 tickets`
+          if (shop.daysSinceActive > 0) {
+            shopLine += ` \u00B7 silent ${shop.daysSinceActive}d`
+          }
+        }
+
+        message += shopLine + '\n'
+      }
+
+      const totalTickets = briefing.supabase.data.ticketsCreatedLast24h
+      const aiSessions = briefing.supabase.data.aiSessionsLast24h
+      message += `\n_${totalTickets} tickets \u00B7 ${aiSessions || 0} AI sessions across all shops_\n`
+    } else if (briefing.supabase.success) {
+      message += '_No shops registered yet_\n'
     } else {
-      message += '_Activity data unavailable_\n'
+      message += '_Shop data unavailable_\n'
     }
 
     message += '\n'
-
-    // Shops to watch section
-    if (briefing.supabase.success && briefing.supabase.data.silentShops.length > 0) {
-      message += '*SHOPS TO WATCH* \uD83D\uDC40\n'
-      for (const shop of briefing.supabase.data.silentShops) {
-        const lastActivity = shop.lastActivityAt
-          ? new Date(shop.lastActivityAt).toLocaleDateString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })
-          : 'Never'
-        message += `${shop.shopName} \u2014 ${shop.daysSilent} days silent (last: ${lastActivity})\n`
-      }
-      message += '\n'
-    }
 
     // Support section
     message += '*SUPPORT*\n'

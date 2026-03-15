@@ -4,7 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import type { ToolResult, SupabaseData, AgentTool } from '../types/index.js'
+import type { ToolResult, SupabaseData, AgentTool, ShopStatus } from '../types/index.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
@@ -86,6 +86,42 @@ export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
       }
     })
 
+    // Get per-shop status breakdown
+    interface ShopStatusRow {
+      shop_id: string
+      shop_name: string
+      created_at: string
+      days_since_signup: number
+      tickets_last_24h: number
+      last_ticket_at: string | null
+      days_since_active: number
+    }
+
+    const { data: shopStatusData, error: shopStatusError } = await supabase
+      .rpc('get_shop_statuses') as {
+        data: ShopStatusRow[] | null
+        error: { message: string } | null
+      }
+
+    if (shopStatusError) {
+      console.log('[supabase] Shop statuses: error:', shopStatusError.message)
+    } else {
+      console.log('[supabase] Shop statuses:', shopStatusData?.length ?? 0, 'OK')
+    }
+
+    const NEW_SHOP_THRESHOLD_DAYS = 7
+
+    const shopStatuses: ShopStatus[] = (shopStatusData || []).map((row: ShopStatusRow) => ({
+      shopId: row.shop_id,
+      shopName: row.shop_name,
+      createdAt: row.created_at,
+      daysSinceSignup: row.days_since_signup,
+      ticketsLast24h: Number(row.tickets_last_24h),
+      lastTicketAt: row.last_ticket_at,
+      daysSinceActive: row.days_since_active,
+      isNewShop: row.days_since_signup <= NEW_SHOP_THRESHOLD_DAYS,
+    }))
+
     return {
       tool: 'supabase',
       success: true,
@@ -97,6 +133,7 @@ export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
         ticketsCreatedLast24h: ticketsCreatedLast24h || 0,
         aiSessionsLast24h: aiSessionsLast24h || 0,
         silentShops,
+        shopStatuses,
       },
     }
   } catch (err) {
@@ -111,6 +148,7 @@ export async function runSupabaseCheck(): Promise<ToolResult<SupabaseData>> {
         ticketsCreatedLast24h: 0,
         aiSessionsLast24h: 0,
         silentShops: [],
+        shopStatuses: [],
       },
       error: err instanceof Error ? err.message : 'Unknown error',
     }

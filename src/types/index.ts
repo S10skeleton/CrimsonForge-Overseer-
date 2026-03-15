@@ -35,6 +35,7 @@ export interface SupabaseData {
   ticketsCreatedLast24h: number
   aiSessionsLast24h: number
   silentShops: SilentShop[]  // shops with no activity in N days
+  shopStatuses: ShopStatus[]
 }
 
 export interface SilentShop {
@@ -42,6 +43,17 @@ export interface SilentShop {
   shopName: string
   lastActivityAt: string | null
   daysSilent: number
+}
+
+export interface ShopStatus {
+  shopId: string
+  shopName: string
+  createdAt: string
+  daysSinceSignup: number
+  ticketsLast24h: number
+  lastTicketAt: string | null
+  daysSinceActive: number
+  isNewShop: boolean        // true if signed up within last 7 days
 }
 
 // ─── Sentry Tool ──────────────────────────────────────────────────────────
