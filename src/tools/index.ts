@@ -19,6 +19,7 @@ import { stripeMetricsTool } from './stripe.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
 import { webSearchTool } from './search.js'
+import { listKnowledgeTool, updateKnowledgeTool } from './knowledge.js'
 
 // ─── For Scheduler ────────────────────────────────────────────────────────
 
@@ -75,6 +76,9 @@ export const allAgentTools = [
   closeIssueTool,
   // Web search
   webSearchTool,
+  // Knowledge management
+  listKnowledgeTool,
+  updateKnowledgeTool,
 ]
 
 export { githubTool } // backwards compat

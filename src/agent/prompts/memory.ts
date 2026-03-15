@@ -14,6 +14,12 @@ interface MemoryEntry {
   category: string
 }
 
+interface KnowledgeSection {
+  section_key: string
+  title: string
+  content: string
+}
+
 interface ParkingLotItem {
   id: string
   item: string
@@ -35,6 +41,7 @@ interface RuntimeMemory {
   parkingLot: ParkingLotItem[]
   docDebt: DocDebtItem[]
   sessionFlags: string[]
+  knowledge: KnowledgeSection[]
 }
 
 // ─── Memory Loader ────────────────────────────────────────────────────────
@@ -48,6 +55,7 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
     parkingLot: [],
     docDebt: [],
     sessionFlags: [],
+    knowledge: [],
   }
 
   if (!url || !key) return empty
@@ -55,7 +63,7 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
   try {
     const supabase = createClient(url, key)
 
-    const [factsRes, parkingRes, debtRes, flagsRes] = await Promise.allSettled([
+    const [factsRes, parkingRes, debtRes, flagsRes, knowledgeRes] = await Promise.allSettled([
       supabase
         .from('agent_memory')
         .select('key, value, category')
@@ -82,6 +90,12 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
         .eq('active', true)
         .order('created_at', { ascending: false })
         .limit(5),
+
+      supabase
+        .from('agent_knowledge')
+        .select('section_key, title, content')
+        .eq('active', true)
+        .order('section_key', { ascending: true }),
     ])
 
     return {
@@ -91,6 +105,7 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
       sessionFlags: flagsRes.status === 'fulfilled'
         ? (flagsRes.value.data || []).map((f: { flag: string }) => f.flag)
         : [],
+      knowledge: knowledgeRes.status === 'fulfilled' ? (knowledgeRes.value.data || []) : [],
     }
   } catch (err) {
     console.error('[MEMORY] Failed to load runtime memory:', err)
@@ -144,3 +159,21 @@ export function buildMemoryPrompt(memory: RuntimeMemory): string {
 
   return prompt
 }
+
+// ─── Knowledge Prompt Builder ─────────────────────────────────────────────
+
+/**
+ * Builds the live project knowledge section from DB rows.
+ * Returns empty string if no knowledge rows loaded (caller falls back to static).
+ */
+export function buildKnowledgePrompt(knowledge: KnowledgeSection[]): string {
+  if (knowledge.length === 0) return ''
+
+  let prompt = '\n─── PROJECT KNOWLEDGE (live from DB) ────────────────────────────────────────────\n'
+  knowledge.forEach(k => {
+    prompt += `\n${k.title.toUpperCase()}\n${k.content}\n`
+  })
+  return prompt
+}
+
+export type { KnowledgeSection, RuntimeMemory }

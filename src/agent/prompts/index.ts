@@ -7,7 +7,7 @@ import { IDENTITY_PROMPT } from './identity.js'
 import { FOUNDER_PROMPT } from './founder.js'
 import { PROJECT_PROMPT } from './project.js'
 import { RULES_PROMPT } from './rules.js'
-import { loadRuntimeMemory, buildMemoryPrompt } from './memory.js'
+import { loadRuntimeMemory, buildMemoryPrompt, buildKnowledgePrompt } from './memory.js'
 import type { MorningBriefing } from '../../types/index.js'
 
 // ─── Assembler ────────────────────────────────────────────────────────────
@@ -16,6 +16,10 @@ export async function buildSystemPrompt(recentBriefing?: MorningBriefing): Promi
   // Load runtime memory fresh each session
   const memory = await loadRuntimeMemory()
   const memoryPrompt = buildMemoryPrompt(memory)
+
+  // Live project knowledge from DB; fall back to static PROJECT_PROMPT if empty
+  const knowledgePrompt = buildKnowledgePrompt(memory.knowledge)
+  const projectSection = knowledgePrompt || PROJECT_PROMPT
 
   const briefingContext = recentBriefing
     ? `\n─── MOST RECENT BRIEFING ─────────────────────────────────────────────────────────\n` +
@@ -29,7 +33,7 @@ export async function buildSystemPrompt(recentBriefing?: MorningBriefing): Promi
   return [
     IDENTITY_PROMPT,
     FOUNDER_PROMPT,
-    PROJECT_PROMPT,
+    projectSection,
     RULES_PROMPT,
     memoryPrompt,
     briefingContext,
