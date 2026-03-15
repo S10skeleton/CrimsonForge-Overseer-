@@ -98,6 +98,12 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
         .order('section_key', { ascending: true }),
     ])
 
+    console.log('[MEMORY DEBUG] knowledge query result:', JSON.stringify({
+      status: knowledgeRes.status,
+      dataLength: knowledgeRes.status === 'fulfilled' ? knowledgeRes.value.data?.length : null,
+      error: knowledgeRes.status === 'fulfilled' ? knowledgeRes.value.error : (knowledgeRes as PromiseRejectedResult).reason,
+    }))
+
     return {
       facts: factsRes.status === 'fulfilled' ? (factsRes.value.data || []) : [],
       parkingLot: parkingRes.status === 'fulfilled' ? (parkingRes.value.data || []) : [],
