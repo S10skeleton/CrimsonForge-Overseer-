@@ -113,3 +113,112 @@ export const twilioStatsTool: AgentTool = {
 }
 
 export { getTwilioStats as runTwilioCheck }
+
+// ─── On-demand SMS send (Elara tool) ─────────────────────────────────────
+
+interface SendSMSResult {
+  to: string
+  messageSid: string
+  status: string
+}
+
+async function sendSMS(to: string, body: string): Promise<ToolResult<SendSMSResult>> {
+  const timestamp = new Date().toISOString()
+  const accountSid = process.env.TWILIO_ACCOUNT_SID
+  const authToken = process.env.TWILIO_AUTH_TOKEN
+  const fromNumber = process.env.TWILIO_FROM_NUMBER
+
+  if (!accountSid || !authToken || !fromNumber) {
+    return {
+      tool: 'send_sms',
+      success: false,
+      timestamp,
+      data: { to, messageSid: '', status: 'not_sent' },
+      error: 'Twilio credentials not configured.',
+    }
+  }
+
+  // Safety: only allow sending to known contacts unless explicitly overridden
+  const ALLOWED_NUMBERS = [
+    process.env.CLUTCH_PHONE_NUMBER,
+    process.env.WAYNE_PHONE_NUMBER,
+    process.env.STEVE_PHONE_NUMBER,
+  ].filter(Boolean) as string[]
+
+  if (ALLOWED_NUMBERS.length > 0 && !ALLOWED_NUMBERS.includes(to)) {
+    return {
+      tool: 'send_sms',
+      success: false,
+      timestamp,
+      data: { to, messageSid: '', status: 'blocked' },
+      error: `Number ${to} is not in the allowed contacts list. Add to env vars to enable.`,
+    }
+  }
+
+  try {
+    const formData = new URLSearchParams({
+      From: fromNumber,
+      To: to,
+      Body: body,
+    })
+
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+        signal: AbortSignal.timeout(10_000),
+      }
+    )
+
+    const result = await response.json() as { sid: string; status: string; error_message?: string }
+
+    if (!response.ok) {
+      throw new Error(result.error_message || `Twilio API error: ${response.status}`)
+    }
+
+    console.log(`[twilio] SMS sent to ${to}: ${result.sid}`)
+    return {
+      tool: 'send_sms',
+      success: true,
+      timestamp,
+      data: { to, messageSid: result.sid, status: result.status },
+    }
+  } catch (err) {
+    return {
+      tool: 'send_sms',
+      success: false,
+      timestamp,
+      data: { to, messageSid: '', status: 'failed' },
+      error: err instanceof Error ? err.message : 'Unknown error',
+    }
+  }
+}
+
+export const sendSMSTool: AgentTool = {
+  name: 'send_sms',
+  description:
+    'Send an SMS message to a known contact (Clutch, Wayne, or Steve). ' +
+    'Use when asked to text someone, send a heads-up, or notify a stakeholder. ' +
+    'The "to" field must be an E.164 phone number (+1XXXXXXXXXX). ' +
+    'Only sends to numbers configured in env vars — will not send to unknown numbers.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      to: {
+        type: 'string',
+        description: 'Recipient phone number in E.164 format (+1XXXXXXXXXX). Use CLUTCH_PHONE_NUMBER for Clutch, WAYNE_PHONE_NUMBER for Wayne, STEVE_PHONE_NUMBER for Steve.',
+      },
+      body: {
+        type: 'string',
+        description: 'The SMS message text. Keep under 160 characters to avoid multi-part messages.',
+      },
+    },
+    required: ['to', 'body'],
+  },
+  execute: async (input) => sendSMS(input.to as string, input.body as string),
+}
