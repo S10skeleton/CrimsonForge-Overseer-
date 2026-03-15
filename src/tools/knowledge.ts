@@ -22,7 +22,7 @@ async function listKnowledge(): Promise<ToolResult> {
     const sb = getSupabase()
     const { data, error } = await sb
       .from('agent_knowledge')
-      .select('section_key, title, content, active, updated_at')
+      .select('section_key, label, content, active, updated_at')
       .order('section_key', { ascending: true })
 
     if (error) throw error
@@ -62,7 +62,7 @@ export const listKnowledgeTool: AgentTool = {
 async function updateKnowledge(
   sectionKey: string,
   content: string,
-  title?: string,
+  label?: string,
 ): Promise<ToolResult> {
   try {
     const sb = getSupabase()
@@ -71,13 +71,13 @@ async function updateKnowledge(
       content,
       updated_at: new Date().toISOString(),
     }
-    if (title) update.title = title
+    if (label) update.label = label
 
     const { data, error } = await sb
       .from('agent_knowledge')
       .update(update)
       .eq('section_key', sectionKey)
-      .select('section_key, title')
+      .select('section_key, label')
       .single()
 
     if (error) throw error
@@ -87,7 +87,7 @@ async function updateKnowledge(
       tool: 'update_knowledge',
       success: true,
       timestamp: new Date().toISOString(),
-      data: { updated: data.section_key, title: data.title },
+      data: { updated: data.section_key, label: data.label },
     }
   } catch (err) {
     return {
@@ -118,9 +118,9 @@ export const updateKnowledgeTool: AgentTool = {
         type: 'string',
         description: 'The new content for this section',
       },
-      title: {
+      label: {
         type: 'string',
-        description: 'Optional: update the section title as well',
+        description: 'Optional: update the section label as well',
       },
     },
     required: ['section_key', 'content'],
@@ -129,6 +129,6 @@ export const updateKnowledgeTool: AgentTool = {
     updateKnowledge(
       input.section_key as string,
       input.content as string,
-      input.title as string | undefined,
+      input.label as string | undefined,
     ),
 }

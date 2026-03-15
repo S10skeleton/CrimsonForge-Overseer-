@@ -16,7 +16,7 @@ interface MemoryEntry {
 
 interface KnowledgeSection {
   section_key: string
-  title: string
+  label: string
   content: string
 }
 
@@ -93,16 +93,10 @@ export async function loadRuntimeMemory(): Promise<RuntimeMemory> {
 
       supabase
         .from('agent_knowledge')
-        .select('section_key, title, content')
+        .select('section_key, label, content, updated_at')
         .eq('active', true)
         .order('section_key', { ascending: true }),
     ])
-
-    console.log('[MEMORY DEBUG] knowledge query result:', JSON.stringify({
-      status: knowledgeRes.status,
-      dataLength: knowledgeRes.status === 'fulfilled' ? knowledgeRes.value.data?.length : null,
-      error: knowledgeRes.status === 'fulfilled' ? knowledgeRes.value.error : (knowledgeRes as PromiseRejectedResult).reason,
-    }))
 
     return {
       facts: factsRes.status === 'fulfilled' ? (factsRes.value.data || []) : [],
@@ -175,9 +169,11 @@ export function buildMemoryPrompt(memory: RuntimeMemory): string {
 export function buildKnowledgePrompt(knowledge: KnowledgeSection[]): string {
   if (knowledge.length === 0) return ''
 
+  console.log(`[PROMPT] Loaded ${knowledge.length} live knowledge sections from DB.`)
+
   let prompt = '\n─── PROJECT KNOWLEDGE (live from DB) ────────────────────────────────────────────\n'
   knowledge.forEach(k => {
-    prompt += `\n${k.title.toUpperCase()}\n${k.content}\n`
+    prompt += `\n${k.label.toUpperCase()}\n${k.content}\n`
   })
   return prompt
 }
