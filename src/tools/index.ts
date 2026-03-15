@@ -15,7 +15,7 @@ import { memoryTools } from './memory.js'
 import { listContactsTool, contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
 import { listCheckinsTool, updateCheckinTool } from './checkins.js'
-import { stripeMetricsTool } from './stripe.js'
+import { runStripeCheck, stripeMetricsTool } from './stripe.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
 import { webSearchTool } from './search.js'
@@ -33,6 +33,7 @@ export const monitors = {
   calendar: runCalendarCheck,
   drive: runDriveCheck,
   twilio: runTwilioCheck,
+  stripe: runStripeCheck,
 }
 
 // ─── For Elara (AI Agent) ─────────────────────────────────────────────────

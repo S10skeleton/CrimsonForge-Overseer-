@@ -90,6 +90,34 @@ export interface EmailData {
   lastCheckAt: string
 }
 
+// ─── Stripe Tool ──────────────────────────────────────────────────────────
+
+export interface StripeWebhookHealth {
+  url: string
+  status: 'healthy' | 'degraded' | 'unknown'
+  enabledEvents: number
+}
+
+export interface StripePaymentFailure {
+  customerId: string
+  customerEmail: string
+  amount: number
+  currency: string
+  failureMessage: string
+  failedAt: string
+}
+
+export interface StripeData {
+  activeSubscriptions: number
+  mrr: number
+  newThisMonth: number
+  cancelledThisMonth: number
+  webhookHealth: StripeWebhookHealth | null
+  paymentFailures: StripePaymentFailure[]
+  hasWebhookIssues: boolean
+  hasPaymentFailures: boolean
+}
+
 // ─── GitHub Tool ──────────────────────────────────────────────────────────
 
 export interface GitHubData {
@@ -106,6 +134,7 @@ export interface MorningBriefing {
   sentry: ToolResult<SentryData>
   railway: ToolResult<RailwayData>
   email: ToolResult<EmailData>
+  stripe?: ToolResult<StripeData>
   alerts: Alert[]
 }
 

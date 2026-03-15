@@ -5,6 +5,7 @@
 
 import cron from 'node-cron'
 import { monitors } from './tools/index.js'
+import { checkForNewSubscribers } from './tools/stripe.js'
 import { sendBriefing, sendAlert, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
@@ -85,6 +86,24 @@ async function runSilentHealthCheck(): Promise<void> {
     } else {
       console.log('[SCHEDULER] Silent health check passed. No alerts needed.')
     }
+
+    // ── Real-time new subscriber alerts ──────────────────────────────────
+    try {
+      if (process.env.STRIPE_SECRET_KEY) {
+        const { newSubscribers } = await checkForNewSubscribers()
+        for (const sub of newSubscribers) {
+          await sendAlert({
+            severity: 'info',
+            tool: 'stripe',
+            message: `🎉 New subscriber: ${sub.email} — ${sub.plan} ($${sub.amount}/mo)`,
+          })
+          console.log(`[SCHEDULER] New subscriber alert: ${sub.email}`)
+        }
+      }
+    } catch (err) {
+      console.error('[SCHEDULER] Error in new subscriber check:', err)
+    }
+
   } catch (err) {
     console.error('[SCHEDULER] Error in silent health check:', err)
   }
@@ -97,7 +116,7 @@ async function runMorningBriefing(): Promise<void> {
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
-    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio] =
+    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio, stripe] =
       await Promise.allSettled([
         monitors.uptime(),
         monitors.supabase(),
@@ -107,6 +126,7 @@ async function runMorningBriefing(): Promise<void> {
         monitors.gmail(),
         monitors.calendar(),
         monitors.twilio(),
+        monitors.stripe(),
       ])
 
     function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
@@ -127,6 +147,7 @@ async function runMorningBriefing(): Promise<void> {
     const gmailResult = getResult(gmail)
     const calendarResult = getResult(calendar)
     const twilioResult = getResult(twilio)
+    const stripeResult = getResult(stripe)
 
     // Determine overall status
     const isUptimeDown =
@@ -174,6 +195,34 @@ async function runMorningBriefing(): Promise<void> {
       })
     }
 
+    // Stripe alerts
+    const stripeData = stripeResult.success
+      ? (stripeResult.data as import('./types/index.js').StripeData)
+      : null
+
+    if (stripeData?.hasWebhookIssues) {
+      alerts.push({
+        severity: 'critical',
+        tool: 'stripe',
+        message: 'Stripe webhook endpoint issue detected',
+        details: stripeData.webhookHealth?.url || 'endpoint not found',
+        actionUrl: 'https://dashboard.stripe.com/webhooks',
+      })
+    }
+
+    if (stripeData?.hasPaymentFailures) {
+      const failureList = stripeData.paymentFailures
+        .map((f) => `${f.customerEmail} ($${f.amount})`)
+        .join(', ')
+      alerts.push({
+        severity: 'warning',
+        tool: 'stripe',
+        message: `${stripeData.paymentFailures.length} payment failure(s) in last 24h`,
+        details: failureList,
+        actionUrl: 'https://dashboard.stripe.com/payments?status=failed',
+      })
+    }
+
     // Build the full briefing object
     const briefing: MorningBriefing = {
       timestamp: new Date().toISOString(),
@@ -183,6 +232,7 @@ async function runMorningBriefing(): Promise<void> {
       sentry: sentryResult,
       railway: railwayResult,
       email: emailResult,
+      stripe: stripeResult,
       alerts,
     }
 
@@ -197,7 +247,17 @@ async function runMorningBriefing(): Promise<void> {
       ? (twilioResult.data as { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean })
       : undefined
 
-    const aiBriefingText = await generateAIBriefing({ briefing, gmailData, calendarData, twilioData: twilioSummary })
+    const stripeForBriefing = stripeResult.success
+      ? (stripeResult.data as import('./types/index.js').StripeData)
+      : undefined
+
+    const aiBriefingText = await generateAIBriefing({
+      briefing,
+      gmailData,
+      calendarData,
+      twilioData: twilioSummary,
+      stripeData: stripeForBriefing,
+    })
 
     if (aiBriefingText) {
       // Post the AI-generated briefing

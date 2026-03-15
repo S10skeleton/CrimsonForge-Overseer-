@@ -105,6 +105,7 @@ export async function generateAIBriefing(data: {
   gmailData?: { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }
   calendarData?: { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }
   twilioData?: { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean }
+  stripeData?: { activeSubscriptions: number; mrr: number; newThisMonth: number; hasWebhookIssues: boolean; hasPaymentFailures: boolean; paymentFailures: Array<{ customerEmail: string; amount: number }> }
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
@@ -145,6 +146,12 @@ export async function generateAIBriefing(data: {
     ? `${data.twilioData.sent} sent, ${data.twilioData.delivered} delivered, ${data.twilioData.failed} failed (${(data.twilioData.failureRate * 100).toFixed(1)}% failure rate)${data.twilioData.thresholdBreached ? ' ⚠️ THRESHOLD BREACHED' : ''}`
     : 'Twilio not configured.'
 
+  const stripeSummary = data.stripeData
+    ? `${data.stripeData.activeSubscriptions} active subs · $${data.stripeData.mrr.toFixed(0)} MRR · ${data.stripeData.newThisMonth} new this month` +
+      (data.stripeData.hasWebhookIssues ? ' ⚠️ WEBHOOK ISSUE' : '') +
+      (data.stripeData.hasPaymentFailures ? ` ⚠️ ${data.stripeData.paymentFailures.length} PAYMENT FAILURES` : '')
+    : 'Stripe not configured (pre-revenue).'
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
@@ -159,6 +166,8 @@ UNREAD EMAILS (${data.gmailData?.unreadCount ?? 0} total):
 ${emailSummary}
 
 SMS (TWILIO): ${twilioSummary}
+
+REVENUE (STRIPE): ${stripeSummary}
 
 Write the morning briefing for Slack in your voice as Elara. Include:
 1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)

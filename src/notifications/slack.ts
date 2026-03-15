@@ -159,6 +159,23 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 
     message += '\n'
 
+    // Revenue section
+    if (briefing.stripe?.success && briefing.stripe.data) {
+      const s = briefing.stripe.data as import('../types/index.js').StripeData
+      message += '*REVENUE*\n'
+      if (s.activeSubscriptions === 0) {
+        message += `\uD83D\uDCB3 $0 MRR — pre-revenue (closed beta)\n`
+      } else {
+        message += `\uD83D\uDCB3 ${s.activeSubscriptions} active subs · $${s.mrr.toFixed(0)} MRR\n`
+        if (s.newThisMonth > 0) message += `\uD83C\uDF89 ${s.newThisMonth} new this month\n`
+        if (s.hasWebhookIssues) message += `\u26A0\uFE0F Webhook issue — check Stripe dashboard\n`
+        if (s.hasPaymentFailures) {
+          message += `\uD83D\uDD34 ${s.paymentFailures.length} payment failure(s) in last 24h\n`
+        }
+      }
+      message += '\n'
+    }
+
     // Support section
     message += '*SUPPORT*\n'
     if (briefing.email.success) {
