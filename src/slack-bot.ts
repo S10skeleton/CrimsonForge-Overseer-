@@ -34,6 +34,12 @@ function appendHistory(threadKey: string, role: 'user' | 'assistant', content: s
   conversationHistory.set(threadKey, history)
 }
 
+// ─── Rate Limiting ────────────────────────────────────────────────────────
+// Prevent rapid-fire messages from spamming the Anthropic API.
+// One active request per thread at a time.
+
+const activeRequests = new Set<string>()
+
 // ─── State ────────────────────────────────────────────────────────────────
 
 let lastBriefing: MorningBriefing | undefined = undefined
@@ -56,10 +62,6 @@ export async function startSlackBot(): Promise<void> {
     return
   }
 
-  // DEBUG — remove after confirming tokens are correct
-  console.log(`[SLACK BOT DEBUG] BOT_TOKEN: "${botToken.slice(0, 12)}..." length=${botToken.length} firstChar=${botToken.charCodeAt(0)}`)
-  console.log(`[SLACK BOT DEBUG] APP_TOKEN: "${appToken.slice(0, 12)}..." length=${appToken.length} firstChar=${appToken.charCodeAt(0)}`)
-
   const app = new App({
     token: botToken,
     appToken,
@@ -77,11 +79,19 @@ export async function startSlackBot(): Promise<void> {
     const text = (message as { text?: string }).text || ''
     if (!text.trim()) return
 
+    const msg = message as { ts: string; thread_ts?: string; channel: string }
+    const threadKey = msg.thread_ts ?? msg.ts
+
     try {
       console.log(`[SLACK BOT] Message received: "${text.slice(0, 80)}"`)
 
-      const msg = message as { ts: string; thread_ts?: string; channel: string }
-      const threadKey = msg.thread_ts ?? msg.ts
+      // Skip if a request for this thread is already in-flight
+      if (activeRequests.has(threadKey)) {
+        console.log(`[SLACK BOT] Skipping — request already in-flight for thread ${threadKey}`)
+        return
+      }
+      activeRequests.add(threadKey)
+
       const history = getHistory(threadKey)
 
       // Show a typing indicator via the "thinking" message
@@ -111,7 +121,9 @@ export async function startSlackBot(): Promise<void> {
       } catch {
         // Non-critical — ignore delete failures
       }
+      activeRequests.delete(threadKey)
     } catch (err) {
+      activeRequests.delete(threadKey)
       logger.error('Agent error:', err)
       await say({
         text: `\u26A0\uFE0F Agent error: ${err instanceof Error ? err.message : 'Unknown error'}`,

@@ -5,18 +5,28 @@
  * Uses randomized firing within the window so it never feels like clockwork.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { WebClient } from '@slack/web-api'
 
+let _supabase: SupabaseClient | null = null
+
 function getSupabase() {
-  return createClient(
-    process.env.ELARA_SUPABASE_URL!,
-    process.env.ELARA_SUPABASE_KEY!
-  )
+  if (!_supabase) {
+    _supabase = createClient(
+      process.env.ELARA_SUPABASE_URL!,
+      process.env.ELARA_SUPABASE_KEY!
+    )
+  }
+  return _supabase
 }
 
+let _slack: WebClient | null = null
+
 function getSlack() {
-  return new WebClient(process.env.SLACK_BOT_TOKEN!)
+  if (!_slack) {
+    _slack = new WebClient(process.env.SLACK_BOT_TOKEN!)
+  }
+  return _slack
 }
 
 const FOUNDER_SLACK_USER_ID = process.env.SLACK_FOUNDER_USER_ID!

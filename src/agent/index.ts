@@ -8,9 +8,14 @@ import { buildSystemPrompt } from './prompts/index.js'
 import type { AgentContext, MorningBriefing } from '../types/index.js'
 import { allAgentTools } from '../tools/index.js'
 
+let _client: Anthropic | null = null
+
 function getClient(): Anthropic | null {
   if (!process.env.ANTHROPIC_API_KEY) return null
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  if (!_client) {
+    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  }
+  return _client
 }
 
 // ─── Main agent runner ────────────────────────────────────────────────────
@@ -49,7 +54,7 @@ export async function runAgent(
     iterations++
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: systemPrompt,
       tools,
@@ -152,7 +157,7 @@ Your voice. Direct. Warm. No preamble. No filler.`
 
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       system: systemPrompt,
       messages: [{ role: 'user', content: prompt }],
