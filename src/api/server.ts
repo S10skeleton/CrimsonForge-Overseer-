@@ -16,18 +16,8 @@ export function createApiServer(): express.Express {
 
   // ── Middleware ──────────────────────────────────────────────────────────────
 
-  app.use(cors({
-    origin: [
-      process.env.FRONTEND_URL ?? '',
-      process.env.PANEL_URL ?? '',
-      process.env.MOBILE_URL ?? '',
-      'http://localhost:5173',
-      'http://localhost:3001',
-      'http://localhost:8081',
-      'exp://localhost:8081',
-    ].filter(Boolean),
-    credentials: true,
-  }))
+  // API is JWT-protected so any origin is safe — reflect origin for credentials support
+  app.use(cors({ origin: true, credentials: true }))
 
   app.use(express.json({ limit: '2mb' }))
 
