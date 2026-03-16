@@ -5,8 +5,56 @@
 
 import pkg from '@slack/bolt'
 const { App, LogLevel } = pkg
+import { createClient } from '@supabase/supabase-js'
 import { runAgent } from './agent/index.js'
 import type { MorningBriefing } from './types/index.js'
+
+// ─── Supabase client for conversation persistence ─────────────────────────
+
+let _convSupabase: ReturnType<typeof createClient> | null = null
+
+function getConvSupabase() {
+  const url = process.env.ELARA_SUPABASE_URL
+  const key = process.env.ELARA_SUPABASE_KEY
+  if (!url || !key) return null
+  if (!_convSupabase) _convSupabase = createClient(url, key)
+  return _convSupabase
+}
+
+async function persistMessage(threadKey: string, role: 'user' | 'assistant', content: string): Promise<void> {
+  try {
+    const db = getConvSupabase()
+    if (!db) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (db as any).from('slack_conversations').insert({ thread_key: threadKey, role, content })
+  } catch {
+    // Non-critical — never let persistence errors affect the bot
+  }
+}
+
+async function loadRecentConversations(): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  try {
+    const db = getConvSupabase()
+    if (!db) return []
+
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (db as any)
+      .from('slack_conversations')
+      .select('role, content, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(100)
+
+    if (error || !data) return []
+    return (data as Array<{ role: string; content: string }>).map(row => ({
+      role: row.role as 'user' | 'assistant',
+      content: row.content,
+    }))
+  } catch {
+    return []
+  }
+}
 
 // ─── Conversation History ─────────────────────────────────────────────────
 
@@ -71,9 +119,15 @@ const activeRequests = new Set<string>()
 // ─── State ────────────────────────────────────────────────────────────────
 
 let lastBriefing: MorningBriefing | undefined = undefined
+let recentConversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
 export function setLastBriefing(briefing: MorningBriefing): void {
   lastBriefing = briefing
+}
+
+async function refreshConversationHistory(): Promise<void> {
+  recentConversationHistory = await loadRecentConversations()
+  console.log(`[SLACK BOT] Loaded ${recentConversationHistory.length} recent conversation messages from DB.`)
 }
 
 // ─── Bot Setup ────────────────────────────────────────────────────────────
@@ -122,6 +176,9 @@ export async function startSlackBot(): Promise<void> {
 
       const history = getHistory(threadKey)
 
+      // Persist user message to DB (non-blocking)
+      void persistMessage(threadKey, 'user', text)
+
       // Show a typing indicator via the "thinking" message
       const thinkingMsg = await say({
         text: '_🤔 Checking..._',
@@ -129,8 +186,11 @@ export async function startSlackBot(): Promise<void> {
       })
 
       appendHistory(threadKey, 'user', text)
-      const response = await runAgent(text, lastBriefing, history)
+      // Use in-memory thread history if available, else fall back to recent DB history
+      const fullHistory = history.length > 0 ? history : recentConversationHistory.slice(-20)
+      const response = await runAgent(text, lastBriefing, fullHistory)
       appendHistory(threadKey, 'assistant', response)
+      void persistMessage(threadKey, 'assistant', response)
 
       // Replace thinking indicator with response in same thread
       await say({
@@ -149,14 +209,14 @@ export async function startSlackBot(): Promise<void> {
       } catch {
         // Non-critical — ignore delete failures
       }
-      activeRequests.delete(threadKey)
     } catch (err) {
-      activeRequests.delete(threadKey)
       logger.error('Agent error:', err)
       await say({
         text: `\u26A0\uFE0F Agent error: ${err instanceof Error ? err.message : 'Unknown error'}`,
         thread_ts: (message as { ts: string }).ts,
       })
+    } finally {
+      activeRequests.delete(threadKey)
     }
   })
 
@@ -183,8 +243,11 @@ export async function startSlackBot(): Promise<void> {
 
     try {
       appendHistory(threadKey, 'user', text)
-      const response = await runAgent(text, lastBriefing, history)
+      void persistMessage(threadKey, 'user', text)
+      const fullHistory = history.length > 0 ? history : recentConversationHistory.slice(-20)
+      const response = await runAgent(text, lastBriefing, fullHistory)
       appendHistory(threadKey, 'assistant', response)
+      void persistMessage(threadKey, 'assistant', response)
       await say({ text: response, thread_ts: event.ts })
     } catch (err) {
       await say({
@@ -201,6 +264,12 @@ export async function startSlackBot(): Promise<void> {
   try {
     await app.start()
     console.log('\u2705 [SLACK BOT] Socket Mode bot started — ready to receive messages.')
+
+    // Load recent conversation history from DB
+    await refreshConversationHistory()
+
+    // Refresh every 30 minutes to pick up conversations from other sessions
+    setInterval(() => { void refreshConversationHistory() }, 30 * 60 * 1000)
   } catch (err) {
     console.error('\u274C [SLACK BOT] Failed to start:', err)
   }

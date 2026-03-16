@@ -104,6 +104,71 @@ async function runSilentHealthCheck(): Promise<void> {
       console.error('[SCHEDULER] Error in new subscriber check:', err)
     }
 
+    // ── New shop onboarding detection ─────────────────────────────────────
+    try {
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const { createClient } = await import('@supabase/supabase-js')
+        const supabase = createClient(
+          process.env.SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY
+        )
+
+        // Shops created in the last 15 minutes
+        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newShops } = await (supabase as any)
+          .from('shops')
+          .select('id, name, created_at')
+          .gte('created_at', since)
+
+        for (const shop of ((newShops as Array<{ id: string; name: string; created_at: string }>) || [])) {
+          await sendAlert({
+            severity: 'info',
+            tool: 'supabase',
+            message: `🏪 New shop onboarded: ${shop.name}`,
+            details: `Signed up just now — watch for first ticket in next 24h`,
+          })
+          console.log(`[SCHEDULER] New shop alert: ${shop.name}`)
+        }
+
+        // Shops in first 7 days with no activity in last 24h — flag faster than normal shops
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: newishShops } = await (supabase as any)
+          .from('shops')
+          .select('id, name, created_at')
+          .gte('created_at', weekAgo)
+
+        for (const shop of ((newishShops as Array<{ id: string; name: string; created_at: string }>) || [])) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { count } = await (supabase as any)
+            .from('tickets')
+            .select('id', { count: 'exact', head: true })
+            .eq('shop_id', shop.id)
+            .gte('created_at', dayAgo)
+
+          const daysSinceSignup = Math.floor(
+            (Date.now() - new Date(shop.created_at).getTime()) / (1000 * 60 * 60 * 24)
+          )
+
+          // Only alert if they've been around for at least 1 day with no tickets
+          if (daysSinceSignup >= 1 && (count === 0 || count === null)) {
+            await sendAlert({
+              severity: 'warning',
+              tool: 'supabase',
+              message: `⚠️ New shop silent: ${shop.name}`,
+              details: `Day ${daysSinceSignup + 1} onboarding — 0 tickets in last 24h. May need support.`,
+            })
+            console.log(`[SCHEDULER] New shop silent alert: ${shop.name} (day ${daysSinceSignup + 1})`)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[SCHEDULER] Error in new shop onboarding check:', err)
+    }
+
   } catch (err) {
     console.error('[SCHEDULER] Error in silent health check:', err)
   }
