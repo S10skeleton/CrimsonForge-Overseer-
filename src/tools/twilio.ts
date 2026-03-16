@@ -138,6 +138,11 @@ async function sendSMS(to: string, body: string): Promise<ToolResult<SendSMSResu
     }
   }
 
+  // Named recipient resolution — Elara can pass "clutch" instead of a phone number
+  if (to.toLowerCase() === 'clutch') { to = process.env.CLUTCH_PHONE_NUMBER || to }
+  if (to.toLowerCase() === 'wayne') { to = process.env.WAYNE_PHONE_NUMBER || to }
+  if (to.toLowerCase() === 'steve') { to = process.env.STEVE_PHONE_NUMBER || to }
+
   // Safety: only allow sending to known contacts unless explicitly overridden
   const ALLOWED_NUMBERS = [
     process.env.CLUTCH_PHONE_NUMBER,
@@ -211,7 +216,7 @@ export const sendSMSTool: AgentTool = {
     properties: {
       to: {
         type: 'string',
-        description: 'Recipient phone number in E.164 format (+1XXXXXXXXXX). Use CLUTCH_PHONE_NUMBER for Clutch, WAYNE_PHONE_NUMBER for Wayne, STEVE_PHONE_NUMBER for Steve.',
+        description: 'Recipient phone number in E.164 format (+1XXXXXXXXXX), or a named contact: "clutch", "wayne", or "steve". Named contacts resolve to the corresponding env var (e.g. "clutch" → CLUTCH_PHONE_NUMBER).',
       },
       body: {
         type: 'string',
