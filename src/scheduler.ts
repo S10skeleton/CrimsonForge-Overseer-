@@ -116,7 +116,7 @@ async function runMorningBriefing(): Promise<void> {
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
-    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio, stripe, resend] =
+    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio, stripe, resend, netlify] =
       await Promise.allSettled([
         monitors.uptime(),
         monitors.supabase(),
@@ -128,6 +128,7 @@ async function runMorningBriefing(): Promise<void> {
         monitors.twilio(),
         monitors.stripe(),
         monitors.resend(),
+        monitors.netlify(),
       ])
 
     function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
@@ -150,6 +151,7 @@ async function runMorningBriefing(): Promise<void> {
     const twilioResult = getResult(twilio)
     const stripeResult = getResult(stripe)
     const resendResult = getResult(resend)
+    const netlifyResult = getResult(netlify)
 
     // Determine overall status
     const isUptimeDown =
@@ -264,6 +266,7 @@ async function runMorningBriefing(): Promise<void> {
       railway: railwayResult,
       email: emailResult,
       stripe: stripeResult,
+      netlify: netlifyResult,
       alerts,
     }
 
@@ -293,6 +296,10 @@ async function runMorningBriefing(): Promise<void> {
         })
       : undefined
 
+    const netlifyForBriefing = netlifyResult.success
+      ? (netlifyResult.data as import('./types/index.js').NetlifyData)
+      : undefined
+
     const aiBriefingText = await generateAIBriefing({
       briefing,
       gmailData,
@@ -300,6 +307,7 @@ async function runMorningBriefing(): Promise<void> {
       twilioData: twilioSummary,
       stripeData: stripeForBriefing,
       resendData: resendForBriefing,
+      netlifyData: netlifyForBriefing,
     })
 
     if (aiBriefingText) {

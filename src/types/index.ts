@@ -118,6 +118,16 @@ export interface StripeData {
   hasPaymentFailures: boolean
 }
 
+// ─── Netlify Tool ─────────────────────────────────────────────────────────
+
+export interface NetlifyData {
+  status: HealthStatus
+  latestDeployState: string | null
+  latestDeployAt: string | null
+  branch: string | null
+  errorMessage: string | null
+}
+
 // ─── GitHub Tool ──────────────────────────────────────────────────────────
 
 export interface GitHubData {
@@ -135,6 +145,7 @@ export interface MorningBriefing {
   railway: ToolResult<RailwayData>
   email: ToolResult<EmailData>
   stripe?: ToolResult<StripeData>
+  netlify?: ToolResult<NetlifyData>
   alerts: Alert[]
 }
 

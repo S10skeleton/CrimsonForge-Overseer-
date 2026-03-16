@@ -107,6 +107,7 @@ export async function generateAIBriefing(data: {
   twilioData?: { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean }
   stripeData?: { activeSubscriptions: number; mrr: number; newThisMonth: number; hasWebhookIssues: boolean; hasPaymentFailures: boolean; paymentFailures: Array<{ customerEmail: string; amount: number }> }
   resendData?: { sent: number; delivered: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null }
+  netlifyData?: { status: string; latestDeployState: string | null; latestDeployAt: string | null; branch: string | null; errorMessage: string | null }
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
@@ -159,6 +160,18 @@ export async function generateAIBriefing(data: {
       (data.resendData.domain && data.resendData.domain.status !== 'verified' ? ` ⚠️ DOMAIN ${data.resendData.domain.status.toUpperCase()}` : '')
     : 'Resend not configured.'
 
+  const netlifyStatus = data.netlifyData
+    ? (() => {
+        const d = data.netlifyData
+        const deployedAt = d.latestDeployAt
+          ? new Date(d.latestDeployAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: tz })
+          : 'unknown'
+        const state = d.latestDeployState ?? 'unknown'
+        const statusFlag = d.status === 'down' ? ' ⚠️ DEPLOY FAILED' : d.status === 'degraded' ? ' ⏳ BUILDING' : ''
+        return `${state} · deployed ${deployedAt}${d.branch ? ` (${d.branch})` : ''}${statusFlag}${d.errorMessage ? ` — ${d.errorMessage}` : ''}`
+      })()
+    : 'Netlify not configured.'
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
@@ -177,6 +190,8 @@ SMS (TWILIO): ${twilioSummary}
 REVENUE (STRIPE): ${stripeSummary}
 
 EMAIL DELIVERY (RESEND): ${resendSummary}
+
+NETLIFY FRONTEND DEPLOY: ${netlifyStatus}
 
 Write the morning briefing for Slack in your voice as Elara. Include:
 1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)

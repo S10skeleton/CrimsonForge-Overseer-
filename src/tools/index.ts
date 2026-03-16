@@ -16,6 +16,7 @@ import { listContactsTool, contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
 import { listCheckinsTool, updateCheckinTool } from './checkins.js'
 import { runStripeCheck, stripeMetricsTool } from './stripe.js'
+import { runNetlifyCheck, netlifyTool } from './netlify.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
 import { runResendCheck, resendStatsTool } from './resend.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
@@ -36,6 +37,7 @@ export const monitors = {
   twilio: runTwilioCheck,
   stripe: runStripeCheck,
   resend: runResendCheck,
+  netlify: runNetlifyCheck,
 }
 
 // ─── For Elara (AI Agent) ─────────────────────────────────────────────────
@@ -79,6 +81,8 @@ export const allAgentTools = [
   listIssuesTool,
   createIssueTool,
   closeIssueTool,
+  // Deploy monitoring
+  netlifyTool,
   // Web search
   webSearchTool,
   // Knowledge management
