@@ -4,6 +4,7 @@
  */
 
 import cron from 'node-cron'
+import { createClient } from '@supabase/supabase-js'
 import { monitors } from './tools/index.js'
 import { checkForNewSubscribers } from './tools/stripe.js'
 import { sendBriefing, sendAlert, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
@@ -16,6 +17,37 @@ import type { MorningBriefing, Alert } from './types/index.js'
 // ─── Configuration ────────────────────────────────────────────────────────
 
 const MORNING_BRIEFING_HOUR = Number(process.env.MORNING_BRIEFING_HOUR || '8')
+
+// ─── Briefing Storage ─────────────────────────────────────────────────────
+
+async function storeBriefing(content: string): Promise<void> {
+  try {
+    const url = process.env.ELARA_SUPABASE_URL
+    const key = process.env.ELARA_SUPABASE_KEY
+    if (!url || !key) return
+
+    const sb = createClient(url, key)
+
+    let status = 'green'
+    if (content.includes('🔴') || content.toLowerCase().includes('critical') || content.toLowerCase().includes('down')) {
+      status = 'red'
+    } else if (content.includes('🟡') || content.toLowerCase().includes('degraded') || content.toLowerCase().includes('warning')) {
+      status = 'yellow'
+    }
+
+    const lines = content.split('\n').filter(l => l.trim())
+    const summaryLine = lines[0]?.replace(/[🟢🟡🔴]/g, '').trim() ?? ''
+
+    await sb.from('agent_briefings').insert({
+      content,
+      status,
+      summary_line: summaryLine.slice(0, 200),
+      briefing_date: new Date().toISOString().split('T')[0],
+    })
+  } catch (err) {
+    console.error('[briefing-store] Failed to save briefing:', err)
+  }
+}
 
 // ─── Health Check Job (every 15 minutes) ──────────────────────────────────
 
@@ -379,11 +411,13 @@ async function runMorningBriefing(): Promise<void> {
     if (aiBriefingText) {
       // Post the AI-generated briefing
       await sendRawMessage(aiBriefingText)
+      await storeBriefing(aiBriefingText)
       console.log('[SCHEDULER] AI morning briefing sent.')
     } else {
       // Fall back to the structured briefing if AI is unavailable
       console.log('[SCHEDULER] AI unavailable — sending structured briefing.')
       await sendBriefing(briefing)
+      await storeBriefing(`[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
     }
 
     console.log('[SCHEDULER] Morning briefing complete.')

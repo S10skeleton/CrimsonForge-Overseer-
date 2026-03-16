@@ -3,7 +3,6 @@
  * Validates environment and starts the scheduler + Slack bot
  */
 
-import { createServer } from 'http'
 import { startScheduler } from './scheduler.js'
 import { startSlackBot } from './slack-bot.js'
 
@@ -66,13 +65,12 @@ async function main(): Promise<void> {
   // Start the two-way Slack bot (optional — only if tokens are configured)
   await startSlackBot()
 
-  // Minimal HTTP server for Railway health checks
+  // Express server — health checks + Ops Console API
+  const { createApiServer } = await import('./api/server.js')
+  const app = createApiServer()
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
-  createServer((_, res) => {
-    res.writeHead(200)
-    res.end('OK')
-  }).listen(port, () => {
-    console.log(`[health] Listening on port ${port}`)
+  app.listen(port, () => {
+    console.log(`[api] Listening on port ${port}`)
   })
 
   console.log('\u2705 Crimson Forge Ops is running.')
