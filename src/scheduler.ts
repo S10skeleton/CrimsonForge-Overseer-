@@ -116,7 +116,7 @@ async function runMorningBriefing(): Promise<void> {
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
-    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio, stripe] =
+    const [uptime, supabase, sentry, railway, email, gmail, calendar, twilio, stripe, resend] =
       await Promise.allSettled([
         monitors.uptime(),
         monitors.supabase(),
@@ -127,6 +127,7 @@ async function runMorningBriefing(): Promise<void> {
         monitors.calendar(),
         monitors.twilio(),
         monitors.stripe(),
+        monitors.resend(),
       ])
 
     function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
@@ -148,6 +149,7 @@ async function runMorningBriefing(): Promise<void> {
     const calendarResult = getResult(calendar)
     const twilioResult = getResult(twilio)
     const stripeResult = getResult(stripe)
+    const resendResult = getResult(resend)
 
     // Determine overall status
     const isUptimeDown =
@@ -223,6 +225,35 @@ async function runMorningBriefing(): Promise<void> {
       })
     }
 
+    // Resend alerts
+    const resendData = resendResult.success
+      ? (resendResult.data as {
+          thresholdBreached: boolean
+          bounceRate: number
+          bounced: number
+          sent: number
+          domain: { name: string; status: string } | null
+        })
+      : null
+
+    if (resendData?.thresholdBreached) {
+      alerts.push({
+        severity: 'warning',
+        tool: 'resend',
+        message: `Email bounce rate ${(resendData.bounceRate * 100).toFixed(1)}% exceeds 3% threshold (${resendData.bounced}/${resendData.sent} emails bounced)`,
+        actionUrl: 'https://resend.com/emails',
+      })
+    }
+
+    if (resendData?.domain && resendData.domain.status !== 'verified') {
+      alerts.push({
+        severity: 'critical',
+        tool: 'resend',
+        message: `Sending domain ${resendData.domain.name} is ${resendData.domain.status} — emails may not deliver`,
+        actionUrl: 'https://resend.com/domains',
+      })
+    }
+
     // Build the full briefing object
     const briefing: MorningBriefing = {
       timestamp: new Date().toISOString(),
@@ -251,12 +282,24 @@ async function runMorningBriefing(): Promise<void> {
       ? (stripeResult.data as import('./types/index.js').StripeData)
       : undefined
 
+    const resendForBriefing = resendResult.success
+      ? (resendResult.data as {
+          sent: number
+          delivered: number
+          bounced: number
+          bounceRate: number
+          thresholdBreached: boolean
+          domain: { name: string; status: string } | null
+        })
+      : undefined
+
     const aiBriefingText = await generateAIBriefing({
       briefing,
       gmailData,
       calendarData,
       twilioData: twilioSummary,
       stripeData: stripeForBriefing,
+      resendData: resendForBriefing,
     })
 
     if (aiBriefingText) {

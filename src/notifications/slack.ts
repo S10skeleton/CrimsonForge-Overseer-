@@ -159,6 +159,37 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 
     message += '\n'
 
+    // Communications section (Twilio + Resend)
+    const hasTwilioData = (briefing as unknown as { twilio?: { success: boolean; data: unknown } }).twilio?.success
+    const hasResendData = (briefing as unknown as { resend?: { success: boolean; data: unknown } }).resend?.success
+
+    if (hasTwilioData || hasResendData) {
+      message += '*COMMUNICATIONS*\n'
+
+      const twilioStats = (briefing as unknown as {
+        twilio?: { success: boolean; data: { sent: number; failed: number; failureRate: number; thresholdBreached: boolean } }
+      }).twilio?.data
+
+      if (twilioStats) {
+        const smsStatus = twilioStats.thresholdBreached ? '\u26A0\uFE0F' : '\u2705'
+        message += `${smsStatus} SMS: ${twilioStats.sent} sent \u00B7 ${twilioStats.failed} failed (${(twilioStats.failureRate * 100).toFixed(1)}%)\n`
+      }
+
+      const resendStats = (briefing as unknown as {
+        resend?: { success: boolean; data: { sent: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null } }
+      }).resend?.data
+
+      if (resendStats) {
+        const emailStatus = resendStats.thresholdBreached || (resendStats.domain && resendStats.domain.status !== 'verified') ? '\u26A0\uFE0F' : '\u2705'
+        message += `${emailStatus} Email: ${resendStats.sent} sent \u00B7 ${resendStats.bounced} bounced (${(resendStats.bounceRate * 100).toFixed(1)}%)\n`
+        if (resendStats.domain && resendStats.domain.status !== 'verified') {
+          message += `\uD83D\uDD34 Domain ${resendStats.domain.name} is ${resendStats.domain.status}\n`
+        }
+      }
+
+      message += '\n'
+    }
+
     // Revenue section
     if (briefing.stripe?.success && briefing.stripe.data) {
       const s = briefing.stripe.data as import('../types/index.js').StripeData

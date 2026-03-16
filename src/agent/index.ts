@@ -106,6 +106,7 @@ export async function generateAIBriefing(data: {
   calendarData?: { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }
   twilioData?: { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean }
   stripeData?: { activeSubscriptions: number; mrr: number; newThisMonth: number; hasWebhookIssues: boolean; hasPaymentFailures: boolean; paymentFailures: Array<{ customerEmail: string; amount: number }> }
+  resendData?: { sent: number; delivered: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null }
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
@@ -152,6 +153,12 @@ export async function generateAIBriefing(data: {
       (data.stripeData.hasPaymentFailures ? ` ⚠️ ${data.stripeData.paymentFailures.length} PAYMENT FAILURES` : '')
     : 'Stripe not configured (pre-revenue).'
 
+  const resendSummary = data.resendData
+    ? `${data.resendData.sent} sent, ${data.resendData.delivered} delivered, ${data.resendData.bounced} bounced (${(data.resendData.bounceRate * 100).toFixed(1)}%)` +
+      (data.resendData.thresholdBreached ? ' ⚠️ BOUNCE THRESHOLD BREACHED' : '') +
+      (data.resendData.domain && data.resendData.domain.status !== 'verified' ? ` ⚠️ DOMAIN ${data.resendData.domain.status.toUpperCase()}` : '')
+    : 'Resend not configured.'
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
@@ -168,6 +175,8 @@ ${emailSummary}
 SMS (TWILIO): ${twilioSummary}
 
 REVENUE (STRIPE): ${stripeSummary}
+
+EMAIL DELIVERY (RESEND): ${resendSummary}
 
 Write the morning briefing for Slack in your voice as Elara. Include:
 1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)

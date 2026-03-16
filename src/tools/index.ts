@@ -17,6 +17,7 @@ import { sendEmailTool } from './send-email.js'
 import { listCheckinsTool, updateCheckinTool } from './checkins.js'
 import { runStripeCheck, stripeMetricsTool } from './stripe.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
+import { runResendCheck, resendStatsTool } from './resend.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
 import { webSearchTool } from './search.js'
 import { listKnowledgeTool, updateKnowledgeTool } from './knowledge.js'
@@ -34,6 +35,7 @@ export const monitors = {
   drive: runDriveCheck,
   twilio: runTwilioCheck,
   stripe: runStripeCheck,
+  resend: runResendCheck,
 }
 
 // ─── For Elara (AI Agent) ─────────────────────────────────────────────────
@@ -71,6 +73,7 @@ export const allAgentTools = [
   stripeMetricsTool,
   twilioStatsTool,
   sendSMSTool,
+  resendStatsTool,
   // GitHub Issues
   listIssuesTool,
   createIssueTool,
