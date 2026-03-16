@@ -10,6 +10,7 @@ import { sendBriefing, sendAlert, sendRawMessage, sendSMSAlert } from './notific
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
+import { runSummarizationDispatcher } from './jobs/summarize.js'
 import type { MorningBriefing, Alert } from './types/index.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
@@ -403,8 +404,11 @@ export function startScheduler(): void {
     try { await runCheckinDispatcher() } catch (err) {
       console.error('[SCHEDULER] Error in check-in dispatcher:', err)
     }
+    try { await runSummarizationDispatcher() } catch (err) {
+      console.error('[SCHEDULER] Error in summarization dispatcher:', err)
+    }
   }, { timezone })
-  console.log('[SCHEDULER] Scheduled: Check-in dispatcher every minute')
+  console.log('[SCHEDULER] Scheduled: Check-in dispatcher + summarization every minute')
 
   // Every 15 minutes: silent health check
   cron.schedule('*/15 * * * *', runSilentHealthCheck, { timezone })

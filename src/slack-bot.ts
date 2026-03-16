@@ -7,6 +7,7 @@ import pkg from '@slack/bolt'
 const { App, LogLevel } = pkg
 import { createClient } from '@supabase/supabase-js'
 import { runAgent } from './agent/index.js'
+import { recordThreadActivity } from './jobs/summarize.js'
 import type { MorningBriefing } from './types/index.js'
 
 // ─── Supabase client for conversation persistence ─────────────────────────
@@ -173,6 +174,7 @@ export async function startSlackBot(): Promise<void> {
         return
       }
       activeRequests.add(threadKey)
+      recordThreadActivity(threadKey)
 
       const history = getHistory(threadKey)
 
@@ -238,6 +240,7 @@ export async function startSlackBot(): Promise<void> {
       return
     }
     activeRequests.add(threadKey)
+    recordThreadActivity(threadKey)
 
     const history = getHistory(threadKey)
 

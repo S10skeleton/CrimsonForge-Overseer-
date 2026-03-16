@@ -10,7 +10,7 @@ import { runEmailCheck, emailTool } from './email.js'
 import { githubTool, githubCommitsTool, githubStatusTool } from './github.js'
 import { runGmailCheck, gmailTool } from './gmail.js'
 import { runCalendarCheck, calendarTool, createCalendarEventTool, updateCalendarEventTool, deleteCalendarEventTool } from './calendar.js'
-import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool, readDriveFileTool } from './drive.js'
+import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDraftTool, readDriveFileTool, copyToWorkspaceTool, writeWorkspaceDocTool, moveToReviewTool } from './drive.js'
 import { memoryTools } from './memory.js'
 import { listContactsTool, contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
@@ -65,6 +65,9 @@ export const allAgentTools = [
   driveReadTool,
   driveCreateDraftTool,
   readDriveFileTool,
+  copyToWorkspaceTool,
+  writeWorkspaceDocTool,
+  moveToReviewTool,
   // Contacts + outbound email
   listContactsTool,
   contactsSearchTool,
