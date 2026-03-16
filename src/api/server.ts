@@ -8,16 +8,28 @@ import authRouter from './routes/auth.js'
 import statusRouter from './routes/status.js'
 import cfpRouter from './routes/cfp.js'
 import elaraRouter from './routes/elara.js'
+import voiceRouter from './routes/voice.js'
+import filesRouter from './routes/files.js'
 
 export function createApiServer(): express.Express {
   const app = express()
 
   // ── Middleware ──────────────────────────────────────────────────────────────
 
-  // Reflect request origin — API is JWT-protected so any origin is safe
-  app.use(cors({ origin: true, credentials: true }))
+  app.use(cors({
+    origin: [
+      process.env.FRONTEND_URL ?? '',
+      process.env.PANEL_URL ?? '',
+      process.env.MOBILE_URL ?? '',
+      'http://localhost:5173',
+      'http://localhost:3001',
+      'http://localhost:8081',
+      'exp://localhost:8081',
+    ].filter(Boolean),
+    credentials: true,
+  }))
 
-  app.use(express.json({ limit: '1mb' }))
+  app.use(express.json({ limit: '2mb' }))
 
   // ── Health check (public — Railway needs this) ──────────────────────────────
 
@@ -35,6 +47,8 @@ export function createApiServer(): express.Express {
   app.use('/api/status', statusRouter)
   app.use('/api/cfp', cfpRouter)
   app.use('/api/elara', elaraRouter)
+  app.use('/api/voice', voiceRouter)
+  app.use('/api/files', filesRouter)
 
   // ── 404 ─────────────────────────────────────────────────────────────────────
 
