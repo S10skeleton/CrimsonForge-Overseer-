@@ -236,7 +236,7 @@ export default function AIConfigTab() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                { key: 'model',                label: 'Model',           value: MODELS.find(m => m.value === origModel)?.label ?? origModel || '—' },
+                { key: 'model',                label: 'Model',           value: (MODELS.find(m => m.value === origModel)?.label ?? origModel) || '—' },
                 { key: 'max_tokens',           label: 'Max Tokens',      value: origTokens ? String(origTokens) : '—' },
                 { key: 'system_prompt_suffix', label: 'Prompt Addendum', value: origSuffix ? `${origSuffix.slice(0, 80)}${origSuffix.length > 80 ? '...' : ''}` : '(none)' },
               ].map(item => (
