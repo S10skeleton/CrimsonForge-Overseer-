@@ -110,6 +110,40 @@ messages with full tool-use, and maintains persistent memory across sessions.
 - Env vars: `NETLIFY_API_TOKEN` + `NETLIFY_SITE_ID`
 - Degrades gracefully if env vars not set
 
+### TASK-13 — Conversation Persistence
+- Every Slack turn (user + assistant) written to `slack_conversations` Elara Supabase table
+- Last 48 hours loaded on session start; refreshed every 30 min for multi-session continuity
+- In-memory thread history takes priority; DB history used as fallback for new sessions
+- `persistMessage()` and `loadRecentConversations()` are fully non-blocking (never affect bot latency)
+
+### TASK-14 — Auto-Summarization
+- New `src/jobs/summarize.ts` — in-memory thread activity tracker
+- After 30 min idle + min 6 messages: sends conversation to Haiku for JSON fact extraction
+- Extracted facts (preferences, decisions, stakeholder observations, patterns) upserted to `agent_memory`
+- Dispatcher runs every minute via scheduler cron (alongside check-in dispatcher)
+
+### TASK-15 — Proactive Memory Writes
+- Elara rules updated with PROACTIVE MEMORY section
+- Triggers defined: preference, routine change, confirmed decision, stakeholder observation, pattern
+- Write-quietly rule: don't announce every memory write, only mention if it changes something meaningful
+
+### TASK-16 — New Shop Onboarding Alerts
+- Real-time Slack alert within 15 minutes of new shop detection
+- Alert includes: shop name, tier inference, day-1 flag with no-tickets warning
+- Silence threshold auto-drops to 1 day for shops in their first 7 days
+- Wired into silent health check loop (runs every 15 min)
+
+### TASK-17 — Google Drive Write Workspace
+- New workspace tools in `drive.ts`: `copy_to_workspace`, `write_workspace_doc`, `move_to_review`
+- Safety guard: `isInElaraWorkspace()` blocks writes outside `GOOGLE_DRIVE_ELARA_FOLDER_ID`
+- Copy-edit-review workflow: copy source → edit in workspace → move to Review subfolder → Clutch approves
+- Rules updated with DOCUMENT EDITING (WORKSPACE) section and full workflow steps
+- Env var: `GOOGLE_DRIVE_ELARA_FOLDER_ID`
+
+### TASK-18 — `finally` Cleanup
+- `finally` cleanup for `activeRequests` now consistent in both `app.message` and `app_mention` handlers
+- Handled as part of TASK-13 rewrite of `slack-bot.ts`
+
 ### Fixes & Ops
 - Sentry slug corrected (`crimson-forge` org, `node` project)
 - Overseer pointed at production Supabase (was querying staging)
@@ -151,112 +185,6 @@ messages with full tool-use, and maintains persistent memory across sessions.
 ## 📋 QUEUED — READY TO BUILD
 
 Tasks ordered by impact. Build in sequence.
-
----
-
-### TASK-13 — Conversation Persistence
-**Impact:** High — biggest capability unlock after Drive reading  
-**Effort:** ~1 hour  
-**What:** New `query_supabase` AgentTool that lets Elara run arbitrary
-read-only SQL against the CFP Supabase. Currently she's limited to
-pre-built monitor functions. With direct query access she can answer
-ad-hoc questions: ticket trends, shop comparisons, AI session patterns,
-customer data on demand.
-
-**Safety guardrails:**
-- Read-only enforced — SELECT only, no INSERT/UPDATE/DELETE/DROP
-- Query length limit (prevent abuse)
-- Timeout: 10 seconds max
-- Uses existing `SUPABASE_SERVICE_ROLE_KEY` — no new credentials
-- Elara always confirms query intent before running on sensitive tables
-
----
-
-### TASK-13 — Conversation Persistence
-**Impact:** High — makes Elara remember across sessions like this chat interface  
-**Effort:** ~2 hours  
-**What:** Store every Slack conversation turn in a `slack_conversations` Supabase
-table. Load the last 48 hours on each session start. Elara remembers what you
-discussed yesterday across threads and redeployes.
-
-**Schema:**
-```sql
-CREATE TABLE slack_conversations (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  thread_key   TEXT NOT NULL,
-  role         TEXT NOT NULL,  -- 'user' | 'assistant'
-  content      TEXT NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT now()
-);
-CREATE INDEX ON slack_conversations(thread_key, created_at DESC);
-CREATE INDEX ON slack_conversations(created_at DESC);
-```
-
-**Code changes:** `src/slack-bot.ts` — write to DB on every message pair,
-load last 48h on session start instead of in-memory only.
-
----
-
-### TASK-14 — Auto-Summarization
-**Impact:** High — builds long-term memory automatically  
-**Effort:** ~2 hours  
-**What:** After a conversation goes quiet (30 min of inactivity), trigger a
-background job that sends the conversation to Claude, extracts key facts and
-decisions, and writes them to `agent_memory` automatically.
-
-**What gets extracted:**
-- Decisions made ("decided to use draft mode for Drive writes")
-- Preferences expressed ("keep responses shorter")
-- Status updates ("Phase A complete, starting Phase B")
-- Stakeholder observations ("Steve asked about gross margin")
-- Pattern notes ("most productive 2-6pm")
-
----
-
-### TASK-15 — Proactive Memory Writes
-**Impact:** Medium — makes memory accumulation feel natural  
-**Effort:** ~30 minutes (rules update only)  
-**What:** Update agent rules so Elara actively uses `remember` during
-conversations when she learns something worth keeping — without being asked.
-
-**Triggers she watches for:**
-- Preference expressed → remember it
-- Routine change → update_routine
-- Decision confirmed → remember it
-- Stakeholder observation → remember it
-- Pattern noticed → remember it
-
----
-
-### TASK-16 — New Shop Onboarding Alerts
-**Impact:** High — critical once shops start signing up at scale  
-**Effort:** ~1 hour  
-**What:** Real-time Slack alert within 15 minutes of a new shop signup.
-Includes: shop name, owner email, tier, whether first ticket has been created.
-First 7 days: silence threshold drops from 3 days to 1 day.
-New shop with zero tickets after 24 hours = immediate alert.
-
----
-
-### TASK-17 — Google Drive Write to Owned Docs
-**Impact:** Medium — closes the doc debt loop without manual copy-paste  
-**Effort:** ~1 hour  
-**What:** Elara can write back to docs she created (DRAFT prefix) or docs
-in a designated Elara workspace folder. Never edits originals.
-
-**Guardrails:**
-- Only writes to docs with `[DRAFT]` in the title OR docs in `GOOGLE_DRIVE_ELARA_FOLDER_ID`
-- Always confirms content before writing
-- Creates a version snapshot before any edit
-- Never touches investor docs, legal docs, or originals
-
----
-
-### TASK-18 — `finally` Cleanup
-**Impact:** Low — cosmetic code quality  
-**Effort:** 5 minutes  
-**What:** Backport `finally` pattern from `app_mention` handler to `app.message`
-handler in `slack-bot.ts`. One-line change, no behavior difference.
 
 ---
 
