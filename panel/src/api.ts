@@ -43,6 +43,21 @@ export const api = {
     stats: () => request<any>('/api/cfp/stats'),
     billingEvents: () => request<any[]>('/api/cfp/billing-events'),
     leads: () => request<any[]>('/api/cfp/leads'),
+    messages: () => request<any[]>('/api/cfp/messages'),
+    createMessage: (payload: { title: string; body: string; type: string; active: boolean; expires_at?: string | null }) =>
+      request<any>('/api/cfp/messages', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    updateMessage: (id: string, payload: Partial<{ title: string; body: string; type: string; active: boolean; expires_at: string | null }>) =>
+      request<any>(`/api/cfp/messages/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    deleteMessage: (id: string) =>
+      request<any>(`/api/cfp/messages/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   elara: {

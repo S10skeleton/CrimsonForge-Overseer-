@@ -181,4 +181,110 @@ router.get('/leads', requireAuth, async (_req, res) => {
   }
 })
 
+// ── System Messages ─────────────────────────────────────────────────────────
+
+router.get('/messages', requireAuth, async (_req, res) => {
+  try {
+    const sb = getCFPSupabase()
+    const { data, error } = await sb
+      .from('system_messages')
+      .select('id, title, body, type, active, created_by, expires_at, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    console.error('[cfp/messages] GET error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.post('/messages', requireAuth, async (req, res) => {
+  const { title, body, type, active, expires_at } = req.body as {
+    title?: string
+    body?: string
+    type?: string
+    active?: boolean
+    expires_at?: string | null
+  }
+
+  if (!title?.trim() || !body?.trim()) {
+    res.status(400).json({ error: 'title and body are required' })
+    return
+  }
+
+  try {
+    const sb = getCFPSupabase()
+    const { data, error } = await sb
+      .from('system_messages')
+      .insert({
+        title: title.trim(),
+        body: body.trim(),
+        type: type ?? 'info',
+        active: active ?? false,
+        expires_at: expires_at ?? null,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    res.json({ success: true, message: data })
+  } catch (err) {
+    console.error('[cfp/messages] POST error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.patch('/messages/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { title, body, type, active, expires_at } = req.body as {
+    title?: string
+    body?: string
+    type?: string
+    active?: boolean
+    expires_at?: string | null
+  }
+
+  try {
+    const sb = getCFPSupabase()
+    const update: Record<string, unknown> = {}
+    if (title !== undefined)      update.title = title.trim()
+    if (body !== undefined)       update.body = body.trim()
+    if (type !== undefined)       update.type = type
+    if (active !== undefined)     update.active = active
+    if (expires_at !== undefined) update.expires_at = expires_at
+
+    const { data, error } = await sb
+      .from('system_messages')
+      .update(update)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+    res.json({ success: true, message: data })
+  } catch (err) {
+    console.error('[cfp/messages] PATCH error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.delete('/messages/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+
+  try {
+    const sb = getCFPSupabase()
+    const { error } = await sb
+      .from('system_messages')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[cfp/messages] DELETE error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
 export default router

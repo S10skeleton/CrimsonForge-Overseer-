@@ -3,16 +3,18 @@ import SystemTab from '../tabs/SystemTab'
 import ShopsTab from '../tabs/ShopsTab'
 import UsersTab from '../tabs/UsersTab'
 import BillingTab from '../tabs/BillingTab'
+import MessagesTab from '../tabs/MessagesTab'
 import ElaraTab from '../tabs/ElaraTab'
 
-type Tab = 'system' | 'shops' | 'users' | 'billing' | 'elara'
+type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'elara'
 
 const NAV: { id: Tab; label: string; icon: string }[] = [
-  { id: 'system',  label: 'System',  icon: '◈' },
-  { id: 'shops',   label: 'Shops',   icon: '⬡' },
-  { id: 'users',   label: 'Users',   icon: '◉' },
-  { id: 'billing', label: 'Billing', icon: '⬨' },
-  { id: 'elara',   label: 'Elara',   icon: '⬟' },
+  { id: 'system',   label: 'System',   icon: '◈' },
+  { id: 'shops',    label: 'Shops',    icon: '⬡' },
+  { id: 'users',    label: 'Users',    icon: '◉' },
+  { id: 'billing',  label: 'Billing',  icon: '⬨' },
+  { id: 'messages', label: 'Messages', icon: '◎' },
+  { id: 'elara',    label: 'Elara',    icon: '⬟' },
 ]
 
 interface Props { onLogout: () => void }
@@ -92,8 +94,9 @@ export default function Panel({ onLogout }: Props) {
           {tab === 'system'  && <SystemTab />}
           {tab === 'shops'   && <ShopsTab />}
           {tab === 'users'   && <UsersTab />}
-          {tab === 'billing' && <BillingTab />}
-          {tab === 'elara'   && <ElaraTab />}
+          {tab === 'billing'   && <BillingTab />}
+          {tab === 'messages'  && <MessagesTab />}
+          {tab === 'elara'     && <ElaraTab />}
         </div>
       </div>
     </div>
