@@ -31,7 +31,8 @@ router.get('/memory', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -48,7 +49,8 @@ router.get('/knowledge', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -76,7 +78,8 @@ router.patch('/knowledge/:key', requireAuth, async (req, res) => {
     if (error) throw error
     res.json({ success: true, updated: data })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -93,7 +96,8 @@ router.get('/parking-lot', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -114,7 +118,8 @@ router.patch('/parking-lot/:id', requireAuth, async (req, res) => {
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -132,7 +137,8 @@ router.get('/checkins', requireAuth, async (_req, res) => {
     if (error && error.code !== 'PGRST116') throw error
     res.json(data?.items ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -150,7 +156,8 @@ router.get('/briefings', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -211,7 +218,8 @@ router.get('/doc-debt', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -232,7 +240,8 @@ router.post('/chat', requireAuth, async (req, res) => {
     const response = await runAgent(message.trim(), undefined, history ?? [])
     res.json({ response })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[elara] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 

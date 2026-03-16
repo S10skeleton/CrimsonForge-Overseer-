@@ -59,7 +59,8 @@ router.get('/shops', requireAuth, async (_req, res) => {
 
     res.json(enriched)
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[cfp/shops] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -68,20 +69,46 @@ router.get('/shops', requireAuth, async (_req, res) => {
 router.get('/users', requireAuth, async (_req, res) => {
   try {
     const sb = getCFPSupabase()
-    const { data, error } = await sb
+
+    // Fetch profiles — email is NOT stored in profiles, it lives in auth.users
+    const { data: profiles, error: profilesError } = await sb
       .from('profiles')
       .select(`
-        id, full_name, email, role, deactivated,
+        id, full_name, role, deactivated,
         tos_accepted_at, tos_version, privacy_accepted_at,
         created_at, updated_at,
         shops:shop_id(id, name)
       `)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
-    res.json(data ?? [])
+    if (profilesError) throw profilesError
+
+    // Fetch emails from auth.users via admin API (requires service role key)
+    const { data: authData, error: authError } = await sb.auth.admin.listUsers({
+      perPage: 1000,
+    })
+
+    if (authError) {
+      // Non-fatal — return profiles without emails rather than failing the whole route
+      console.warn('[cfp/users] Could not fetch auth emails:', authError.message)
+      res.json(profiles ?? [])
+      return
+    }
+
+    // Join emails onto profiles
+    const emailMap = Object.fromEntries(
+      (authData.users ?? []).map((u) => [u.id, u.email ?? null])
+    )
+
+    const enriched = (profiles ?? []).map((p: any) => ({
+      ...p,
+      email: emailMap[p.id] ?? null,
+    }))
+
+    res.json(enriched)
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[cfp/users] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -112,7 +139,8 @@ router.get('/stats', requireAuth, async (_req, res) => {
       recentTickets: recentTickets ?? 0,
     })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[cfp/stats] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -130,7 +158,8 @@ router.get('/billing-events', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[cfp/billing-events] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
@@ -147,7 +176,8 @@ router.get('/leads', requireAuth, async (_req, res) => {
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[cfp/leads] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 

@@ -23,7 +23,7 @@ router.get('/', requireAuth, async (_req, res) => {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resolve = (r: PromiseSettledResult<any>) =>
-      r.status === 'fulfilled' ? r.value : { success: false, data: null, error: String(r.reason) }
+      r.status === 'fulfilled' ? r.value : { success: false, data: null, error: r.reason instanceof Error ? r.reason.message : JSON.stringify(r.reason) }
 
     res.json({
       timestamp: new Date().toISOString(),
@@ -37,7 +37,8 @@ router.get('/', requireAuth, async (_req, res) => {
       netlify: resolve(netlify),
     })
   } catch (err) {
-    res.status(500).json({ error: String(err) })
+    console.error('[status] Error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })
 
