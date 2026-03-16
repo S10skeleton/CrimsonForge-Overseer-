@@ -4,9 +4,10 @@ import ShopsTab from '../tabs/ShopsTab'
 import UsersTab from '../tabs/UsersTab'
 import BillingTab from '../tabs/BillingTab'
 import MessagesTab from '../tabs/MessagesTab'
+import AIConfigTab from '../tabs/AIConfigTab'
 import ElaraTab from '../tabs/ElaraTab'
 
-type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'elara'
+type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'aiconfig' | 'elara'
 
 const NAV: { id: Tab; label: string; icon: string }[] = [
   { id: 'system',   label: 'System',   icon: '◈' },
@@ -14,6 +15,7 @@ const NAV: { id: Tab; label: string; icon: string }[] = [
   { id: 'users',    label: 'Users',    icon: '◉' },
   { id: 'billing',  label: 'Billing',  icon: '⬨' },
   { id: 'messages', label: 'Messages', icon: '◎' },
+  { id: 'aiconfig', label: 'Forge AI', icon: '🤖' },
   { id: 'elara',    label: 'Elara',    icon: '⬟' },
 ]
 
@@ -96,6 +98,7 @@ export default function Panel({ onLogout }: Props) {
           {tab === 'users'   && <UsersTab />}
           {tab === 'billing'   && <BillingTab />}
           {tab === 'messages'  && <MessagesTab />}
+          {tab === 'aiconfig'  && <AIConfigTab />}
           {tab === 'elara'     && <ElaraTab />}
         </div>
       </div>

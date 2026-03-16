@@ -58,6 +58,13 @@ export const api = {
       request<any>(`/api/cfp/messages/${id}`, {
         method: 'DELETE',
       }),
+    aiConfig: () =>
+      request<{ rows: any[]; config: Record<string, string> }>('/api/cfp/ai-config'),
+    updateAiConfig: (updates: Array<{ config_key: string; config_value: string }>) =>
+      request<{ success: boolean; updated: string[] }>('/api/cfp/ai-config', {
+        method: 'PATCH',
+        body: JSON.stringify({ updates }),
+      }),
   },
 
   elara: {

@@ -287,4 +287,63 @@ router.delete('/messages/:id', requireAuth, async (req, res) => {
   }
 })
 
+// ── AI Config ────────────────────────────────────────────────────────────────
+// Reads/writes the ai_config table in CFP Supabase.
+// Keys actually used by chat.js: model, max_tokens, system_prompt_suffix
+// (temperature is stored but not yet read by the chat route)
+
+router.get('/ai-config', requireAuth, async (_req, res) => {
+  try {
+    const sb = getCFPSupabase()
+    const { data, error } = await sb
+      .from('ai_config')
+      .select('id, config_key, config_value, updated_at')
+      .order('config_key')
+
+    if (error) throw error
+
+    const configMap: Record<string, string> = {}
+    for (const row of data ?? []) {
+      if (row.config_key && row.config_value != null) {
+        configMap[row.config_key] = row.config_value
+      }
+    }
+
+    res.json({ rows: data ?? [], config: configMap })
+  } catch (err) {
+    console.error('[cfp/ai-config] GET error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.patch('/ai-config', requireAuth, async (req, res) => {
+  const { updates } = req.body as {
+    updates?: Array<{ config_key: string; config_value: string }>
+  }
+
+  if (!Array.isArray(updates) || updates.length === 0) {
+    res.status(400).json({ error: 'updates array required' })
+    return
+  }
+
+  try {
+    const sb = getCFPSupabase()
+    const now = new Date().toISOString()
+
+    for (const u of updates) {
+      const { error } = await sb
+        .from('ai_config')
+        .update({ config_value: u.config_value, updated_at: now })
+        .eq('config_key', u.config_key)
+
+      if (error) throw error
+    }
+
+    res.json({ success: true, updated: updates.map(u => u.config_key) })
+  } catch (err) {
+    console.error('[cfp/ai-config] PATCH error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
 export default router
