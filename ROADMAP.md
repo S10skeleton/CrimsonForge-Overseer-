@@ -95,6 +95,13 @@ messages with full tool-use, and maintains persistent memory across sessions.
 - Rules updated: Elara uses `read_drive_file` for all file types by default
 - Doc debt logged for .docx and PDF files needing Google Doc conversion
 
+### TASK-12 — Supabase Direct Query Tool
+- New `supabase-query.ts` tool with `query_supabase` AgentTool
+- Runs arbitrary read-only SQL via `exec_readonly_query` RPC function
+- Safety: SELECT/WITH only, blocks 12 write keywords, no semicolons, 2000 char limit, 100 row cap
+- Elara rules updated with when-to-use, key tables, and safety constraints
+- No new dependencies or env vars — uses existing Supabase client
+
 ### TASK-11 — Netlify Deploy Status
 - New `netlify.ts` tool queries Netlify API for latest deploy state
 - Returns: status (healthy/degraded/down), deploy state, published_at, branch, error_message
@@ -147,7 +154,7 @@ Tasks ordered by impact. Build in sequence.
 
 ---
 
-### TASK-12 — Supabase Direct Query Tool (Read-Only)
+### TASK-13 — Conversation Persistence
 **Impact:** High — biggest capability unlock after Drive reading  
 **Effort:** ~1 hour  
 **What:** New `query_supabase` AgentTool that lets Elara run arbitrary

@@ -188,6 +188,37 @@ stripe_metrics returns live revenue data: active subs, MRR, new signups, cancell
 Include in morning briefing once CFP has paying customers.
 Before launch, skip or note "no active subs yet."
 
+─── SUPABASE DIRECT QUERY ────────────────────────────────────────────────────
+
+Elara can run read-only SQL against the CFP database via query_supabase.
+
+WHEN TO USE:
+  → Ad-hoc data questions: "how many tickets this week?", "which shop is most active?"
+  → Trend analysis: ticket volume over time, AI session patterns
+  → Shop comparisons: side-by-side activity across shops
+  → Anything check_supabase doesn't already answer
+
+WHEN NOT TO USE:
+  → For pre-built metrics (activeShops, ticketsCreatedLast24h) — use check_supabase
+  → For customer PII — always confirm intent first, minimize fields selected
+  → Never query auth.users directly
+
+KEY TABLES:
+  shops           → one row per shop (id, name, created_at, subscription tier)
+  tickets         → repair orders (shop_id, vehicle_id, status, archived)
+  ticket_items    → parts and labor on each ticket
+  vehicles        → VIN, year, make, model, mileage
+  customers       → name, email, phone
+  profiles        → users (shop_id, role, email)
+  service_time_logs → tech clock in/out per ticket
+  messages        → AI chat history per ticket
+
+SAFETY RULES:
+  → SELECT only — tool blocks all write operations automatically
+  → Always include a description of what you're querying
+  → Cap results with LIMIT when querying large tables
+  → For customer data: select only what's needed for the question
+
 ─── GITHUB ISSUES ────────────────────────────────────────────────────────────
 
 - list_github_issues: show open bugs and tasks

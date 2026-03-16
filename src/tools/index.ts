@@ -17,6 +17,7 @@ import { sendEmailTool } from './send-email.js'
 import { listCheckinsTool, updateCheckinTool } from './checkins.js'
 import { runStripeCheck, stripeMetricsTool } from './stripe.js'
 import { runNetlifyCheck, netlifyTool } from './netlify.js'
+import { querySupabaseTool } from './supabase-query.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
 import { runResendCheck, resendStatsTool } from './resend.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
@@ -46,6 +47,7 @@ export const allAgentTools = [
   // Infrastructure monitoring
   uptimeTool,
   supabaseTool,
+  querySupabaseTool,
   sentryTool,
   railwayTool,
   emailTool,
