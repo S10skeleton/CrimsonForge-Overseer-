@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Elara",
+    "slug": "elara-jarvis",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05050e",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#05050e"
+    },
+    "plugins": [
+      "expo-av",
+      "expo-image-picker",
+      "expo-document-picker",
+      "expo-secure-store"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "pro.crimsonforge.elara",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Elara needs mic access for voice chat.",
+        "NSPhotoLibraryUsageDescription": "Elara needs photo access to send images.",
+        "NSCameraUsageDescription": "Elara needs camera access to capture images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#05050e"
+      },
+      "package": "pro.crimsonforge.elara",
+      "permissions": ["RECORD_AUDIO", "READ_EXTERNAL_STORAGE", "CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
