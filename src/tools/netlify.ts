@@ -96,8 +96,12 @@ export async function runNetlifyCheck(): Promise<ToolResult<NetlifyData>> {
 export const netlifyTool: AgentTool = {
   name: 'check_netlify',
   description:
-    'Checks the latest Netlify deploy status for the crimsonforge.pro frontend. ' +
-    'Returns deploy state (ready/building/error), when it was last published, and any error messages.',
+    'Check the latest Netlify deploy status for the CFP frontend (crimsonforge.pro). ' +
+    'Returns deploy state (ready/building/error), deploy time, branch, and error message if any. ' +
+    'ALWAYS call this when asked about: Netlify, frontend deploy, did the deploy work, ' +
+    'crimsonforge.pro build status, frontend health. ' +
+    'Do NOT use the uptime check as a substitute — that only confirms the site is up, ' +
+    'not whether the latest deploy succeeded.',
   input_schema: { type: 'object', properties: {}, required: [] },
   execute: async () => runNetlifyCheck(),
 }
