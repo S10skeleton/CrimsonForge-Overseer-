@@ -207,6 +207,7 @@ async function runSilentHealthCheck(): Promise<void> {
               .from('agent_session_flags')
               .select('created_at')
               .eq('flag', flagKey)
+              .eq('active', true)
               .gte('created_at', almostDayAgo)
               .single()
 
