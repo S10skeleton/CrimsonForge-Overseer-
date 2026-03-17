@@ -59,7 +59,13 @@ export default function Panel({ onLogout }: Props) {
             <div className="orb-ring ring-1" style={{ inset: 0,  borderWidth: 1.5 }} />
             <div className="orb-ring ring-2" style={{ inset: 8,  borderWidth: 1   }} />
             <div className="orb-ring ring-3" style={{ inset: 14, borderWidth: 1   }} />
-            <div className="ring-core" style={{ inset: 20 }} />
+            <div style={{
+              position: 'absolute', inset: 20,
+              borderRadius: '50%', overflow: 'hidden',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <img src="/elara-logo.png" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
           </div>
           <div>
             <div style={{

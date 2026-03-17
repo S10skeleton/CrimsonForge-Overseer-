@@ -120,7 +120,13 @@ export default function Login({ onLogin }: Props) {
           <div className="orb-ring ring-1" style={{ inset: 0,  borderWidth: 2 }} />
           <div className="orb-ring ring-2" style={{ inset: 14, borderWidth: 1.5 }} />
           <div className="orb-ring ring-3" style={{ inset: 26, borderWidth: 1 }} />
-          <div className="ring-core" style={{ inset: 38 }} />
+          <div style={{
+            position: 'absolute', inset: 38,
+            borderRadius: '50%', overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <img src="/elara-logo.png" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           {/* Orbiting dot */}
           <div style={{
             position: 'absolute', top: '50%', left: '50%',
