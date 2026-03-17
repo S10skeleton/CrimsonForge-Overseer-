@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "projectRoot": "mobile",
       "developmentClient": true,
       "distribution": "internal",
       "android": {
@@ -13,20 +14,22 @@
       }
     },
     "preview": {
+      "projectRoot": "mobile",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_OVERSEER_URL": "crimsonforge-overseer-production.up.railway.app"
+        "EXPO_PUBLIC_OVERSEER_URL": "https://crimsonforge-overseer-production.up.railway.app"
       }
     },
     "production": {
+      "projectRoot": "mobile",
       "android": {
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_OVERSEER_URL": "crimsonforge-overseer-production.up.railway.app"
+        "EXPO_PUBLIC_OVERSEER_URL": "https://crimsonforge-overseer-production.up.railway.app"
       }
     }
   }
