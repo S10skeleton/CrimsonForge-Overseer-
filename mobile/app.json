@@ -31,7 +31,9 @@
         "NSMicrophoneUsageDescription": "Elara needs mic access for voice chat.",
         "NSPhotoLibraryUsageDescription": "Elara needs photo access to send images.",
         "NSCameraUsageDescription": "Elara needs camera access to capture images.",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -54,6 +56,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "95f86412-f84b-46bf-9752-f4da9deb9521"
+      }
+    },
+    "owner": "s10skeleton"
   }
 }
