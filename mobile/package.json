@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:apk": "eas build --platform android --profile preview --local",
+    "build:apk:cloud": "eas build --platform android --profile preview"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.15.5",

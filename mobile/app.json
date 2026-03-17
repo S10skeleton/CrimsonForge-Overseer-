@@ -16,7 +16,13 @@
       "expo-av",
       "expo-image-picker",
       "expo-document-picker",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Elara needs microphone access for voice chat."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": false,
@@ -24,19 +30,35 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Elara needs mic access for voice chat.",
         "NSPhotoLibraryUsageDescription": "Elara needs photo access to send images.",
-        "NSCameraUsageDescription": "Elara needs camera access to capture images."
+        "NSCameraUsageDescription": "Elara needs camera access to capture images.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
         "backgroundColor": "#05050e"
       },
       "package": "pro.crimsonforge.elara",
-      "permissions": ["RECORD_AUDIO", "READ_EXTERNAL_STORAGE", "CAMERA"]
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET"
+      ],
+      "allowBackup": false,
+      "softwareKeyboardLayoutMode": "pan"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
     }
   }
 }

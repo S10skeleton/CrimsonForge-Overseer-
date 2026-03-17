@@ -25,6 +25,9 @@ export default function ChatScreen() {
   const [isRecording, setIsRecording] = useState(false)
   const [mode, setMode]               = useState<'text' | 'voice'>('text')
   const [sound, setSound]             = useState<Audio.Sound | null>(null)
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const [isSpeaking, setIsSpeaking]   = useState(false)
+  const speakerWiggle = useRef(new Animated.Value(0)).current
 
   const listRef = useRef<FlatList>(null)
 
@@ -51,6 +54,17 @@ export default function ChatScreen() {
 
   const scrollToBottom = () => {
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100)
+  }
+
+  const triggerWiggle = () => {
+    speakerWiggle.setValue(0)
+    Animated.sequence([
+      Animated.timing(speakerWiggle, { toValue: 1,  duration: 60,  useNativeDriver: true }),
+      Animated.timing(speakerWiggle, { toValue: -1, duration: 60,  useNativeDriver: true }),
+      Animated.timing(speakerWiggle, { toValue: 1,  duration: 60,  useNativeDriver: true }),
+      Animated.timing(speakerWiggle, { toValue: -1, duration: 60,  useNativeDriver: true }),
+      Animated.timing(speakerWiggle, { toValue: 0,  duration: 60,  useNativeDriver: true }),
+    ]).start()
   }
 
   // ── Text send ──────────────────────────────────────────────────────────────
@@ -128,16 +142,58 @@ export default function ChatScreen() {
     } finally { setLoading(false) }
   }
 
-  const playAudio = async (base64Uri: string) => {
+  const playAudio = async (audioUrl: string) => {
+    triggerWiggle()
+    if (!voiceEnabled) return
+
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true })
-      if (sound) await sound.unloadAsync()
-      const { sound: newSound } = await Audio.Sound.createAsync({ uri: base64Uri })
+      if (sound) {
+        await sound.unloadAsync()
+        setSound(null)
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      })
+
+      // Short delay to let audio session settle after recording mode
+      await new Promise(resolve => setTimeout(resolve, 150))
+
+      let uri = audioUrl
+
+      // Write base64 data URI to temp file — expo-av is more reliable with file URIs
+      if (audioUrl.startsWith('data:audio')) {
+        const base64Data = audioUrl.split(',')[1]
+        const FileSystem = require('expo-file-system')
+        const tmpPath = `${FileSystem.cacheDirectory}elara_${Date.now()}.mp3`
+        await FileSystem.writeAsStringAsync(tmpPath, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        uri = tmpPath
+      }
+
+      setIsSpeaking(true)
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, volume: 1.0 }
+      )
       setSound(newSound)
-      await newSound.playAsync()
+
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsSpeaking(false)
+          newSound.unloadAsync()
+        }
+      })
+
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     } catch (e) {
       console.error('Audio playback error:', e)
+      setIsSpeaking(false)
     }
   }
 
@@ -185,12 +241,42 @@ export default function ChatScreen() {
               <Text style={styles.headerStatusText}>ONLINE</Text>
             </View>
           </View>
-          <TouchableOpacity
-            onPress={() => setMode(m => m === 'text' ? 'voice' : 'text')}
-            style={styles.modeToggle}
-          >
-            <Text style={styles.modeToggleText}>{mode === 'text' ? '🎙' : '⌨️'}</Text>
-          </TouchableOpacity>
+          {/* Speaker toggle + mode toggle */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 4 }}>
+            <TouchableOpacity
+              onPress={() => setVoiceEnabled(v => !v)}
+              style={styles.modeToggle}
+              activeOpacity={0.7}
+            >
+              <Animated.View style={{
+                transform: [{
+                  rotate: speakerWiggle.interpolate({
+                    inputRange: [-1, 0, 1],
+                    outputRange: ['-12deg', '0deg', '12deg'],
+                  })
+                }]
+              }}>
+                <Text style={[styles.modeToggleText, !voiceEnabled && { opacity: 0.3 }]}>
+                  {isSpeaking ? '🔊' : voiceEnabled ? '🔈' : '🔇'}
+                </Text>
+              </Animated.View>
+              {isSpeaking && (
+                <View style={{
+                  position: 'absolute', top: 6, right: 6,
+                  width: 7, height: 7, borderRadius: 4,
+                  backgroundColor: '#4ACCFE',
+                  elevation: 4,
+                }} />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setMode(m => m === 'text' ? 'voice' : 'text')}
+              style={styles.modeToggle}
+            >
+              <Text style={styles.modeToggleText}>{mode === 'text' ? '🎙' : '⌨️'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <LinearGradient colors={GRAD_COLORS} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.topBar} />
