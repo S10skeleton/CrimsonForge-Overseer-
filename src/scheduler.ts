@@ -146,54 +146,83 @@ async function runSilentHealthCheck(): Promise<void> {
           process.env.SUPABASE_SERVICE_ROLE_KEY
         )
 
-        // Shops created in the last 15 minutes
+        // Demo/excluded shops — comma separated in env var
+        const excludedShops = (process.env.EXCLUDED_SHOP_NAMES ?? 'Riverside Auto Service')
+          .split(',').map(s => s.trim().toLowerCase())
+
+        // Shops created in the last 15 minutes (new signup alert)
         const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newShops } = await (supabase as any)
+        const { data: newShops } = await supabase
           .from('shops')
           .select('id, name, created_at')
           .gte('created_at', since)
 
-        for (const shop of ((newShops as Array<{ id: string; name: string; created_at: string }>) || [])) {
+        for (const shop of (newShops || [])) {
+          if (excludedShops.includes(shop.name.toLowerCase())) continue
           await sendAlert({
             severity: 'info',
             tool: 'supabase',
             message: `🏪 New shop onboarded: ${shop.name}`,
             details: `Signed up just now — watch for first ticket in next 24h`,
           })
-          console.log(`[SCHEDULER] New shop alert: ${shop.name}`)
         }
 
-        // Shops in first 7 days with no activity in last 24h — flag faster than normal shops
+        // Shops in first 7 days with no tickets after 24h
+        // Only alert ONCE per shop — check if we alerted in the last 23 hours
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        const almostDayAgo = new Date(Date.now() - 23 * 60 * 60 * 1000).toISOString()
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: newishShops } = await (supabase as any)
+        const { data: newSilentShops } = await supabase
           .from('shops')
           .select('id, name, created_at')
           .gte('created_at', weekAgo)
 
-        for (const shop of ((newishShops as Array<{ id: string; name: string; created_at: string }>) || [])) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { count } = await (supabase as any)
-            .from('tickets')
-            .select('id', { count: 'exact', head: true })
-            .eq('shop_id', shop.id)
-            .gte('created_at', dayAgo)
+        for (const shop of (newSilentShops || [])) {
+          // Skip demo/excluded shops
+          if (excludedShops.includes(shop.name.toLowerCase())) continue
 
           const daysSinceSignup = Math.floor(
             (Date.now() - new Date(shop.created_at).getTime()) / (1000 * 60 * 60 * 24)
           )
 
-          // Only alert if they've been around for at least 1 day with no tickets
-          if (daysSinceSignup >= 1 && (count === 0 || count === null)) {
+          // Only alert after at least 1 full day
+          if (daysSinceSignup < 1) continue
+
+          // Check ticket count (all time, not just last 24h)
+          const { count } = await supabase
+            .from('tickets')
+            .select('id', { count: 'exact', head: true })
+            .eq('shop_id', shop.id)
+
+          if ((count ?? 0) > 0) continue // has tickets, skip
+
+          // Check if we already sent this alert in the last 23h using agent_session_flags as dedup store
+          const flagKey = `onboarding_alert_${shop.id}`
+          const elaraSupabase = process.env.ELARA_SUPABASE_URL && process.env.ELARA_SUPABASE_KEY
+            ? createClient(process.env.ELARA_SUPABASE_URL, process.env.ELARA_SUPABASE_KEY)
+            : null
+
+          if (elaraSupabase) {
+            const { data: existingFlag } = await elaraSupabase
+              .from('agent_session_flags')
+              .select('created_at')
+              .eq('flag', flagKey)
+              .gte('created_at', almostDayAgo)
+              .single()
+
+            if (existingFlag) continue // already alerted today
+
             await sendAlert({
               severity: 'warning',
               tool: 'supabase',
               message: `⚠️ New shop silent: ${shop.name}`,
-              details: `Day ${daysSinceSignup + 1} onboarding — 0 tickets in last 24h. May need support.`,
+              details: `Day ${daysSinceSignup + 1} onboarding — 0 tickets ever. May need a check-in.`,
             })
+
+            await elaraSupabase
+              .from('agent_session_flags')
+              .insert({ flag: flagKey })
+
             console.log(`[SCHEDULER] New shop silent alert: ${shop.name} (day ${daysSinceSignup + 1})`)
           }
         }
