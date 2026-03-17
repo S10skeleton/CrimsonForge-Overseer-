@@ -244,3 +244,81 @@ select option { background: var(--bg-dark); }
 }
 .orbit-cw  { position: absolute; border-radius: 50%; border: 1px dashed rgba(89,73,172,.25); animation: orbit-cw  12s linear infinite; }
 .orbit-ccw { position: absolute; border-radius: 50%; border: 1px dashed rgba(74,204,254,.15); animation: orbit-ccw 20s linear infinite; }
+
+/* ─── Mobile responsive ─────────────────────────────────────────────────────── */
+
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top:    env(safe-area-inset-top, 0px);
+}
+
+/* Bottom tab bar — mobile only */
+.mobile-tabs {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: calc(56px + var(--safe-bottom));
+  background: var(--bg-dark);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+  padding-bottom: var(--safe-bottom);
+}
+
+.mobile-tab-btn {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px; background: none; border: none;
+  cursor: pointer; padding: 8px 4px 4px;
+  color: var(--dim); transition: color .15s;
+  font-family: 'Rajdhani', sans-serif;
+  position: relative;
+}
+.mobile-tab-btn.active { color: var(--cyan); }
+.mobile-tab-btn span:first-child { font-size: 18px; line-height: 1; }
+.mobile-tab-btn span:last-child  { font-size: 9px; letter-spacing: 1px; font-weight: 700; text-transform: uppercase; }
+
+/* Mic button for voice */
+.mic-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1.5px solid var(--border-lit);
+  background: var(--bg-dark);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all .15s; flex-shrink: 0;
+  font-size: 20px;
+}
+.mic-btn:hover     { border-color: var(--violet); }
+.mic-btn.recording {
+  background: linear-gradient(135deg, #EA1823, #8D1845);
+  border-color: var(--crimson);
+  box-shadow: 0 0 20px rgba(234,24,35,.4);
+  animation: breathe .8s ease-in-out infinite;
+}
+.mic-btn:disabled  { opacity: .35; cursor: not-allowed; }
+
+/* Voice transcript badge */
+.voice-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--violet);
+  font-family: 'Share Tech Mono', monospace;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 768px) {
+  .mobile-tabs      { display: flex; }
+  .desktop-sidebar  { display: none !important; }
+
+  .panel-main {
+    padding-bottom: calc(56px + var(--safe-bottom) + 16px) !important;
+    padding-top: 16px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .card    { padding: 14px; }
+  .kpi     { padding: 14px 16px; }
+  .kpi-value { font-size: 1.5rem; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .chat-area { height: calc(100vh - 200px) !important; }
+}

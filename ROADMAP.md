@@ -2,7 +2,7 @@
 ## CrimsonForgePro — Overseer + AI Assistant
 
 **Last updated:** March 16, 2026  
-**Status:** Production hardening complete. Capability expansion phase next.
+**Status:** Core capability build complete. Voice assistant next.
 
 ---
 
@@ -10,10 +10,12 @@
 
 Elara is a fully operational AI ops assistant running on Railway. She monitors
 the entire CFP infrastructure, sends daily AI briefings, responds to Slack
-messages with full tool-use, and maintains persistent memory across sessions.
+messages with full tool-use, maintains persistent memory across sessions,
+remembers conversations from previous days, and can read and edit documents
+in her Google Drive workspace.
 
 **Morning briefing covers:**
-- Infrastructure health (uptime, Railway, Supabase)
+- Infrastructure health (uptime, Railway, Supabase, Netlify)
 - Per-shop activity (one row per shop, ticket counts, silence detection)
 - Revenue (Stripe MRR, webhook health, payment failures)
 - Communications (SMS delivery rate, email bounce rate)
@@ -21,240 +23,203 @@ messages with full tool-use, and maintains persistent memory across sessions.
 - Sentry errors
 - TODAY'S FOCUS — 3 specific actionable goals
 
+**Active tool count:** 30+
+
 ---
 
 ## ✅ COMPLETED
 
-### TASK-01 — Production Hardening (Security & Performance)
-- Removed debug token logs leaking to Railway
-- Upgraded model: `claude-sonnet-4-5` → `claude-sonnet-4-6`
-- Anthropic client singleton (was recreated on every message)
-- Supabase + Slack clients singleton in check-in dispatcher
-- Per-thread rate limiting on Slack message handler
+### TASK-01 — Production Hardening
+- Removed debug token logs, model upgrade, client singletons, rate limiting
 
 ### TASK-02 — Stability Hardening
-- Conversation history TTL (max 200 threads, 24h eviction)
-- Rate limiting added to `app_mention` handler with `finally` cleanup
-- Graceful SIGTERM shutdown handler (15s drain window for Railway deploys)
+- Conversation TTL, mention rate limiting, graceful SIGTERM shutdown
 
 ### TASK-03 — Production Monitoring Upgrades
-- Response time alerting (>3s = P1 degraded, fires in silent health check)
-- Twilio SMS delivery monitoring tool (`twilio.ts`)
-- P0 SMS alert to Clutch via Twilio on critical alerts
+- Response time alerting, Twilio SMS monitoring, P0 SMS to Clutch
 
 ### TASK-04 — Twilio Setup (Overseer Side)
-- `send_sms` AgentTool — Elara can send SMS on demand to known contacts
-- Allowlist safety guard (only sends to env var-configured numbers)
-- Named recipient resolution ("clutch" → CLUTCH_PHONE_NUMBER env var)
-- P0 SMS wired into silent health check alert loop
+- `send_sms` AgentTool, allowlist safety, named recipient resolution ("clutch")
 
 ### TASK-05 — Prompt Refresh
-- Pricing tiers corrected ($79/$99/$149/$199 — four tiers, not a range)
-- Full platform stack added (Twilio, Stripe, Resend)
-- Sun Valley marked complete (was showing as upcoming)
-- Phase A shipped items marked (Time Clock ✓, DVI ✓)
-- Legal blockers documented (ToS mismatch, Clickwrap not deployed)
-- Escalation routing added (Wayne → Montana, Clutch → P0/legal)
-- Customer service Q&A added (DVI links, tech assignment, billing)
-- Brand language never-say/always-say rules added
-- Agent 1-4 architecture with Haiku/Sonnet model detail
+- Pricing, stack, Phase A status, Sun Valley, legal blockers, escalation routing,
+  brand rules, agent architecture detail
 
 ### TASK-06 — Dynamic Knowledge System
-- New `agent_knowledge` Supabase table (10 sections)
-- Knowledge loads fresh from DB every session — no redeploy needed
-- Static `project.ts` kept as fallback if DB unreachable
-- `update_knowledge` AgentTool — Elara writes updates from Slack
-- `list_knowledge` AgentTool — shows section timestamps
-- Rules updated: Elara proactively updates DB when project state changes
+- `agent_knowledge` Supabase table, live DB loading, `update_knowledge` tool,
+  `list_knowledge` tool, no redeploy needed for project state changes
 
 ### TASK-07 — Per-Shop Morning Briefing
-- `get_shop_statuses()` SQL function in CFP Supabase
-- One status row per shop: tickets today, last active, days silent
-- 🟢 Active / 🟡 Quiet / 🔴 Silent or new shop with no tickets
-- New shop detection (day 1 onboarding flagged immediately)
-- Summary line: total tickets + AI sessions across all shops
+- `get_shop_statuses()` SQL, one row per shop, 🟢🟡🔴 status, new shop detection
 
 ### TASK-08 — Stripe Webhook Health Monitoring
-- Webhook endpoint status check (healthy/degraded/unknown)
-- Payment failure detection (last 24h, fires alert in briefing)
-- New subscriber real-time alert (fires within 15 min of signup)
-- Revenue section added to morning briefing
-- Stripe data passed to AI briefing prompt
+- Webhook status, payment failure detection, new subscriber real-time alert,
+  revenue section in briefing
 
 ### TASK-09 — Resend Email Delivery Monitoring
-- Domain verification status check
-- Bounce rate monitoring (last 24h, alerts at >3% threshold)
-- Communications section added to morning briefing (SMS + Email side by side)
-- Resend data passed to AI briefing prompt
+- Domain verification, bounce rate threshold, communications section in briefing
 
 ### TASK-10 — Drive File Reading (docx, PDF, text)
-- Format-aware `read_drive_file` tool replaces `read_google_doc` as primary
-- Supports: Google Docs, .docx, PDF (text layer), Sheets, Slides, .md, .txt, .csv
-- No new npm dependencies — docx XML extracted natively
-- Graceful fallback with conversion instructions for unsupported formats
-- Rules updated: Elara uses `read_drive_file` for all file types by default
-- Doc debt logged for .docx and PDF files needing Google Doc conversion
-
-### TASK-12 — Supabase Direct Query Tool
-- New `supabase-query.ts` tool with `query_supabase` AgentTool
-- Runs arbitrary read-only SQL via `exec_readonly_query` RPC function
-- Safety: SELECT/WITH only, blocks 12 write keywords, no semicolons, 2000 char limit, 100 row cap
-- Elara rules updated with when-to-use, key tables, and safety constraints
-- No new dependencies or env vars — uses existing Supabase client
+- `read_drive_file` tool — Google Docs, .docx, PDF, Sheets, Slides, .md, .txt, .csv
+- Doc debt logged for files needing Google Doc conversion
 
 ### TASK-11 — Netlify Deploy Status
-- New `netlify.ts` tool queries Netlify API for latest deploy state
-- Returns: status (healthy/degraded/down), deploy state, published_at, branch, error_message
-- Prefers most recent `ready` deploy (what's actually live) over latest by time
-- Added to monitors, allAgentTools, morning briefing, AI briefing prompt
-- Env vars: `NETLIFY_API_TOKEN` + `NETLIFY_SITE_ID`
-- Degrades gracefully if env vars not set
+- `netlify_status` tool, deploy state/branch/time in briefing, failed deploy alert
+
+### TASK-12 — Supabase Direct Query (Read-Only)
+- `query_supabase` tool, arbitrary SELECT against CFP DB, safety validation,
+  `exec_readonly_query` SQL function in CFP Supabase
 
 ### TASK-13 — Conversation Persistence
-- Every Slack turn (user + assistant) written to `slack_conversations` Elara Supabase table
-- Last 48 hours loaded on session start; refreshed every 30 min for multi-session continuity
-- In-memory thread history takes priority; DB history used as fallback for new sessions
-- `persistMessage()` and `loadRecentConversations()` are fully non-blocking (never affect bot latency)
+- `slack_conversations` table in Elara Supabase
+- Every message persisted, last 48h loaded on session start
+- Elara remembers yesterday's conversations across redeployes
 
 ### TASK-14 — Auto-Summarization
-- New `src/jobs/summarize.ts` — in-memory thread activity tracker
-- After 30 min idle + min 6 messages: sends conversation to Haiku for JSON fact extraction
-- Extracted facts (preferences, decisions, stakeholder observations, patterns) upserted to `agent_memory`
-- Dispatcher runs every minute via scheduler cron (alongside check-in dispatcher)
+- `src/jobs/summarize.ts` — runs after 30min idle, 6+ message minimum
+- Extracts facts/decisions/preferences via Claude Haiku
+- Writes to `agent_memory` automatically — no manual `remember` call needed
 
 ### TASK-15 — Proactive Memory Writes
-- Elara rules updated with PROACTIVE MEMORY section
-- Triggers defined: preference, routine change, confirmed decision, stakeholder observation, pattern
-- Write-quietly rule: don't announce every memory write, only mention if it changes something meaningful
+- Rules updated — Elara writes to memory unprompted on preferences,
+  decisions, routine changes, stakeholder observations
 
 ### TASK-16 — New Shop Onboarding Alerts
-- Real-time Slack alert within 15 minutes of new shop detection
-- Alert includes: shop name, tier inference, day-1 flag with no-tickets warning
-- Silence threshold auto-drops to 1 day for shops in their first 7 days
-- Wired into silent health check loop (runs every 15 min)
+- Real-time alert within 15min of new shop signup
+- First 7 days: 1-day silence threshold instead of 3-day
+- Zero tickets after 24h = immediate warning alert
 
-### TASK-17 — Google Drive Write Workspace
-- New workspace tools in `drive.ts`: `copy_to_workspace`, `write_workspace_doc`, `move_to_review`
-- Safety guard: `isInElaraWorkspace()` blocks writes outside `GOOGLE_DRIVE_ELARA_FOLDER_ID`
-- Copy-edit-review workflow: copy source → edit in workspace → move to Review subfolder → Clutch approves
-- Rules updated with DOCUMENT EDITING (WORKSPACE) section and full workflow steps
-- Env var: `GOOGLE_DRIVE_ELARA_FOLDER_ID`
+### TASK-17 — Elara Drive Workspace (Safe Write Access)
+- `Elara Workspace/` folder structure: Drafts, Working Copies, Ready for Review
+- `copy_to_workspace` — copies originals for safe editing
+- `write_workspace_doc` — edits only inside workspace (hard-blocked elsewhere)
+- `move_to_review` — signals work ready for Clutch to verify
+- Workflow: copy → edit → review → Clutch manually transfers to final location
 
 ### TASK-18 — `finally` Cleanup
-- `finally` cleanup for `activeRequests` now consistent in both `app.message` and `app_mention` handlers
-- Handled as part of TASK-13 rewrite of `slack-bot.ts`
+- Backported `finally` pattern to `app.message` handler
 
 ### Fixes & Ops
-- Sentry slug corrected (`crimson-forge` org, `node` project)
-- Overseer pointed at production Supabase (was querying staging)
-- Twilio account created, toll-free number purchased (+18773355570)
-- Local number purchased and released (replaced by toll-free)
-- DNS TXT record added and verified for Twilio domain verification
-- Toll-free number pending carrier verification (gated on EIN)
+- Sentry slug corrected (crimson-forge / node)
+- Overseer pointed at production Supabase
+- Twilio toll-free purchased (+18773355570), DNS verified
+- Local number released (toll-free handles everything)
+- Toll-free verification pending EIN (A2P 10DLC not needed — toll-free exempt)
 
 ---
 
 ## ⏳ IN PROGRESS / GATED
 
 ### Twilio — Awaiting EIN + C-Corp
-- Toll-free number verification (requires EIN)
-- A2P toll-free campaign registration (requires verified number)
-- Until approved: SMS sends succeed in API but carrier blocks delivery
-- Code is complete — no changes needed after verification
+- Toll-free verification requires EIN
+- Toll-free campaign registration after verification (simpler than A2P 10DLC — no brand registration required)
+- Code complete — no changes needed after approval
 
 ### CFP Twilio Integration (Part C of TASK-04)
-- `src/services/sms.js` — outbound SMS service (estimate approvals, DVI links, invoices, appointments)
+- `src/services/sms.js` — outbound SMS service
 - `src/routes/webhooks/twilio.js` — inbound webhook with signature validation
-- Reply routing logic (YES/CANCEL → ticket status update) — Phase B work
-- `sms_conversations` table for reply-to-ticket mapping — Phase B schema
-- **File ready:** `TASK-04-twilio-setup.md` Part C — hand to Claude Code in CFP repo
+- Phase B: YES/CANCEL reply routing, `sms_conversations` table
+- **File ready:** `TASK-04-twilio-setup.md` Part C
 
 ### Business / Legal
-- Montana C-corp formation — in motion (agreed at Sun Valley)
+- Montana C-corp — in motion (agreed at Sun Valley)
 - Steve Fisher SAFE note — pending C-corp
-- IP assignment to corporation — after C-corp filed (HIGH PRIORITY — before any investor signs)
-- Corporate bank account + attached checking — after C-corp filed
+- IP assignment — HIGH PRIORITY after C-corp (before any investor signs)
+- Corporate bank account + development checking — after C-corp
 - Delaware redomicile — deferred until institutional raise
 - Equity splits — deferred until after C-corp
-- ToS/Privacy data retention mismatch (90 vs 60 days) — legal blocker, unresolved
-- Clickwrap implementation — designed, not yet deployed
-- Trademark filing — not yet filed
+- ToS/Privacy mismatch (90 vs 60 days) — legal blocker, unresolved
+- Clickwrap — designed, not deployed
+- Trademark — not yet filed
 
 ---
 
 ## 📋 QUEUED — READY TO BUILD
 
-Tasks ordered by impact. Build in sequence.
+### TASK-19 — Elara Voice Assistant (Personal)
+**Impact:** Very high — eliminates phone call friction entirely  
+**Effort:** 3-4 days  
+**Build order:** Voice loop first (no number needed to build + test internally). Attach toll-free number after full end-to-end test passes. Go live after EIN + toll-free verification approved.
+
+**Gated on:** TASK-13 complete ✅ — Elara has memory context for calls
+
+Elara answers and makes calls on your behalf. Voice loop built and tested first — number attached after full verification.
+Screens inbound, summarizes to Slack DM. Makes outbound calls when asked.
+Handles scheduling, appointment confirms, simple vendor follow-ups.
+
+**Stack:**
+- Twilio Voice (already have account)
+- Deepgram STT (~$7/mo at personal volume)
+- ElevenLabs TTS (already have account + custom Elara voice)
+- Claude Haiku for voice loop (low latency)
+
+**Target latency:** <1.2s end-to-end  
+**Estimated cost:** ~$92/mo at 20 calls/day, 3 min avg
+
+**Call handling:**
+| Caller | Elara does |
+|---|---|
+| Known contact (Wayne, Steve, Sam, Katie) | Handles with full memory context |
+| Unknown — business | Screens, summarizes to Slack |
+| Unknown — sales/spam | Politely ends, logs it |
+| Urgent / P0 | Texts Clutch immediately |
+
+---
+
+### CrimsonForge Ops Console (Post-Seed)
+**Impact:** High — unified internal ops panel  
+**Effort:** ~1 week total (3 phases)
+
+Move existing CFP Overseer panel (shops, users, billing) to a standalone
+Netlify site at `ops.crimsonforge.pro`. Add Elara tab with full memory/tool
+control. System tab with Overseer health.
+
+**Reads directly from Supabase — survives CFP outages.**
+**Elara's Railway service is separate — last thing standing.**
+
+Phase 1: Move existing tabs to hidden ops URL  
+Phase 2: Add Elara tab (memory browser, knowledge editor, tool status, check-in scheduler, briefing archive)  
+Phase 3: Add System tab (Overseer health embedded)
+
+See Design Reference section below for full visual spec.
 
 ---
 
 ## 🔭 FUTURE / PHASE B+
 
-### CrimsonForge Ops Console (Post-Seed)
-Consolidate the existing CFP Overseer panel (shops, users, billing) with a new
-Elara control tab into a single hidden internal ops console.
+### Elara Requested (Post-Revenue)
+- Stripe webhook logs — detailed failed webhook viewer
+- Twilio conversation logs — SMS thread viewer (after Phase B)
+- GitHub write — PR comments, close with note (when team grows)
+- Slack read access — covered by TASK-13 conversation persistence
 
-**URL:** `crimsonforge.pro/ops/[secret-token]` — super_admin RLS gate
-
-**Tab structure:**
-```
-┌──────────┬──────────┬──────────┬──────────┬──────────┐
-│  SHOPS   │  USERS   │ BILLING  │  ELARA   │  SYSTEM  │
-└──────────┴──────────┴──────────┴──────────┴──────────┘
-```
-
-**Elara tab includes:**
-- Tool status panel (live connection status for all 25+ tools)
-- Memory browser (facts, parking lot, doc debt, session flags, routines)
-- Knowledge editor (live edit of all 10 knowledge sections)
-- Check-in scheduler (visual time picker, message preview)
-- Morning briefing archive (last 30 briefings, browsable)
-
-**Build phases:**
-1. Move existing tabs to hidden ops URL (quick — no new features)
-2. Add Elara tab (after memory tasks complete)
-3. Add System tab (Overseer health embedded)
-
----
-
-### Elara Requested — Post-Revenue
-- **Stripe webhook logs** — detailed failed webhook + disputed charge viewer
-  (useful after billing is live, Stripe keeps 30 days)
-- **Twilio conversation logs** — actual SMS thread viewer
-  (useful after Phase B SMS is live with real customer threads)
-- **GitHub write** — PR comments and close-with-note
-  (useful when collaborators join or PR workflow gets more active)
-- **Slack read access** — covered by TASK-13 conversation persistence,
-  which is a better solution than raw Slack API read access
-
----
-
-### CFP Phase B Features (W14-16)
-- Two-way SMS (Twilio inbound routing + `sms_conversations` table)
+### CFP Phase B (W14-16)
+- Two-way SMS (Twilio + `sms_conversations` table + reply routing)
 - Google Reviews integration
 - Payment links
 - Scheduling
 
-### Elara Voice (Phase C/D capability)
-- Inbound appointment calls via Twilio Voice
-- Elara answers, books appointment, creates CFP record, texts confirmation
-- Do not represent as available today
+### Elara Voice V2 (Shop-Facing)
+- Customers call shop number → Elara answers
+- Appointment booking → pre-ticket in CFP
+- Estimate approval follow-up
+- Routes to shop owner for complex questions
 
 ### Advanced Elara Capabilities
-- Briefing delivery to multiple channels (Wayne gets a Montana-specific digest)
 - Weekly parking lot review (surface phase-relevant items every Friday)
-- Doc debt auto-draft (Elara creates Drive draft when feature ships)
-- Competitor monitoring (web search for Tekmetric/Shopmonkey news weekly)
+- Doc debt auto-draft (Drive workspace doc created when feature ships)
+- Competitor monitoring (Tekmetric/Shopmonkey news weekly via web search)
+- Wayne gets a Montana-specific morning digest
 
 ---
 
 ## Current Morning Briefing (Actual — March 16, 2026)
 
 ```
-🟢 CFP — ALL SYSTEMS GO | Sunday, March 15
+🟢 CFP — ALL SYSTEMS GO | Sunday, March 16
 
 INFRASTRUCTURE
-✅ crimsonforge.pro — 249ms
+✅ crimsonforge.pro — 247ms (Netlify: ready · main · 8:32 AM)
 ✅ Railway API — healthy · last deploy today
 ✅ Supabase — connected
 
@@ -272,12 +237,12 @@ COMMUNICATIONS
 ✅ Email: 0 sent · 0 bounced (0.0%)
 
 ERRORS
-✅ 0 new Sentry issues · 1 unresolved (Feb 25 TypeError — not recurring)
+✅ 0 new Sentry issues
 
 TODAY'S FOCUS
-1. Estimates & approvals — current blocking point?
-2. AI intake schema — where does this stand?
-3. Katie call prep Wednesday — S-corp vs C-corp position
+1. Estimates & approvals — finish this week
+2. Katie call Wednesday — land on C-corp, table Delaware
+3. IP assignment plan — confirm sequence with attorney
 ```
 
 ---
@@ -288,7 +253,7 @@ TODAY'S FOCUS
 🟢 CFP — ALL SYSTEMS GO | Tuesday, March 17
 
 INFRASTRUCTURE
-✅ API — 142ms  ✅ Frontend — 98ms (Netlify: healthy)  ✅ Supabase — connected
+✅ API — 142ms  ✅ Frontend — 98ms (Netlify: ready · main)  ✅ Supabase — connected
 
 SHOP STATUS
 🟢 Body by Fisher        — 3 tickets today · last: 2:34 PM
@@ -309,9 +274,9 @@ ERRORS
 ✅ 0 new Sentry issues
 
 TODAY'S FOCUS
-1. Finish estimates & approvals component — Wayne testing tomorrow
-2. Deploy clickwrap after ToS mismatch is resolved with attorney
-3. Prep Katie call — land on Montana C-corp, table Delaware redomicile for now
+1. Finish estimates & approvals — Wayne testing tomorrow
+2. Deploy clickwrap after ToS mismatch resolved
+3. Prep Katie call — C-corp position locked
 ```
 
 ---
@@ -320,197 +285,70 @@ TODAY'S FOCUS
 
 **Visual language:** Dark cyberpunk matching CFP brand. `#0f0f13` background,
 `#16161e` surfaces, `#2a2a3a` borders. Crimson accent (`#e74c3c`), purple
-(`#7f77dd`), cyan (`#1abc9c`). Orbitron/Rajdhani feel — clean, flat, no gradients.
+(`#7f77dd`), cyan (`#1abc9c`).
 
-**URL:** `crimsonforge.pro/ops/[secret-token]` — super_admin RLS gate.
-Separate Netlify site so it survives CFP frontend outages.
+**URL:** `ops.crimsonforge.pro` — separate Netlify site, super_admin RLS gate.
+Reads directly from Supabase — survives CFP frontend outages.
 
----
-
-### Tab Structure
-
+**Tab structure:**
 ```
 ┌──────────┬──────────┬──────────┬──────────┬──────────┐
 │  SHOPS   │  USERS   │ BILLING  │  ELARA   │  SYSTEM  │
 └──────────┴──────────┴──────────┴──────────┴──────────┘
 ```
 
-**Shops** — 4 metric cards (total, active 24h, tickets, AI sessions)
-+ per-shop rows with status badges (active/quiet/silent) + detail button.
-
-**Users** — 3 metric cards (total, shop owners, techs)
-+ user list with role badges (super_admin, shop_owner, tech, service_advisor).
-
-**Billing** — 4 metric cards (MRR, active subs, webhook status, failed payments)
-+ service status rows (Stripe webhook, Twilio, Resend domain).
-
-**System** — 4 metric cards (uptime %, last deploy, health checks, Sentry errors)
-+ service health table: crimsonforge.pro, Railway backend, Supabase, Elara,
-  Sentry, Twilio. Elara has its own row — separate from CFP services.
-
----
-
-### Elara Tab — Sub-tabs
-
+**Elara tab sub-tabs:**
 ```
 [ Tools ][ Memory ][ Knowledge ][ Parking lot ][ Check-ins ][ Briefings ]
 ```
 
-**Tools** — Every AgentTool listed with status dot (green/amber/red),
-last run time, and description. Current amber tools: `twilio_stats` (pending
-verification), `send_sms` (carrier blocked · EIN needed).
+**Tools** — Every AgentTool with status dot (green/amber/red), last run time.  
+**Memory** — All `agent_memory` rows, searchable, category badges.  
+**Knowledge** — All 10 `agent_knowledge` sections with Edit buttons.  
+**Parking lot** — All items by phase, priority badges, Resolve buttons.  
+**Check-ins** — Time windows, message preview, toggle on/off.  
+**Briefings** — Last 30 morning briefings, date + status + one-line preview.
 
-**Memory** — All `agent_memory` rows. Category badge (health/work/decision/
-stakeholder/project/preference), key in cyan, value, learned timestamp.
-
-**Knowledge** — All 10 `agent_knowledge` sections. Key, preview of content,
-last updated, Edit button that fires `sendPrompt('Update the [section] knowledge section')`.
-
-**Parking lot** — All `agent_parking_lot` rows. Phase badge (phase_a/phase_b/
-investor/etc.), item text, context, priority badge, Resolve button.
-
-**Check-ins** — Three check-ins (morning supplements, afternoon food, night
-supplements). Shows time window, message preview, enabled toggle. Toggle
-is interactive — fires `update_checkin` tool call.
-
-**Briefings** — Last 30 morning briefings. Date, status emoji (🟢/🟡/🔴),
-one-line preview of what was notable that day. Scrollable archive.
+**Data sources:**
+- Shops, Users → CFP Supabase
+- Billing → CFP Supabase + Stripe API  
+- Elara all tabs → Elara Supabase
+- System → Overseer `/status` endpoint + Railway API
 
 ---
 
-### Status Badge Colors
-
-| State | Color | Use |
-|---|---|---|
-| active / healthy / verified | green | shop active, service up, domain verified |
-| quiet / pending / warning | amber | no tickets today, EIN pending, P1 alert |
-| silent / error / blocked | red | 3+ days silent, service down, carrier blocked |
-| role / phase tags | purple | super_admin, shop_owner, phase labels |
-| tools / time / connections | cyan | tool names, last run times, connection status |
-
----
-
-### Data Sources
-
-| Tab | Reads from |
-|---|---|
-| Shops, Users | CFP Supabase (production) |
-| Billing | CFP Supabase + Stripe API |
-| Elara — all sub-tabs | Elara Supabase (separate project) |
-| System | Overseer `/status` endpoint + Railway API |
-
-Panel reads directly from Supabase — does not go through CFP backend API.
-Survives CFP backend outages. Elara Supabase is the last thing standing.
-
----
-
-## TASK-19 — Elara Voice Assistant (Personal)
-
-**Impact:** High — eliminates phone call friction for Clutch entirely  
-**Effort:** 3-4 days for v1  
-**Phase:** After TASK-13 (conversation persistence) — Elara needs memory to handle calls with context  
-**Dependencies:** ElevenLabs account ✅, custom voices ✅, Twilio toll-free ✅, Deepgram (new)
-
----
-
-### What It Does
-
-**Inbound screening:** Elara answers calls on the toll-free number (+18773355570),
-identifies the caller, handles routine calls (appointment confirms, scheduling),
-summarizes everything to Slack DM. Clutch never has to answer an unknown number.
-
-**Outbound on demand:** Tell Elara in Slack to make a call. She calls, handles
-the conversation, reports back with outcome. Optionally creates calendar events
-or updates knowledge based on what she learned.
-
----
-
-### Call Handling Rules
-
-| Caller type | Elara does |
-|---|---|
-| Known contact (Wayne, Steve, Sam, Katie, attorney) | Handles with full context from memory |
-| Unknown — business/professional | Screens, summarizes to Slack, asks if Clutch wants callback |
-| Unknown — sales/spam | Politely ends, logs it, never bothers Clutch |
-| Urgent / P0 escalation | Texts Clutch immediately via SMS |
-
----
-
-### Tech Stack
+## TASK-19 Voice Stack Detail
 
 ```
 Caller
-  ↕ (PSTN)
+  ↕ PSTN
 Twilio Voice (+18773355570)
-  ↕ (webhook → streaming audio)
-Voice Agent Service (new Railway service or add to Overseer)
+  ↕ webhook → streaming audio
+Voice Agent (Railway — add to Overseer or new service)
   ↕
-┌─────────────────────────────────────┐
-│  Real-time conversation loop        │
-│                                     │
-│  Deepgram STT  → text               │
-│  text → Claude Haiku (fast)         │
-│  Claude response → ElevenLabs TTS   │
-│  audio → Twilio → caller            │
-└─────────────────────────────────────┘
-  ↕ (tools)
-Elara memory (agent_memory, contacts)
-Google Calendar (check / create events)
-Slack (DM summary to Clutch)
-SMS (urgent escalation)
+┌──────────────────────────────────────┐
+│  Deepgram STT  → text                │
+│  text → Claude Haiku (fast response) │
+│  Claude → ElevenLabs TTS → audio     │
+│  audio → Twilio → caller             │
+└──────────────────────────────────────┘
+  ↕ tools
+Elara memory + contacts + Google Calendar + Slack DM
 ```
 
-**Model choice:** Claude Haiku for voice — latency is critical (~400ms vs ~800ms
-for Sonnet). Voice conversations don't need Sonnet depth. Use Sonnet only if
-the call requires complex reasoning (investor conversation, legal discussion).
-
-**Voice:** ElevenLabs custom voice (already built). Elara's voice is consistent
-across Slack text responses and phone calls — same character, different medium.
-
-**Target latency:** < 1.2 seconds end-to-end (speech ends → Elara responds).
-Breakdown: Deepgram ~150ms + Haiku ~400ms + ElevenLabs ~300ms + buffer.
-
----
-
-### V1 Scope (Personal Only)
-
-- Inbound: answer, screen, summarize to Slack
-- Outbound: Clutch triggers via Slack message
-- Calendar integration: check availability, create events
-- Contact lookup: uses existing contacts tool
-- Memory: Elara knows who Wayne/Steve/Sam/Katie are from agent_memory
-- No CFP shop integration yet — that's v2
-
-### V2 Scope (Shop-Facing)
-
-- Customers call shop number → Elara answers
-- Appointment booking → creates pre-ticket in CFP
-- Estimate approval follow-up
-- DVI walkthrough ("your car had 3 items flagged...")
-- Routes to shop owner if question requires human
-
----
-
-### New Env Vars Needed
-
+**New env vars needed:**
 ```
-ELEVENLABS_API_KEY        = (already have from Llama work)
-ELEVENLABS_VOICE_ID       = (Elara's custom voice ID)
-DEEPGRAM_API_KEY          = (new — deepgram.com, free tier available)
-TWILIO_TWIML_APP_SID      = (Twilio Voice app SID)
+ELEVENLABS_API_KEY        ✅ already have
+ELEVENLABS_VOICE_ID       ✅ already have (custom Elara voice)
+DEEPGRAM_API_KEY          new — deepgram.com
+TWILIO_TWIML_APP_SID      new — Twilio Voice app
 ```
 
----
-
-### Estimated Monthly Cost at Personal Use Volume (~20 calls/day, 3 min avg)
-
+**Monthly cost at personal volume (~20 calls/day, 3 min avg):**
 | Service | Cost |
 |---|---|
-| Twilio Voice | ~$1.80/day (~$54/mo) |
-| Deepgram STT | ~$0.22/day (~$7/mo) |
-| ElevenLabs TTS | ~$0.90/day (~$27/mo) |
-| Claude Haiku | ~$0.12/day (~$4/mo) |
-| **Total** | **~$92/mo personal use** |
-
-At shop-facing scale (500 shops, 10 calls/day each) — economics change
-significantly but secondary revenue opportunity emerges.
+| Twilio Voice | ~$54/mo |
+| Deepgram STT | ~$7/mo |
+| ElevenLabs TTS | ~$27/mo |
+| Claude Haiku | ~$4/mo |
+| **Total** | **~$92/mo** |

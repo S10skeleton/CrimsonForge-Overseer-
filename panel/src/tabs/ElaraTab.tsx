@@ -62,15 +62,29 @@ export default function ElaraTab() {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
+type ChatMessage = { role: 'user' | 'assistant'; content: string; via?: 'voice' }
+
 function ElaraChat() {
-  const [history, setHistory] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
-  const [input, setInput]     = useState('')
-  const [loading, setLoading] = useState(false)
-  const bottomRef             = useRef<HTMLDivElement>(null)
+  const [history, setHistory]         = useState<ChatMessage[]>([])
+  const [input, setInput]             = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [recording, setRecording]     = useState(false)
+  const [voiceSupported, setVoiceSupported] = useState(false)
+  const bottomRef                     = useRef<HTMLDivElement>(null)
+  const mediaRecorderRef              = useRef<MediaRecorder | null>(null)
+  const chunksRef                     = useRef<Blob[]>([])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history])
+
+  useEffect(() => {
+    setVoiceSupported(
+      typeof window !== 'undefined' &&
+      typeof window.MediaRecorder !== 'undefined' &&
+      !!navigator.mediaDevices?.getUserMedia
+    )
+  }, [])
 
   const send = async () => {
     const msg = input.trim()
@@ -86,8 +100,43 @@ function ElaraChat() {
     } finally { setLoading(false) }
   }
 
+  const startRecording = async () => {
+    if (recording || loading) return
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      chunksRef.current = []
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setLoading(true)
+        try {
+          const { transcript, response } = await api.voice.message(audioBlob, history)
+          if (transcript) setHistory(h => [...h, { role: 'user', content: transcript, via: 'voice' }])
+          if (response)   setHistory(h => [...h, { role: 'assistant', content: response }])
+          // if (audioUrl) { const audio = new Audio(audioUrl); audio.play() }
+        } catch (e: any) {
+          setHistory(h => [...h, { role: 'assistant', content: `Voice error: ${e.message}` }])
+        } finally { setLoading(false) }
+      }
+      mediaRecorderRef.current = mr
+      mr.start()
+      setRecording(true)
+    } catch {
+      alert('Microphone access denied.')
+    }
+  }
+
+  const stopRecording = () => {
+    if (!recording) return
+    mediaRecorderRef.current?.stop()
+    mediaRecorderRef.current = null
+    setRecording(false)
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 600 }}>
+    <div className="chat-area" style={{ display: 'flex', flexDirection: 'column', height: 600 }}>
       {/* Message area */}
       <div className="card" style={{ flex: 1, overflowY: 'auto', marginBottom: 12, padding: '20px' }}>
         {history.length === 0 && (
@@ -129,7 +178,7 @@ function ElaraChat() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: 'Share Tech Mono', fontSize: 9, color: 'var(--crimson)',
               }}>
-                U
+                {m.via === 'voice' ? '🎤' : 'U'}
               </div>
             )}
             <div style={{
@@ -141,6 +190,9 @@ function ElaraChat() {
               padding: '10px 14px', maxWidth: '78%',
               fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap',
             }}>
+              {m.via === 'voice' && (
+                <span className="voice-badge">voice</span>
+              )}
               {m.content}
             </div>
           </div>
@@ -172,20 +224,34 @@ function ElaraChat() {
 
       {/* Input */}
       <div style={{ display: 'flex', gap: 10 }}>
+        {voiceSupported && (
+          <button
+            className={`mic-btn ${recording ? 'recording' : ''}`}
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onTouchStart={e => { e.preventDefault(); startRecording() }}
+            onTouchEnd={e => { e.preventDefault(); stopRecording() }}
+            disabled={loading}
+            title="Hold to speak"
+          >
+            🎤
+          </button>
+        )}
         <div style={{ flex: 1, position: 'relative' }}>
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder="Message Elara... (Enter to send, Shift+Enter for newline)"
+            placeholder={recording ? 'Listening...' : 'Message Elara... (Enter to send, Shift+Enter for newline)'}
             rows={2}
+            disabled={recording}
             style={{ resize: 'none', paddingRight: 14 }}
           />
         </div>
         <button
           className="btn btn-primary"
           onClick={send}
-          disabled={loading || !input.trim()}
+          disabled={loading || recording || !input.trim()}
           style={{ alignSelf: 'flex-end', minWidth: 80 }}
         >
           Send

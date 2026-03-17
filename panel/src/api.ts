@@ -91,4 +91,63 @@ export const api = {
         body: JSON.stringify({ message, history }),
       }),
   },
+
+  voice: {
+    speak: (text: string) =>
+      request<{ audioUrl: string }>('/api/voice/speak', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      }),
+
+    message: async (
+      audioBlob: Blob,
+      history: Array<{ role: 'user' | 'assistant'; content: string }>
+    ): Promise<{ transcript: string; response: string; audioUrl?: string }> => {
+      const token = getToken()
+      const formData = new FormData()
+      formData.append('audio', audioBlob, 'voice.webm')
+      formData.append('history', JSON.stringify(history))
+
+      const res = await fetch(`${BASE}/api/voice/message`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? `HTTP ${res.status}`)
+      }
+      return res.json()
+    },
+  },
+
+  files: {
+    list: () => request<{ workspace: any[]; recent: any[] }>('/api/files/list'),
+
+    upload: async (file: File, caption?: string): Promise<{ success: boolean; file: any; elaraNote: string | null }> => {
+      const token = getToken()
+      const formData = new FormData()
+      formData.append('file', file)
+      if (caption) formData.append('caption', caption)
+      const res = await fetch(`${BASE}/api/files/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? `HTTP ${res.status}`)
+      }
+      return res.json()
+    },
+
+    getLink: (fileId: string) =>
+      request<{ name: string; mimeType: string; downloadUrl: string; filename: string }>(`/api/files/${fileId}/link`),
+
+    ask: (fileId: string, question: string) =>
+      request<{ response: string }>('/api/files/ask', {
+        method: 'POST',
+        body: JSON.stringify({ fileId, question }),
+      }),
+  },
 }
