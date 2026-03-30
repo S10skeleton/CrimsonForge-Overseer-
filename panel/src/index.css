@@ -156,6 +156,7 @@ body {
 .badge-red     { background: rgba(239,68,68,.1);   color: var(--red);    border-color: rgba(239,68,68,.25); }
 .badge-cyan    { background: rgba(74,204,254,.08); color: var(--cyan);   border-color: rgba(74,204,254,.2); }
 .badge-purple  { background: rgba(89,73,172,.12);  color: #b0a0ff;       border-color: rgba(89,73,172,.3); }
+.badge-violet  { background: rgba(89,73,172,.2);   color: var(--violet);  border-color: rgba(89,73,172,.4); }
 .badge-crimson { background: rgba(234,24,35,.1);   color: #ff7080;       border-color: rgba(234,24,35,.25); }
 .badge-dim     { background: rgba(255,255,255,.04); color: var(--dim);   border-color: rgba(255,255,255,.08); }
 

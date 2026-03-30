@@ -6,8 +6,10 @@ import BillingTab  from '../tabs/BillingTab'
 import MessagesTab from '../tabs/MessagesTab'
 import AIConfigTab from '../tabs/AIConfigTab'
 import ElaraTab    from '../tabs/ElaraTab'
+import LeadsTab    from '../tabs/LeadsTab'
+import FeedbackTab from '../tabs/FeedbackTab'
 
-type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'aiconfig' | 'elara'
+type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'aiconfig' | 'elara' | 'leads' | 'feedback'
 
 const NAV: { id: Tab; label: string; glyph: string; mobileLabel: string }[] = [
   { id: 'elara',    label: 'Elara',    glyph: '⬟', mobileLabel: 'ELARA'   },
@@ -15,12 +17,14 @@ const NAV: { id: Tab; label: string; glyph: string; mobileLabel: string }[] = [
   { id: 'shops',    label: 'Shops',    glyph: '⬡', mobileLabel: 'SHOPS'   },
   { id: 'billing',  label: 'Billing',  glyph: '⬨', mobileLabel: 'BILLING' },
   { id: 'messages', label: 'Messages', glyph: '◎', mobileLabel: 'MSGS'    },
+  { id: 'leads',    label: 'Leads',    glyph: '◇', mobileLabel: 'LEADS'   },
   { id: 'users',    label: 'Users',    glyph: '◉', mobileLabel: 'USERS'   },
+  { id: 'feedback', label: 'Feedback', glyph: '◈', mobileLabel: 'FEEDBK'  },
   { id: 'aiconfig', label: 'Forge AI', glyph: '⬟', mobileLabel: 'AI'      },
 ]
 
 const DESKTOP_NAV = [...NAV].sort((a, b) => {
-  const order = ['system','shops','users','billing','messages','aiconfig','elara']
+  const order = ['system','shops','leads','users','billing','feedback','messages','aiconfig','elara']
   return order.indexOf(a.id) - order.indexOf(b.id)
 })
 
@@ -142,6 +146,8 @@ export default function Panel({ onLogout }: Props) {
           {tab === 'users'    && <UsersTab />}
           {tab === 'billing'  && <BillingTab />}
           {tab === 'messages' && <MessagesTab />}
+          {tab === 'leads'    && <LeadsTab />}
+          {tab === 'feedback' && <FeedbackTab />}
           {tab === 'aiconfig' && <AIConfigTab />}
           {tab === 'elara'    && <ElaraTab />}
         </div>
@@ -169,6 +175,16 @@ export default function Panel({ onLogout }: Props) {
             </button>
           )
         })}
+
+        {/* Sign Out */}
+        <button
+          className="mobile-tab-btn"
+          onClick={onLogout}
+          style={{ color: 'var(--crimson)' }}
+        >
+          <span>⏻</span>
+          <span>OUT</span>
+        </button>
       </nav>
     </div>
   )

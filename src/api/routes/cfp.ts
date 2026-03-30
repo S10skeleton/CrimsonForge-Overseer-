@@ -27,6 +27,8 @@ router.get('/shops', requireAuth, async (_req, res) => {
         id, name, email, phone, address,
         subscription_status, subscription_tier, monthly_revenue,
         stripe_customer_id, stripe_subscription_id, trial_ends_at,
+        stripe_connect_charges_enabled,
+        founder_notes,
         created_at, updated_at,
         tickets:tickets(count),
         profiles:profiles(count)
@@ -50,11 +52,24 @@ router.get('/shops', requireAuth, async (_req, res) => {
       }
     }
 
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: recentTickets } = await sb
+      .from('tickets')
+      .select('shop_id')
+      .in('shop_id', shopIds)
+      .gte('created_at', sevenDaysAgo)
+
+    const recentByShop: Record<string, number> = {}
+    for (const t of recentTickets ?? []) {
+      recentByShop[t.shop_id] = (recentByShop[t.shop_id] ?? 0) + 1
+    }
+
     const enriched = (data ?? []).map((s: any) => ({
       ...s,
-      ticket_count: s.tickets?.[0]?.count ?? 0,
-      user_count: s.profiles?.[0]?.count ?? 0,
+      ticket_count:        s.tickets?.[0]?.count ?? 0,
+      user_count:          s.profiles?.[0]?.count ?? 0,
       last_ticket_created: lastTicketByShop[s.id] ?? null,
+      recent_tickets_7d:   recentByShop[s.id] ?? 0,
     }))
 
     res.json(enriched)
@@ -342,6 +357,74 @@ router.patch('/ai-config', requireAuth, async (req, res) => {
     res.json({ success: true, updated: updates.map(u => u.config_key) })
   } catch (err) {
     console.error('[cfp/ai-config] PATCH error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+// ── Shop founder notes ──────────────────────────────────────────────────────
+router.patch('/shops/:id/notes', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { founder_notes } = req.body as { founder_notes: string }
+  try {
+    const sb = getCFPSupabase()
+    const { error } = await sb.from('shops').update({ founder_notes }).eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+// ── Leads PATCH / DELETE ────────────────────────────────────────────────────
+router.patch('/leads/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const updates = req.body as Record<string, unknown>
+  try {
+    const sb = getCFPSupabase()
+    const { error } = await sb.from('contact_requests').update(updates).eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.delete('/leads/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  try {
+    const sb = getCFPSupabase()
+    const { error } = await sb.from('contact_requests').delete().eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+// ── Feedback ────────────────────────────────────────────────────────────────
+router.get('/feedback', requireAuth, async (_req, res) => {
+  try {
+    const sb = getCFPSupabase()
+    const { data, error } = await sb
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
+  }
+})
+
+router.patch('/feedback/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { status } = req.body as { status: string }
+  try {
+    const sb = getCFPSupabase()
+    const { error } = await sb.from('feedback').update({ status }).eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
   }
 })

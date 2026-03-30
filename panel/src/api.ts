@@ -43,6 +43,24 @@ export const api = {
     stats: () => request<any>('/api/cfp/stats'),
     billingEvents: () => request<any[]>('/api/cfp/billing-events'),
     leads: () => request<any[]>('/api/cfp/leads'),
+    updateLead: (id: string, updates: Record<string, unknown>) =>
+      request<any>(`/api/cfp/leads/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      }),
+    deleteLead: (id: string) =>
+      request<any>(`/api/cfp/leads/${id}`, { method: 'DELETE' }),
+    feedback: () => request<any[]>('/api/cfp/feedback'),
+    updateFeedback: (id: string, status: string) =>
+      request<any>(`/api/cfp/feedback/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+    saveShopNotes: (shopId: string, notes: string) =>
+      request<any>(`/api/cfp/shops/${shopId}/notes`, {
+        method: 'PATCH',
+        body: JSON.stringify({ founder_notes: notes }),
+      }),
     messages: () => request<any[]>('/api/cfp/messages'),
     createMessage: (payload: { title: string; body: string; type: string; active: boolean; expires_at?: string | null }) =>
       request<any>('/api/cfp/messages', {
