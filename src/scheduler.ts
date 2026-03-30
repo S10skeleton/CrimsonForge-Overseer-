@@ -428,6 +428,28 @@ async function runMorningBriefing(): Promise<void> {
       ? (netlifyResult.data as import('./types/index.js').NetlifyData)
       : undefined
 
+    // Fetch recent feedback (new items only, last 30 days)
+    let feedbackForBriefing: Array<{
+      type: string; message: string; status: string;
+      submitter_name?: string; shop_name?: string; created_at: string
+    }> = []
+
+    try {
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        const { data: feedbackRows } = await sb
+          .from('feedback')
+          .select('type, message, status, submitter_name, shop_name, created_at')
+          .gte('created_at', thirtyDaysAgo)
+          .order('created_at', { ascending: false })
+          .limit(20)
+        feedbackForBriefing = feedbackRows ?? []
+      }
+    } catch (err) {
+      console.error('[SCHEDULER] Error fetching feedback for briefing:', err)
+    }
+
     const aiBriefingText = await generateAIBriefing({
       briefing,
       gmailData,
@@ -436,6 +458,7 @@ async function runMorningBriefing(): Promise<void> {
       stripeData: stripeForBriefing,
       resendData: resendForBriefing,
       netlifyData: netlifyForBriefing,
+      feedbackData: feedbackForBriefing,
     })
 
     if (aiBriefingText) {

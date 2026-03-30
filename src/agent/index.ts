@@ -108,6 +108,7 @@ export async function generateAIBriefing(data: {
   stripeData?: { activeSubscriptions: number; mrr: number; newThisMonth: number; hasWebhookIssues: boolean; hasPaymentFailures: boolean; paymentFailures: Array<{ customerEmail: string; amount: number }> }
   resendData?: { sent: number; delivered: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null }
   netlifyData?: { status: string; latestDeployState: string | null; latestDeployAt: string | null; branch: string | null; errorMessage: string | null }
+  feedbackData?: Array<{ type: string; message: string; status: string; submitter_name?: string; shop_name?: string; created_at: string }>
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
@@ -172,6 +173,22 @@ export async function generateAIBriefing(data: {
       })()
     : 'Netlify not configured.'
 
+  const feedbackSummary = (() => {
+    const items = data.feedbackData ?? []
+    if (items.length === 0) return 'No new feedback.'
+
+    const newItems = items.filter(f => f.status === 'new')
+    if (newItems.length === 0) return `${items.length} feedback item(s) — all reviewed.`
+
+    const lines = newItems.slice(0, 5).map(f => {
+      const who  = [f.submitter_name, f.shop_name].filter(Boolean).join(' @ ')
+      const type = f.type === 'bug' ? 'Bug' : f.type === 'suggestion' ? 'Idea' : f.type === 'praise' ? 'Praise' : 'General'
+      return `• ${type}${who ? ` (${who})` : ''}: "${f.message.slice(0, 120)}${f.message.length > 120 ? '…' : ''}"`
+    }).join('\n')
+
+    return `${newItems.length} new item(s) awaiting review:\n${lines}${newItems.length > 5 ? `\n…and ${newItems.length - 5} more` : ''}`
+  })()
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
@@ -193,6 +210,9 @@ EMAIL DELIVERY (RESEND): ${resendSummary}
 
 NETLIFY FRONTEND DEPLOY: ${netlifyStatus}
 
+BETA FEEDBACK:
+${feedbackSummary}
+
 Write the morning briefing for Slack in your voice as Elara. Include:
 1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)
 2. Infrastructure highlights — only flag real issues, skip "all systems nominal" boilerplate
@@ -201,6 +221,7 @@ Write the morning briefing for Slack in your voice as Elara. Include:
 5. *TODAY'S FOCUS* — 3 specific, concrete goals for today based on the current roadmap phase.
    Not categories. Real tasks. "Finish VIN scanner component and test on Apocalypse Auto VINs" not "work on mobile."
 6. Health check — one line. Did you take morning supplements? Workout planned?
+7. Feedback — if there are new unreviewed items, call out any bugs or urgent ideas in one line.
 
 Your voice. Direct. Warm. No preamble. No filler.`
 

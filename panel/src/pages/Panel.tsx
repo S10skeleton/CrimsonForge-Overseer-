@@ -28,7 +28,7 @@ const DESKTOP_NAV = [...NAV].sort((a, b) => {
   return order.indexOf(a.id) - order.indexOf(b.id)
 })
 
-const MOBILE_NAV = ['elara','system','shops','billing','messages'].map(id => NAV.find(n => n.id === id)!)
+const MOBILE_NAV = ['elara','system','shops','billing','leads','feedback'].map(id => NAV.find(n => n.id === id)!)
 
 interface Props { onLogout: () => void }
 
