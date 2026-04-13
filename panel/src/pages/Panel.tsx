@@ -8,8 +8,10 @@ import AIConfigTab from '../tabs/AIConfigTab'
 import ElaraTab    from '../tabs/ElaraTab'
 import LeadsTab    from '../tabs/LeadsTab'
 import FeedbackTab from '../tabs/FeedbackTab'
+import ForgePilotTab from '../tabs/ForgePilotTab'
+import ForgePulseTab from '../tabs/ForgePulseTab'
 
-type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'aiconfig' | 'elara' | 'leads' | 'feedback'
+type Tab = 'system' | 'shops' | 'users' | 'billing' | 'messages' | 'aiconfig' | 'elara' | 'leads' | 'feedback' | 'forgepilot' | 'forgepulse'
 
 const NAV: { id: Tab; label: string; glyph: string; mobileLabel: string }[] = [
   { id: 'elara',    label: 'Elara',    glyph: '⬟', mobileLabel: 'ELARA'   },
@@ -20,15 +22,17 @@ const NAV: { id: Tab; label: string; glyph: string; mobileLabel: string }[] = [
   { id: 'leads',    label: 'Leads',    glyph: '◇', mobileLabel: 'LEADS'   },
   { id: 'users',    label: 'Users',    glyph: '◉', mobileLabel: 'USERS'   },
   { id: 'feedback', label: 'Feedback', glyph: '◈', mobileLabel: 'FEEDBK'  },
+  { id: 'forgepilot', label: 'ForgePilot', glyph: '◈', mobileLabel: 'FP' },
+  { id: 'forgepulse', label: 'ForgePulse', glyph: '◎', mobileLabel: 'PULSE' },
   { id: 'aiconfig', label: 'Forge AI', glyph: '⬟', mobileLabel: 'AI'      },
 ]
 
 const DESKTOP_NAV = [...NAV].sort((a, b) => {
-  const order = ['system','shops','leads','users','billing','feedback','messages','aiconfig','elara']
+  const order = ['system','shops','leads','users','billing','forgepilot','forgepulse','feedback','messages','aiconfig','elara']
   return order.indexOf(a.id) - order.indexOf(b.id)
 })
 
-const MOBILE_NAV = ['elara','system','shops','billing','leads','feedback'].map(id => NAV.find(n => n.id === id)!)
+const MOBILE_NAV = ['elara','system','shops','billing','forgepilot','leads','feedback'].map(id => NAV.find(n => n.id === id)!)
 
 interface Props { onLogout: () => void }
 
@@ -148,6 +152,8 @@ export default function Panel({ onLogout }: Props) {
           {tab === 'messages' && <MessagesTab />}
           {tab === 'leads'    && <LeadsTab />}
           {tab === 'feedback' && <FeedbackTab />}
+          {tab === 'forgepilot' && <ForgePilotTab />}
+          {tab === 'forgepulse' && <ForgePulseTab />}
           {tab === 'aiconfig' && <AIConfigTab />}
           {tab === 'elara'    && <ElaraTab />}
         </div>

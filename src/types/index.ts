@@ -146,6 +146,7 @@ export interface MorningBriefing {
   email: ToolResult<EmailData>
   stripe?: ToolResult<StripeData>
   netlify?: ToolResult<NetlifyData>
+  forgePilot?: ForgePilotBriefing
   alerts: Alert[]
 }
 
@@ -181,4 +182,68 @@ export interface AgentContext {
   systemPrompt: string
   availableTools: AgentTool[]
   recentBriefing?: MorningBriefing
+}
+
+// ─── ForgePilot Supabase Tool ─────────────────────────────────────────────
+
+export interface ForgePilotUser {
+  id: string
+  email: string
+  subscriptionTier: 'free' | 'base' | 'pro'
+  shopRole: 'owner' | 'advisor' | 'tech'
+  obdEnabled: boolean
+  cfpLinked: boolean
+  hasShop: boolean
+  createdAt: string
+}
+
+export interface ForgePilotSessionSummary {
+  totalSessions: number
+  sessionsLast24h: number
+  sessionsLast7d: number
+  obdScansLast24h: number
+  sessionsWithDtcs: number
+  aiMessagesLast24h: number
+}
+
+export interface ForgePilotSupabaseData {
+  connectionStatus: HealthStatus
+  totalUsers: number
+  activeUsersLast24h: number
+  totalSessions: number
+  sessionSummary: ForgePilotSessionSummary
+  shopCount: number
+  activeShopCount: number
+  motorCacheEntries: number
+}
+
+// ─── ForgePilot Stripe Tool ───────────────────────────────────────────────
+
+export interface ForgePilotStripeData {
+  activeSubscriptions: number
+  mrr: number
+  newThisMonth: number
+  cancelledThisMonth: number
+  paymentFailures: StripePaymentFailure[]   // reuse existing type
+  hasPaymentFailures: boolean
+  planBreakdown: {
+    solo: number
+    shop: number
+  }
+}
+
+// ─── ForgePilot Uptime Tool ───────────────────────────────────────────────
+
+export interface ForgePilotUptimeData {
+  frontend: UptimeData    // reuse existing type
+  api: UptimeData
+}
+
+// ─── ForgePilot Morning Briefing block ────────────────────────────────────
+
+export interface ForgePilotBriefing {
+  supabase: ToolResult<ForgePilotSupabaseData>
+  stripe: ToolResult<ForgePilotStripeData>
+  uptime: ToolResult<ForgePilotUptimeData>
+  alerts: Alert[]
 }

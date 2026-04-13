@@ -12,7 +12,10 @@ import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
-import type { MorningBriefing, Alert } from './types/index.js'
+import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
+import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
+import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
+import type { MorningBriefing, Alert, ForgePilotBriefing } from './types/index.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
@@ -232,6 +235,35 @@ async function runSilentHealthCheck(): Promise<void> {
       console.error('[SCHEDULER] Error in new shop onboarding check:', err)
     }
 
+    // ForgePilot health
+    try {
+      const fpUptime = await runForgePilotUptimeCheck()
+      if (fpUptime.success) {
+        const fpDown = [fpUptime.data.frontend, fpUptime.data.api].filter(u => u.status === 'down')
+        if (fpDown.length > 0) {
+          await sendAlert({
+            severity: 'critical',
+            tool: 'fp_uptime',
+            message: `ForgePilot service DOWN: ${fpDown.map(u => u.url).join(', ')}`,
+          })
+        }
+      }
+
+      const fpStripe = await runForgePilotStripeCheck()
+      if (fpStripe.success && fpStripe.data.hasPaymentFailures) {
+        await sendAlert({
+          severity: 'warning',
+          tool: 'fp_stripe',
+          message: `ForgePilot: ${fpStripe.data.paymentFailures.length} payment failure(s) detected.`,
+          details: fpStripe.data.paymentFailures
+            .map(f => `${f.customerEmail} — $${f.amount}`)
+            .join('\n'),
+        })
+      }
+    } catch (err) {
+      console.error('[scheduler] FP health check error:', err)
+    }
+
   } catch (err) {
     console.error('[SCHEDULER] Error in silent health check:', err)
   }
@@ -384,6 +416,28 @@ async function runMorningBriefing(): Promise<void> {
       })
     }
 
+    // ForgePilot briefing section
+    let fpBriefing: ForgePilotBriefing | null = null
+    try {
+      const [fpSupabase, fpStripe, fpUptime] = await Promise.all([
+        runForgePilotSupabaseCheck(),
+        runForgePilotStripeCheck(),
+        runForgePilotUptimeCheck(),
+      ])
+
+      const fpAlerts: Alert[] = []
+      if (!fpUptime.success || fpUptime.data.frontend.status === 'down' || fpUptime.data.api.status === 'down') {
+        fpAlerts.push({ severity: 'critical', tool: 'fp_uptime', message: 'ForgePilot service DOWN' })
+      }
+      if (fpStripe.data?.hasPaymentFailures) {
+        fpAlerts.push({ severity: 'warning', tool: 'fp_stripe', message: `${fpStripe.data.paymentFailures.length} FP payment failure(s)` })
+      }
+
+      fpBriefing = { supabase: fpSupabase, stripe: fpStripe, uptime: fpUptime, alerts: fpAlerts }
+    } catch (err) {
+      console.error('[scheduler] FP morning briefing error:', err)
+    }
+
     // Build the full briefing object
     const briefing: MorningBriefing = {
       timestamp: new Date().toISOString(),
@@ -395,6 +449,7 @@ async function runMorningBriefing(): Promise<void> {
       email: emailResult,
       stripe: stripeResult,
       netlify: netlifyResult,
+      forgePilot: fpBriefing ?? undefined,
       alerts,
     }
 

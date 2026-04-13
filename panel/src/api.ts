@@ -85,6 +85,13 @@ export const api = {
       }),
   },
 
+  fp: {
+    stats:    () => request<any>('/api/fp/stats'),
+    users:    () => request<any[]>('/api/fp/users'),
+    shops:    () => request<any[]>('/api/fp/shops'),
+    sessions: () => request<any[]>('/api/fp/sessions'),
+  },
+
   elara: {
     memory: () => request<any[]>('/api/elara/memory'),
     knowledge: () => request<any[]>('/api/elara/knowledge'),

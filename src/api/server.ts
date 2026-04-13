@@ -10,6 +10,7 @@ import cfpRouter from './routes/cfp.js'
 import elaraRouter from './routes/elara.js'
 import voiceRouter from './routes/voice.js'
 import filesRouter from './routes/files.js'
+import fpRouter from './routes/fp.js'
 
 export function createApiServer(): express.Express {
   const app = express()
@@ -39,6 +40,7 @@ export function createApiServer(): express.Express {
   app.use('/api/elara', elaraRouter)
   app.use('/api/voice', voiceRouter)
   app.use('/api/files', filesRouter)
+  app.use('/api/fp', fpRouter)
 
   // ── 404 ─────────────────────────────────────────────────────────────────────
 

@@ -20,6 +20,9 @@ import { runNetlifyCheck, netlifyTool } from './netlify.js'
 import { querySupabaseTool } from './supabase-query.js'
 import { runTwilioCheck, twilioStatsTool, sendSMSTool } from './twilio.js'
 import { runResendCheck, resendStatsTool } from './resend.js'
+import { runForgePilotSupabaseCheck, forgePilotSupabaseTool } from './supabase-forgepilot.js'
+import { runForgePilotStripeCheck, forgePilotStripeTool }     from './stripe-forgepilot.js'
+import { runForgePilotUptimeCheck, forgePilotUptimeTool }     from './uptime-forgepilot.js'
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
 import { webSearchTool } from './search.js'
 import { listKnowledgeTool, updateKnowledgeTool } from './knowledge.js'
@@ -39,6 +42,9 @@ export const monitors = {
   stripe: runStripeCheck,
   resend: runResendCheck,
   netlify: runNetlifyCheck,
+  fp_supabase: runForgePilotSupabaseCheck,
+  fp_stripe:   runForgePilotStripeCheck,
+  fp_uptime:   runForgePilotUptimeCheck,
 }
 
 // ─── For Elara (AI Agent) ─────────────────────────────────────────────────
@@ -88,6 +94,10 @@ export const allAgentTools = [
   closeIssueTool,
   // Deploy monitoring
   netlifyTool,
+  // ForgePilot monitoring
+  forgePilotSupabaseTool,
+  forgePilotStripeTool,
+  forgePilotUptimeTool,
   // Web search
   webSearchTool,
   // Knowledge management
