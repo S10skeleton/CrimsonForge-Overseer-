@@ -199,7 +199,6 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
 
     const allActive = await stripe.subscriptions.list({
       status: 'active', limit: 100,
-      expand: ['data.items.data.price.product'],
     })
     const fpActive = allActive.data.filter(isFPSub)
 
@@ -222,7 +221,6 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
       status: 'canceled',
       created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
       limit: 100,
-      expand: ['data.items.data.price.product'],
     })
     const cancelledThisMonth = cancelled.data.filter(isFPSub).length
 
@@ -246,8 +244,7 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
       if (!subId) continue
       try {
         const sub = await stripe.subscriptions.retrieve(
-          subId,
-          { expand: ['items.data.price.product'] }
+          subId
         )
         if (!isFPSub(sub)) continue
       } catch { continue }

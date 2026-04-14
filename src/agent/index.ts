@@ -109,30 +109,13 @@ export async function generateAIBriefing(data: {
   resendData?: { sent: number; delivered: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null }
   netlifyData?: { status: string; latestDeployState: string | null; latestDeployAt: string | null; branch: string | null; errorMessage: string | null }
   feedbackData?: Array<{ type: string; message: string; status: string; submitter_name?: string; shop_name?: string; created_at: string }>
+  fpData?: import('../types/index.js').ForgePilotBriefing
 }): Promise<string | null> {
   const client = getClient()
   if (!client) return null
 
   const tz = process.env.TIMEZONE || 'America/Denver'
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: tz })
-
-  const shopStatuses = data.briefing.supabase?.data?.shopStatuses ?? []
-  const shopSummary = shopStatuses.length > 0
-    ? shopStatuses.map(s => {
-        const status = s.daysSinceActive >= 3 ? 'SILENT' : s.ticketsLast24h > 0 ? 'ACTIVE' : 'QUIET'
-        return `${s.shopName}: ${status} (${s.ticketsLast24h} tickets today, ${s.daysSinceActive}d since last activity${s.isNewShop ? ', NEW SHOP' : ''})`
-      }).join(' | ')
-    : 'No shops yet'
-
-  const infraSummary = {
-    overallStatus: data.briefing.overallStatus,
-    activeShops: data.briefing.supabase?.data?.activeShopsLast24h ?? 'N/A',
-    ticketsCreated: data.briefing.supabase?.data?.ticketsCreatedLast24h ?? 'N/A',
-    aiSessions: data.briefing.supabase?.data?.aiSessionsLast24h ?? 'N/A',
-    newErrors: data.briefing.sentry?.data?.newIssueCount ?? 0,
-    alerts: data.briefing.alerts,
-    shopBreakdown: shopSummary,
-  }
 
   const calSummary = data.calendarData?.todayEvents?.length
     ? data.calendarData.todayEvents.map(e => {
@@ -148,12 +131,6 @@ export async function generateAIBriefing(data: {
   const twilioSummary = data.twilioData
     ? `${data.twilioData.sent} sent, ${data.twilioData.delivered} delivered, ${data.twilioData.failed} failed (${(data.twilioData.failureRate * 100).toFixed(1)}% failure rate)${data.twilioData.thresholdBreached ? ' ⚠️ THRESHOLD BREACHED' : ''}`
     : 'Twilio not configured.'
-
-  const stripeSummary = data.stripeData
-    ? `${data.stripeData.activeSubscriptions} active subs · $${data.stripeData.mrr.toFixed(0)} MRR · ${data.stripeData.newThisMonth} new this month` +
-      (data.stripeData.hasWebhookIssues ? ' ⚠️ WEBHOOK ISSUE' : '') +
-      (data.stripeData.hasPaymentFailures ? ` ⚠️ ${data.stripeData.paymentFailures.length} PAYMENT FAILURES` : '')
-    : 'Stripe not configured (pre-revenue).'
 
   const resendSummary = data.resendData
     ? `${data.resendData.sent} sent, ${data.resendData.delivered} delivered, ${data.resendData.bounced} bounced (${(data.resendData.bounceRate * 100).toFixed(1)}%)` +
@@ -189,41 +166,115 @@ export async function generateAIBriefing(data: {
     return `${newItems.length} new item(s) awaiting review:\n${lines}${newItems.length > 5 ? `\n…and ${newItems.length - 5} more` : ''}`
   })()
 
+  // ── ForgePilot summary ───────────────────────────────────────────────────
+  const fpSummary = (() => {
+    if (!data.fpData) return 'ForgePilot data unavailable.'
+
+    const sb = data.fpData.supabase?.data
+    const st = data.fpData.stripe?.data
+    const up = data.fpData.uptime?.data
+
+    const uptimeStr = up
+      ? [
+          `frontend: ${up.frontend.status}${up.frontend.responseMs ? ` (${up.frontend.responseMs}ms)` : ''}`,
+          `api: ${up.api.status}${up.api.responseMs ? ` (${up.api.responseMs}ms)` : ''}`,
+        ].join(' \u00B7 ')
+      : 'uptime unknown'
+
+    const sessionStr = sb
+      ? [
+          `${sb.sessionSummary.sessionsLast24h} sessions (24h)`,
+          `${sb.sessionSummary.sessionsLast7d} sessions (7d)`,
+          `${sb.sessionSummary.obdScansLast24h} OBD scans`,
+          `${sb.sessionSummary.aiMessagesLast24h} AI messages`,
+          `${sb.totalUsers} total users`,
+        ].join(' \u00B7 ')
+      : 'no session data'
+
+    const stripeStr = st
+      ? st.activeSubscriptions > 0
+        ? `${st.activeSubscriptions} active subs \u00B7 $${st.mrr.toFixed(0)}/mo MRR \u00B7 solo: ${st.planBreakdown.solo} \u00B7 shop: ${st.planBreakdown.shop}` +
+          (st.newThisMonth > 0 ? ` \u00B7 \uD83C\uDF89 ${st.newThisMonth} new this month` : '') +
+          (st.hasPaymentFailures ? ` \u00B7 \u26A0\uFE0F ${st.paymentFailures.length} PAYMENT FAILURES` : '')
+        : 'Pre-revenue \u2014 no active subscriptions yet'
+      : 'Stripe data unavailable'
+
+    const fpAlertStr = data.fpData.alerts?.length > 0
+      ? data.fpData.alerts.map(a => `\uD83D\uDD34 ${a.message}`).join(' | ')
+      : '\u2705 No alerts'
+
+    return `Uptime: ${uptimeStr}\nUsage: ${sessionStr}\nRevenue: ${stripeStr}\nAlerts: ${fpAlertStr}`
+  })()
+
+  // ── CFP summary (condensed — flag issues only) ──────────────────────────
+  const cfpIssues: string[] = []
+
+  if (data.briefing.overallStatus === 'down') cfpIssues.push('\uD83D\uDD34 SERVICES DOWN')
+  if ((data.briefing.sentry?.data?.newIssueCount ?? 0) > 0)
+    cfpIssues.push(`${data.briefing.sentry!.data!.newIssueCount} new Sentry errors`)
+  if (data.stripeData?.hasPaymentFailures)
+    cfpIssues.push(`${data.stripeData.paymentFailures.length} payment failure(s): ${data.stripeData.paymentFailures.map(f => f.customerEmail).join(', ')}`)
+  if (data.stripeData?.hasWebhookIssues) cfpIssues.push('Stripe webhook issue')
+  if (data.resendData?.thresholdBreached)
+    cfpIssues.push(`Email bounce rate ${(data.resendData.bounceRate * 100).toFixed(1)}% \u2014 above threshold`)
+  if (data.twilioData?.thresholdBreached)
+    cfpIssues.push(`SMS failure rate ${(data.twilioData.failureRate * 100).toFixed(1)}% \u2014 above threshold`)
+
+  const silentShopCount = (data.briefing.supabase?.data?.silentShops ?? []).length
+  if (silentShopCount > 0) cfpIssues.push(`${silentShopCount} shop(s) silent 3+ days`)
+
+  const cfpStatus = cfpIssues.length > 0
+    ? `Issues requiring attention:\n${cfpIssues.map(i => `\u2022 ${i}`).join('\n')}`
+    : `Nominal \u2014 ${data.briefing.supabase?.data?.activeShopsLast24h ?? 0} active shops, ` +
+      `${data.briefing.supabase?.data?.ticketsCreatedLast24h ?? 0} tickets (24h), ` +
+      `${data.stripeData ? `$${data.stripeData.mrr.toFixed(0)} MRR` : 'billing OK'}`
+
   // Load the system prompt to get roadmap context
   const systemPrompt = await buildSystemPrompt(data.briefing)
 
   const prompt = `Today is ${today}.
 
-INFRASTRUCTURE: ${JSON.stringify(infraSummary, null, 2)}
+\u2500\u2500\u2500 FORGEPILOT (primary focus) \u2500\u2500\u2500
+${fpSummary}
 
-CALENDAR:
+\u2500\u2500\u2500 CRIMSONFORGE PRO (flag issues only) \u2500\u2500\u2500
+${cfpStatus}
+
+\u2500\u2500\u2500 CALENDAR \u2500\u2500\u2500
 ${calSummary}
 
-UNREAD EMAILS (${data.gmailData?.unreadCount ?? 0} total):
+\u2500\u2500\u2500 UNREAD EMAILS (${data.gmailData?.unreadCount ?? 0} total) \u2500\u2500\u2500
 ${emailSummary}
 
-SMS (TWILIO): ${twilioSummary}
+\u2500\u2500\u2500 COMMS HEALTH \u2500\u2500\u2500
+SMS (Twilio): ${twilioSummary}
+Email delivery (Resend): ${resendSummary}
+Frontend deploy (Netlify): ${netlifyStatus}
 
-REVENUE (STRIPE): ${stripeSummary}
-
-EMAIL DELIVERY (RESEND): ${resendSummary}
-
-NETLIFY FRONTEND DEPLOY: ${netlifyStatus}
-
-BETA FEEDBACK:
+\u2500\u2500\u2500 CFP FEEDBACK \u2500\u2500\u2500
 ${feedbackSummary}
 
-Write the morning briefing for Slack in your voice as Elara. Include:
-1. One-line status (\uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34)
-2. Infrastructure highlights — only flag real issues, skip "all systems nominal" boilerplate
-3. Schedule — clean, time-ordered
-4. Email highlights — flag anything needing a response today
-5. *TODAY'S FOCUS* — 3 specific, concrete goals for today based on the current roadmap phase.
-   Not categories. Real tasks. "Finish VIN scanner component and test on Apocalypse Auto VINs" not "work on mobile."
-6. Health check — one line. Did you take morning supplements? Workout planned?
-7. Feedback — if there are new unreviewed items, call out any bugs or urgent ideas in one line.
+Write the morning briefing for Slack in your voice as Elara. Structure:
 
-Your voice. Direct. Warm. No preamble. No filler.`
+1. **One-line status** \u2014 \uD83D\uDFE2/\uD83D\uDFE1/\uD83D\uDD34 based on the most critical thing right now
+
+2. **ForgePilot** \u2014 Lead here. This is the priority product. Cover:
+   - Uptime and API health
+   - Session activity (any real usage? OBD scans? AI messages?)
+   - Revenue status (pre-launch is fine, just say so clearly)
+   - Any alerts. If everything is green, say so with energy \u2014 momentum matters.
+
+3. **CrimsonForge Pro** \u2014 Keep this tight. If there are issues in the CFP section above, surface them clearly. If it says "Nominal", write ONE line max: "CFP nominal \u2014 X shops active." Then move on.
+
+4. **Schedule** \u2014 Clean, time-ordered. Skip if empty.
+
+5. **Email** \u2014 Flag anything needing a response today. Skip boilerplate.
+
+6. **TODAY'S FOCUS** \u2014 3 specific, concrete tasks. Bias toward ForgePilot unless CFP has active fires. Not categories \u2014 real work. "Ship VIN scanner to TestFlight" not "work on mobile."
+
+7. **Health check** \u2014 One line. Supplements? Workout?
+
+Your voice. Direct. Warm. ForgePilot-first. No filler.`
 
   try {
     const response = await client.messages.create({

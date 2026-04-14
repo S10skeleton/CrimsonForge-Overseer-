@@ -514,6 +514,7 @@ async function runMorningBriefing(): Promise<void> {
       resendData: resendForBriefing,
       netlifyData: netlifyForBriefing,
       feedbackData: feedbackForBriefing,
+      fpData: fpBriefing ?? undefined,
     })
 
     if (aiBriefingText) {

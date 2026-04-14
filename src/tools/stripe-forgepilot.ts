@@ -47,7 +47,7 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
 
   try {
     // ── Active subscriptions — fetch all, filter to FP ───────────────────
-    const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100, expand: ['data.items.data.price.product'] })
+    const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100 })
     const fpActive = allActive.data.filter(isFPSubscription)
 
     const activeSubscriptions = fpActive.length
@@ -83,7 +83,6 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
       status: 'canceled',
       created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
       limit: 100,
-      expand: ['data.items.data.price.product'],
     })
     const cancelledThisMonth = cancelled.data.filter(isFPSubscription).length
 
@@ -100,9 +99,7 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
       if (!subId) continue
       // Only include FP subscriptions
       try {
-        const sub = await stripe.subscriptions.retrieve(subId, {
-          expand: ['items.data.price.product'],
-        })
+        const sub = await stripe.subscriptions.retrieve(subId)
         if (!isFPSubscription(sub)) continue
       } catch {
         continue
