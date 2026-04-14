@@ -4,6 +4,7 @@
  */
 
 import { Router } from 'express'
+import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
 import { requireAuth } from '../middleware/auth.js'
 
@@ -164,6 +165,114 @@ router.get('/sessions', requireAuth, async (_req, res) => {
     res.json(data ?? [])
   } catch (err) {
     console.error('[fp/sessions]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── Billing (Stripe — FP products only) ───────────────────────────────────
+
+const FP_PRODUCT_IDS = new Set([
+  'prod_UKSIWeqYK7y4TK', // ForgePilot Solo
+  'prod_UKSIUMHG5eSsTs', // ForgePilot Shop
+  'prod_UKSI8NgY3miSMh', // ForgePilot Additional Seat
+])
+
+function isFPSub(sub: Stripe.Subscription): boolean {
+  return sub.items.data.some(
+    (item) => item.price.product && FP_PRODUCT_IDS.has(item.price.product as string)
+  )
+}
+
+router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    res.json({
+      activeSubscriptions: 0, mrr: 0, newThisMonth: 0, cancelledThisMonth: 0,
+      paymentFailures: [], hasPaymentFailures: false,
+      planBreakdown: { solo: 0, shop: 0 },
+    })
+    return
+  }
+
+  try {
+    const stripe = new Stripe(stripeKey)
+
+    const allActive = await stripe.subscriptions.list({
+      status: 'active', limit: 100,
+      expand: ['data.items.data.price.product'],
+    })
+    const fpActive = allActive.data.filter(isFPSub)
+
+    const mrr = fpActive.reduce((sum, sub) => {
+      const item = sub.items.data[0]
+      if (!item) return sum
+      const amount = item.price.unit_amount || 0
+      const interval = item.price.recurring?.interval
+      return sum + (interval === 'year' ? amount / 12 : amount) / 100
+    }, 0)
+
+    const startOfMonth = new Date()
+    startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
+
+    const newThisMonth = fpActive.filter(
+      (s) => new Date(s.created * 1000) >= startOfMonth
+    ).length
+
+    const cancelled = await stripe.subscriptions.list({
+      status: 'canceled',
+      created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
+      limit: 100,
+      expand: ['data.items.data.price.product'],
+    })
+    const cancelledThisMonth = cancelled.data.filter(isFPSub).length
+
+    const planBreakdown = { solo: 0, shop: 0 }
+    for (const sub of fpActive) {
+      for (const item of sub.items.data) {
+        const pid = item.price.product as string
+        if (pid === 'prod_UKSIWeqYK7y4TK') planBreakdown.solo++
+        if (pid === 'prod_UKSIUMHG5eSsTs') planBreakdown.shop++
+      }
+    }
+
+    // Payment failures — open invoices on FP subscriptions
+    const openInvoices = await stripe.invoices.list({
+      status: 'open', limit: 20, expand: ['data.customer'],
+    })
+
+    const paymentFailures = []
+    for (const inv of openInvoices.data) {
+      const subId = (inv as any).subscription as string | null
+      if (!subId) continue
+      try {
+        const sub = await stripe.subscriptions.retrieve(
+          subId,
+          { expand: ['items.data.price.product'] }
+        )
+        if (!isFPSub(sub)) continue
+      } catch { continue }
+      const customer = inv.customer as Stripe.Customer
+      paymentFailures.push({
+        customerId:     typeof inv.customer === 'string' ? inv.customer : customer?.id ?? '',
+        customerEmail:  customer?.email ?? 'unknown',
+        amount:         inv.amount_due / 100,
+        currency:       inv.currency,
+        failureMessage: inv.last_finalization_error?.message ?? 'Payment failed',
+        failedAt:       new Date(inv.created * 1000).toISOString(),
+      })
+    }
+
+    res.json({
+      activeSubscriptions: fpActive.length,
+      mrr:                 Math.round(mrr * 100) / 100,
+      newThisMonth,
+      cancelledThisMonth,
+      paymentFailures,
+      hasPaymentFailures:  paymentFailures.length > 0,
+      planBreakdown,
+    })
+  } catch (err) {
+    console.error('[fp/billing]', err)
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
 })

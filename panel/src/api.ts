@@ -90,6 +90,7 @@ export const api = {
     users:    () => request<any[]>('/api/fp/users'),
     shops:    () => request<any[]>('/api/fp/shops'),
     sessions: () => request<any[]>('/api/fp/sessions'),
+    billing:  () => request<any>('/api/fp/billing'),
   },
 
   elara: {
