@@ -274,4 +274,85 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
   }
 })
 
+// ── FP System Messages ────────────────────────────────────────────────────────
+
+router.get('/messages', requireAuth, async (_req, res) => {
+  try {
+    const sb = getFPSupabase()
+    const { data, error } = await sb
+      .from('fp_system_messages')
+      .select('id, title, body, type, active, expires_at, created_at')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    console.error('[fp/messages] GET error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/messages', requireAuth, async (req, res): Promise<void> => {
+  const { title, body, type, active, expires_at } = req.body
+  if (!title?.trim() || !body?.trim()) {
+    res.status(400).json({ error: 'title and body are required' })
+    return
+  }
+  try {
+    const sb = getFPSupabase()
+    const { data, error } = await sb
+      .from('fp_system_messages')
+      .insert({
+        title: title.trim(),
+        body:  body.trim(),
+        type:  type ?? 'info',
+        active: active ?? false,
+        expires_at: expires_at || null,
+      })
+      .select()
+      .single()
+    if (error) throw error
+    res.json({ message: data })
+  } catch (err) {
+    console.error('[fp/messages] POST error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.patch('/messages/:id', requireAuth, async (req, res) => {
+  const { title, body, type, active, expires_at } = req.body
+  try {
+    const sb = getFPSupabase()
+    const updates: Record<string, unknown> = {}
+    if (title      !== undefined) updates.title      = title
+    if (body       !== undefined) updates.body       = body
+    if (type       !== undefined) updates.type       = type
+    if (active     !== undefined) updates.active     = active
+    if (expires_at !== undefined) updates.expires_at = expires_at
+    const { error } = await sb
+      .from('fp_system_messages')
+      .update(updates)
+      .eq('id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[fp/messages] PATCH error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.delete('/messages/:id', requireAuth, async (req, res) => {
+  try {
+    const sb = getFPSupabase()
+    const { error } = await sb
+      .from('fp_system_messages')
+      .delete()
+      .eq('id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[fp/messages] DELETE error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
 export default router

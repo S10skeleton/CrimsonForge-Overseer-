@@ -92,6 +92,13 @@ export const api = {
     shops:    () => request<any[]>('/api/fp/shops'),
     sessions: () => request<any[]>('/api/fp/sessions'),
     billing:  () => request<any>('/api/fp/billing'),
+    messages:       () => request<any[]>('/api/fp/messages'),
+    createMessage:  (payload: { title: string; body: string; type: string; active: boolean; expires_at?: string | null }) =>
+      request<any>('/api/fp/messages', { method: 'POST', body: JSON.stringify(payload) }),
+    updateMessage:  (id: string, payload: Record<string, unknown>) =>
+      request<any>(`/api/fp/messages/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
+    deleteMessage:  (id: string) =>
+      request<any>(`/api/fp/messages/${id}`, { method: 'DELETE' }),
   },
 
   elara: {
