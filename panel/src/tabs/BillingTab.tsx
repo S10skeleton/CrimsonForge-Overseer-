@@ -25,7 +25,7 @@ export default function BillingTab() {
       </h1>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div className="kpi-grid">
         {[
           { label: 'MRR',         value: loading ? '\u2014' : `$${mrr.toLocaleString()}`,         color: 'var(--green)' },
           { label: 'ARR',         value: loading ? '\u2014' : `$${(mrr * 12).toLocaleString()}`,  color: 'var(--green)' },

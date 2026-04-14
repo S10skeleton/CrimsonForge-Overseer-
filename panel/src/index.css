@@ -136,6 +136,14 @@ body {
 .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); }
 .kpi-sub   { font-size: 12px; color: var(--dim); margin-top: 2px; }
 
+/* Responsive KPI grid — auto-flows to 2 cols on mobile */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
 /* ─── Status dots ─────────────────────────────────────────────────────────── */
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
 .dot-green  { background: var(--green);  box-shadow: 0 0 8px var(--green); }
@@ -320,6 +328,14 @@ select option { background: var(--bg-dark); }
   .kpi-value { font-size: 1.5rem; }
 
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* List rows — hide lower-priority columns on narrow screens */
+  .mobile-hide { display: none !important; }
+
+  /* Sub-tab button rows — wrap instead of overflow */
+  .subtab-row { flex-wrap: wrap !important; }
 
   .chat-area { height: calc(100vh - 200px) !important; }
 }

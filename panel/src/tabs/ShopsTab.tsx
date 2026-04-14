@@ -80,7 +80,7 @@ export default function ShopsTab() {
       </h1>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div className="kpi-grid">
         {[
           { label: 'Total Shops',      value: total,        color: 'var(--text)' },
           { label: 'Active / Partner', value: activeCount,  color: 'var(--green)' },

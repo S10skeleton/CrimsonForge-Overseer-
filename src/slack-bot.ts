@@ -133,6 +133,12 @@ async function refreshConversationHistory(): Promise<void> {
 
 // ─── Bot Setup ────────────────────────────────────────────────────────────
 
+let _slackApp: InstanceType<typeof App> | null = null
+
+export function getSlackApp() {
+  return _slackApp
+}
+
 export async function startSlackBot(): Promise<void> {
   const botToken = process.env.SLACK_BOT_TOKEN
   const appToken = process.env.SLACK_APP_TOKEN
@@ -151,6 +157,7 @@ export async function startSlackBot(): Promise<void> {
     socketMode: true,
     logLevel: LogLevel.WARN,
   })
+  _slackApp = app
 
   // ─── Handle Direct Messages ────────────────────────────────────────────
 

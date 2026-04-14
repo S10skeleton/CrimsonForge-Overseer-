@@ -57,7 +57,7 @@ export default function ForgePilotTab() {
       </div>
 
       {/* Sub-tab nav */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+      <div className="subtab-row" style={{ display: 'flex', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
         {SUB_TABS.map(t => (
           <button
             key={t.id}
@@ -83,7 +83,7 @@ export default function ForgePilotTab() {
       {subTab === 'overview' && (
         <div>
           {/* KPI grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+          <div className="kpi-grid">
             {[
               { label: 'Total Users',      value: loading ? '...' : stats?.totalUsers ?? 0,       color: 'var(--cyan)'  },
               { label: 'Total Sessions',   value: loading ? '...' : stats?.totalSessions ?? 0,    color: 'var(--cyan)'  },
@@ -174,7 +174,7 @@ export default function ForgePilotTab() {
                 <div style={{ fontSize: 11, color: 'var(--dim)' }}>
                   {u.last_session_at ? formatDistanceToNow(new Date(u.last_session_at), { addSuffix: true }) : 'no sessions'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--dim)' }}>
+                <div className="mobile-hide" style={{ fontSize: 11, color: 'var(--dim)' }}>
                   joined {u.created_at ? formatDistanceToNow(new Date(u.created_at), { addSuffix: true }) : '\u2014'}
                 </div>
               </div>
@@ -259,7 +259,7 @@ export default function ForgePilotTab() {
                 <div style={{ color: s.message_count > 0 ? 'var(--cyan)' : 'var(--dim)' }}>
                   {s.message_count > 0 ? `${s.message_count} msgs` : '\u2014'}
                 </div>
-                <div style={{ color: s.scan_timestamp ? 'var(--green)' : 'var(--dim)' }}>
+                <div className="mobile-hide" style={{ color: s.scan_timestamp ? 'var(--green)' : 'var(--dim)' }}>
                   {s.scan_timestamp ? 'OBD' : '\u2014'}
                 </div>
                 <div style={{ color: 'var(--dim)' }}>

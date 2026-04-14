@@ -68,14 +68,14 @@ const PRODUCT_GROUPS: ProductGroup[] = [
   },
 ]
 
-// Mobile nav - flat, one item per product group + global items
-const MOBILE_NAV: { id: Tab; glyph: string; label: string }[] = [
-  { id: 'elara',      glyph: '\u2B1F', label: 'ELARA'  },
-  { id: 'system',     glyph: '\u25C8', label: 'SYSTEM' },
-  { id: 'shops',      glyph: '\u2B21', label: 'CFP'    },
-  { id: 'forgepilot', glyph: '\u25C8', label: 'PILOT'  },
-  { id: 'billing',    glyph: '\u2B28', label: 'BILLING'},
-  { id: 'leads',      glyph: '\u25C7', label: 'LEADS'  },
+// Mobile nav — 5 priority items + sign out
+// FP billing is the revenue focus during launch; CFP billing accessible on desktop
+const MOBILE_NAV: { id: Tab; glyph: string; label: string; dot?: string }[] = [
+  { id: 'elara',      glyph: '\u2B1F', label: 'ELARA'   },
+  { id: 'system',     glyph: '\u25C8', label: 'SYSTEM'  },
+  { id: 'forgepilot', glyph: '\u25C8', label: 'PILOT'   , dot: '#4ACCFE' },
+  { id: 'fp-billing', glyph: '\u2B28', label: 'FP $$$'  , dot: '#4ACCFE' },
+  { id: 'shops',      glyph: '\u2B21', label: 'CFP'     , dot: '#EA1823' },
 ]
 
 interface Props { onLogout: () => void }
@@ -318,14 +318,27 @@ export default function Panel({ onLogout }: Props) {
               key={item.id}
               className={`mobile-tab-btn ${active ? 'active' : ''}`}
               onClick={() => navigateTo(item.id)}
+              style={active && item.dot ? { color: item.dot } : undefined}
             >
-              <span>{item.glyph}</span>
-              <span>{item.label}</span>
+              {/* Elara live dot */}
               {item.id === 'elara' && (
                 <div style={{
-                  position: 'absolute', top: 6, right: '50%', marginRight: -20,
+                  position: 'absolute', top: 6, right: '50%', marginRight: -18,
                   width: 5, height: 5, borderRadius: '50%',
                   background: 'var(--green)', boxShadow: '0 0 6px var(--green)',
+                }} />
+              )}
+              <span style={active && item.dot ? { color: item.dot } : undefined}>
+                {item.glyph}
+              </span>
+              <span>{item.label}</span>
+              {/* Product accent dot */}
+              {item.dot && (
+                <div style={{
+                  position: 'absolute', bottom: 6, left: '50%', marginLeft: -2,
+                  width: 4, height: 4, borderRadius: '50%',
+                  background: item.dot,
+                  opacity: active ? 1 : 0.3,
                 }} />
               )}
             </button>

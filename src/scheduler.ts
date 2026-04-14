@@ -7,7 +7,7 @@ import cron from 'node-cron'
 import { createClient } from '@supabase/supabase-js'
 import { monitors } from './tools/index.js'
 import { checkForNewSubscribers } from './tools/stripe.js'
-import { sendBriefing, sendAlert, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
+import { sendBriefing, sendAlert, sendAlertToChannel, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
@@ -237,11 +237,13 @@ async function runSilentHealthCheck(): Promise<void> {
 
     // ForgePilot health
     try {
+      const fpChannelId = process.env.FP_SLACK_CHANNEL_ID
+
       const fpUptime = await runForgePilotUptimeCheck()
       if (fpUptime.success) {
         const fpDown = [fpUptime.data.frontend, fpUptime.data.api].filter(u => u.status === 'down')
         if (fpDown.length > 0) {
-          await sendAlert({
+          await sendAlertToChannel(fpChannelId, {
             severity: 'critical',
             tool: 'fp_uptime',
             message: `ForgePilot service DOWN: ${fpDown.map(u => u.url).join(', ')}`,
@@ -251,7 +253,7 @@ async function runSilentHealthCheck(): Promise<void> {
 
       const fpStripe = await runForgePilotStripeCheck()
       if (fpStripe.success && fpStripe.data.hasPaymentFailures) {
-        await sendAlert({
+        await sendAlertToChannel(fpChannelId, {
           severity: 'warning',
           tool: 'fp_stripe',
           message: `ForgePilot: ${fpStripe.data.paymentFailures.length} payment failure(s) detected.`,

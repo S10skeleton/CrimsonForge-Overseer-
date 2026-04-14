@@ -35,7 +35,7 @@ export default function ForgePilotBillingTab() {
       )}
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div className="kpi-grid">
         {[
           { label: 'MRR',            value: loading ? '...' : `$${mrr.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,  color: 'var(--green)' },
           { label: 'ARR',            value: loading ? '...' : `$${arr.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,  color: 'var(--green)' },

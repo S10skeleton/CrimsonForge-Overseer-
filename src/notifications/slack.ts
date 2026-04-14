@@ -4,6 +4,7 @@
  */
 
 import type { MorningBriefing, Alert } from '../types/index.js'
+import { getSlackApp } from '../slack-bot.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
@@ -274,6 +275,41 @@ export async function sendAlert(alert: Alert): Promise<void> {
     })
   } catch (err) {
     console.error('Error sending alert to Slack:', err)
+  }
+}
+
+/**
+ * Sends an alert to a specific Slack channel by ID using the bot token.
+ * Used for product-specific channels (e.g. #forgepilot-ops).
+ * Falls back to the default webhook alert if channel ID is missing.
+ */
+export async function sendAlertToChannel(channelId: string | undefined, alert: Alert): Promise<void> {
+  if (!channelId) {
+    // No channel configured — fall back to default webhook channel
+    return sendAlert(alert)
+  }
+
+  try {
+    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
+    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()}\n`
+    message += `${alert.message}\n`
+    if (alert.details) message += `\n${alert.details}\n`
+    if (alert.actionUrl) message += `\nView: ${alert.actionUrl}\n`
+
+    const slackApp = getSlackApp()
+    if (slackApp) {
+      await slackApp.client.chat.postMessage({
+        channel: channelId,
+        text: message,
+      })
+    } else {
+      // Bot not running — fall back to webhook
+      await sendAlert(alert)
+    }
+  } catch (err) {
+    console.error('[slack] Error sending alert to channel:', err)
+    // Best-effort fallback
+    try { await sendAlert(alert) } catch {}
   }
 }
 
