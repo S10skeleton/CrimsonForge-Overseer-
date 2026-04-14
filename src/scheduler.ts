@@ -266,6 +266,33 @@ async function runSilentHealthCheck(): Promise<void> {
       console.error('[scheduler] FP health check error:', err)
     }
 
+    // ForgePulse waitlist — alert on new signups
+    try {
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const { createClient: createCFP } = await import('@supabase/supabase-js')
+        const cfpSb = createCFP(
+          process.env.SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY
+        )
+        const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+        const { data: newSignups } = await cfpSb
+          .from('forgepulse_waitlist')
+          .select('email, source')
+          .gte('created_at', since)
+
+        for (const signup of newSignups ?? []) {
+          await sendAlert({
+            severity: 'info',
+            tool: 'forgepulse',
+            message: `\uD83D\uDE80 ForgePulse waitlist signup: ${signup.email}`,
+            details: signup.source ? `Source: ${signup.source}` : undefined,
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[scheduler] ForgePulse waitlist check error:', err)
+    }
+
   } catch (err) {
     console.error('[SCHEDULER] Error in silent health check:', err)
   }
