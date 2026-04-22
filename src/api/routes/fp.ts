@@ -18,7 +18,7 @@ function getFPSupabase() {
 }
 
 function getAppUrl(): string {
-  return process.env.FORGEPILOT_APP_URL || 'https://app.forgepilot.pro'
+  return process.env.FP_FRONTEND_URL || 'https://app.forgepilot.pro'
 }
 
 // ── Stats summary ───────────────────────────────────────────────────────────
