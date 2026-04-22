@@ -17,6 +17,10 @@ function getFPSupabase() {
   )
 }
 
+function getAppUrl(): string {
+  return process.env.FORGEPILOT_APP_URL || 'https://app.forgepilot.pro'
+}
+
 // ── Stats summary ───────────────────────────────────────────────────────────
 
 router.get('/stats', requireAuth, async (_req, res) => {
@@ -351,6 +355,269 @@ router.delete('/messages/:id', requireAuth, async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     console.error('[fp/messages] DELETE error:', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── Invites (founder-level user onboarding) ─────────────────────────────────
+// Distinct from fp_shop_invites (the 6-digit code flow used by shop owners
+// to add their own techs). These are platform-level onboarding invites
+// initiated from the Overseer panel.
+
+type InviteRole = 'owner' | 'tech' | 'advisor'
+type InviteRow = {
+  id: string
+  email: string
+  full_name: string | null
+  role: InviteRole
+  status: 'pending' | 'activated' | 'revoked'
+  invited_by: string | null
+  invited_at: string
+  activated_at: string | null
+  last_active_at: string | null
+  auth_user_id: string | null
+  notes: string | null
+}
+
+router.post('/invite', requireAuth, async (req, res): Promise<void> => {
+  const { email, full_name, role, notes } = req.body as {
+    email?: string
+    full_name?: string
+    role?: InviteRole
+    notes?: string
+  }
+
+  const cleanEmail = email?.trim().toLowerCase()
+  const cleanName  = full_name?.trim() || null
+  const cleanRole: InviteRole = role === 'owner' || role === 'tech' || role === 'advisor' ? role : 'owner'
+  const cleanNotes = notes?.trim() || null
+
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    res.status(400).json({ error: 'Valid email is required' })
+    return
+  }
+
+  try {
+    const sb = getFPSupabase()
+
+    // Block obvious duplicates (pending or already activated)
+    const { data: existingInvite } = await sb
+      .from('fp_invites')
+      .select('id, status')
+      .eq('email', cleanEmail)
+      .maybeSingle()
+
+    if (existingInvite && existingInvite.status === 'pending') {
+      res.status(409).json({
+        error:  'Already invited',
+        detail: 'This email has a pending invite. Use resend instead.',
+        inviteId: existingInvite.id,
+      })
+      return
+    }
+    if (existingInvite && existingInvite.status === 'activated') {
+      res.status(409).json({
+        error:  'Already activated',
+        detail: 'This user has already activated their account.',
+      })
+      return
+    }
+
+    // Check if auth user already exists — handles the "confirmed but stuck" case
+    // (e.g. user clicked a prior broken invite link and is now email-confirmed
+    // but has no shop yet). inviteUserByEmail errors on confirmed users, so we
+    // fall back to generateLink for those.
+    const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
+    const existingAuth = listed?.users?.find(u => (u.email ?? '').toLowerCase() === cleanEmail)
+
+    let authUserId: string | null = null
+
+    if (existingAuth && existingAuth.email_confirmed_at) {
+      // Confirmed user — send a branded magic link
+      const { error: linkErr } = await sb.auth.admin.generateLink({
+        type:    'magiclink',
+        email:   cleanEmail,
+        options: { redirectTo: getAppUrl() },
+      })
+      if (linkErr) {
+        console.error('[fp/invite] generateLink error:', linkErr)
+        res.status(500).json({ error: linkErr.message })
+        return
+      }
+      authUserId = existingAuth.id
+    } else {
+      // New user OR unconfirmed existing user — standard invite flow
+      const { data, error } = await sb.auth.admin.inviteUserByEmail(cleanEmail, {
+        redirectTo: getAppUrl(),
+        data: {
+          full_name:    cleanName,
+          invited_role: cleanRole,
+        },
+      })
+      if (error) {
+        console.error('[fp/invite] inviteUserByEmail error:', error)
+        res.status(500).json({ error: error.message })
+        return
+      }
+      authUserId = data.user?.id ?? null
+    }
+
+    // Upsert tracking row (overwrite any prior revoked row for same email)
+    const { data: inviteRow, error: insertErr } = await sb
+      .from('fp_invites')
+      .upsert({
+        email:        cleanEmail,
+        full_name:    cleanName,
+        role:         cleanRole,
+        status:       'pending',
+        invited_by:   (req as any).user?.email ?? 'overseer',
+        invited_at:   new Date().toISOString(),
+        auth_user_id: authUserId,
+        notes:        cleanNotes,
+      }, { onConflict: 'email' })
+      .select()
+      .single()
+
+    if (insertErr) {
+      console.error('[fp/invite] fp_invites insert error:', insertErr)
+      // Non-fatal — the email did send, just log the DB failure
+    }
+
+    res.json({ success: true, invite: inviteRow, auth_user_id: authUserId })
+  } catch (err) {
+    console.error('[fp/invite]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.get('/invites', requireAuth, async (_req, res) => {
+  try {
+    const sb = getFPSupabase()
+    const { data, error } = await sb
+      .from('fp_invites')
+      .select('*')
+      .order('invited_at', { ascending: false })
+
+    if (error) throw error
+
+    // Enrich with last_session_at for activated users
+    const activatedIds = (data ?? [])
+      .filter((i: InviteRow) => i.auth_user_id && i.status === 'activated')
+      .map((i: InviteRow) => i.auth_user_id as string)
+
+    const lastSessionMap: Record<string, string> = {}
+    if (activatedIds.length > 0) {
+      const { data: sessions } = await sb
+        .from('fp_sessions')
+        .select('user_id, updated_at')
+        .in('user_id', activatedIds)
+        .order('updated_at', { ascending: false })
+
+      for (const s of sessions ?? []) {
+        if (!lastSessionMap[s.user_id]) lastSessionMap[s.user_id] = s.updated_at
+      }
+    }
+
+    const enriched = (data ?? []).map((i: InviteRow) => ({
+      ...i,
+      last_session_at: i.auth_user_id ? (lastSessionMap[i.auth_user_id] ?? null) : null,
+    }))
+
+    res.json(enriched)
+  } catch (err) {
+    console.error('[fp/invites] GET', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/invites/:id/resend', requireAuth, async (req, res): Promise<void> => {
+  const { id } = req.params
+  try {
+    const sb = getFPSupabase()
+    const { data: invite, error: fetchErr } = await sb
+      .from('fp_invites')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr || !invite) {
+      res.status(404).json({ error: 'Invite not found' })
+      return
+    }
+    if (invite.status !== 'pending') {
+      res.status(400).json({ error: `Cannot resend invite in status "${invite.status}"` })
+      return
+    }
+
+    // Determine which path to use (same logic as POST /invite)
+    const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
+    const existingAuth = listed?.users?.find(u => (u.email ?? '').toLowerCase() === invite.email.toLowerCase())
+
+    if (existingAuth && existingAuth.email_confirmed_at) {
+      const { error } = await sb.auth.admin.generateLink({
+        type:    'magiclink',
+        email:   invite.email,
+        options: { redirectTo: getAppUrl() },
+      })
+      if (error) { res.status(500).json({ error: error.message }); return }
+    } else {
+      const { error } = await sb.auth.admin.inviteUserByEmail(invite.email, {
+        redirectTo: getAppUrl(),
+        data: {
+          full_name:    invite.full_name,
+          invited_role: invite.role,
+        },
+      })
+      if (error) { res.status(500).json({ error: error.message }); return }
+    }
+
+    await sb
+      .from('fp_invites')
+      .update({ invited_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[fp/invites/resend]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.delete('/invites/:id', requireAuth, async (req, res): Promise<void> => {
+  const { id } = req.params
+  try {
+    const sb = getFPSupabase()
+    const { data: invite, error: fetchErr } = await sb
+      .from('fp_invites')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr || !invite) {
+      res.status(404).json({ error: 'Invite not found' })
+      return
+    }
+
+    // If still pending and auth user never confirmed, delete the auth row too
+    if (invite.status === 'pending' && invite.auth_user_id) {
+      const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
+      const authUser = listed?.users?.find(u => u.id === invite.auth_user_id)
+      if (authUser && !authUser.email_confirmed_at) {
+        const { error: delAuthErr } = await sb.auth.admin.deleteUser(invite.auth_user_id)
+        if (delAuthErr) {
+          console.warn('[fp/invites/delete] auth user delete failed:', delAuthErr.message)
+        }
+      }
+    }
+
+    await sb
+      .from('fp_invites')
+      .update({ status: 'revoked', updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[fp/invites/delete]', err)
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
 })
