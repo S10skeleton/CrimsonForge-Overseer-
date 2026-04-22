@@ -83,11 +83,11 @@ const MOBILE_NAV: { id: Tab; glyph: string; label: string; dot?: string }[] = [
 interface Props { onLogout: () => void }
 
 export default function Panel({ onLogout }: Props) {
-  const [tab,        setTab]        = useState<Tab>('elara')
+  const [tab,        setTab]        = useState<Tab>('system')
   const [clock,      setClock]      = useState('')
   const [openGroups, setOpenGroups] = useState<Set<string>>(
-    // CFP open by default, others closed
-    new Set(['cfp'])
+    // Landing on System; FP group open as launch priority
+    new Set(['fp'])
   )
 
   useEffect(() => {
