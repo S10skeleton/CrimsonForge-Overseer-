@@ -99,6 +99,12 @@ export const api = {
       request<any>(`/api/fp/messages/${id}`, { method: 'PATCH', body: JSON.stringify(payload) }),
     deleteMessage:  (id: string) =>
       request<any>(`/api/fp/messages/${id}`, { method: 'DELETE' }),
+    feedback: () => request<any[]>('/api/fp/feedback'),
+    updateFeedback: (id: string, status: string) =>
+      request<any>(`/api/fp/feedback/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
     invite: (payload: { email: string; full_name?: string; role: 'owner' | 'tech' | 'advisor'; notes?: string }) =>
       request<{ success: boolean; invite: any; auth_user_id: string | null }>('/api/fp/invite', {
         method: 'POST',

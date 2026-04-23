@@ -11,12 +11,13 @@ import FeedbackTab           from '../tabs/FeedbackTab'
 import ForgePilotTab         from '../tabs/ForgePilotTab'
 import ForgePilotBillingTab  from '../tabs/ForgePilotBillingTab'
 import ForgePilotMessagesTab from '../tabs/ForgePilotMessagesTab'
+import ForgePilotFeedbackTab from '../tabs/ForgePilotFeedbackTab'
 import ForgePulseTab         from '../tabs/ForgePulseTab'
 
 type Tab =
   | 'elara' | 'system'
   | 'shops' | 'users' | 'billing' | 'messages' | 'leads' | 'feedback' | 'aiconfig'
-  | 'forgepilot' | 'fp-billing' | 'fp-messages'
+  | 'forgepilot' | 'fp-billing' | 'fp-messages' | 'fp-feedback'
   | 'forgepulse'
 
 // --- Product group definitions ------------------------------------------------
@@ -58,6 +59,7 @@ const PRODUCT_GROUPS: ProductGroup[] = [
       { id: 'forgepilot', label: 'Overview', glyph: '\u25C8' },
       { id: 'fp-billing', label: 'Billing',  glyph: '\u2B28' },
       { id: 'fp-messages', label: 'Messages', glyph: '\u25CE' },
+      { id: 'fp-feedback', label: 'Feedback', glyph: '◈' },
     ],
   },
   {
@@ -308,6 +310,7 @@ export default function Panel({ onLogout }: Props) {
           {tab === 'forgepilot' && <ForgePilotTab />}
           {tab === 'fp-billing' && <ForgePilotBillingTab />}
           {tab === 'fp-messages' && <ForgePilotMessagesTab />}
+          {tab === 'fp-feedback' && <ForgePilotFeedbackTab />}
           {tab === 'forgepulse' && <ForgePulseTab />}
         </div>
       </div>

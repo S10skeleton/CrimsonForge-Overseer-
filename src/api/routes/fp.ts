@@ -359,6 +359,37 @@ router.delete('/messages/:id', requireAuth, async (req, res) => {
   }
 })
 
+// ── Feedback ────────────────────────────────────────────────────────────────
+
+router.get('/feedback', requireAuth, async (_req, res) => {
+  try {
+    const sb = getFPSupabase()
+    const { data, error } = await sb
+      .from('fp_feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    console.error('[fp/feedback]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.patch('/feedback/:id', requireAuth, async (req, res) => {
+  const { id } = req.params
+  const { status } = req.body as { status: string }
+  try {
+    const sb = getFPSupabase()
+    const { error } = await sb.from('fp_feedback').update({ status }).eq('id', id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[fp/feedback PATCH]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
 // ── Invites (founder-level user onboarding) ─────────────────────────────────
 // Distinct from fp_shop_invites (the 6-digit code flow used by shop owners
 // to add their own techs). These are platform-level onboarding invites
