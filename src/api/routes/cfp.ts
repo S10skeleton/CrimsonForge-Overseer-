@@ -436,13 +436,31 @@ router.get('/forgepulse-waitlist', requireAuth, async (_req, res) => {
     const sb = getCFPSupabase()
     const { data, error } = await sb
       .from('forgepulse_waitlist')
-      .select('id, email, source, created_at')
+      .select('id, email, source, created_at, name, shop_name, role, vehicles_per_month, comment')
       .order('created_at', { ascending: false })
 
     if (error) throw error
     res.json(data ?? [])
   } catch (err) {
     console.error('[cfp/forgepulse-waitlist]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+// ── ForgePilot Waitlist ──────────────────────────────────────────────────────
+
+router.get('/forgepilot-waitlist', requireAuth, async (_req, res) => {
+  try {
+    const sb = getCFPSupabase()
+    const { data, error } = await sb
+      .from('forgepilot_waitlist')
+      .select('id, email, source, created_at, name, shop_name, role, vehicles_per_month, comment')
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    console.error('[cfp/forgepilot-waitlist]', err)
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
 })

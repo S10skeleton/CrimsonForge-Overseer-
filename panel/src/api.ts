@@ -77,6 +77,7 @@ export const api = {
         method: 'DELETE',
       }),
     forgePulseWaitlist: () => request<any[]>('/api/cfp/forgepulse-waitlist'),
+    forgePilotWaitlist: () => request<any[]>('/api/cfp/forgepilot-waitlist'),
     aiConfig: () =>
       request<{ rows: any[]; config: Record<string, string> }>('/api/cfp/ai-config'),
     updateAiConfig: (updates: Array<{ config_key: string; config_value: string }>) =>

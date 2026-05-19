@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { CSSProperties } from 'react'
 import { api } from '../api'
 import { formatDistanceToNow } from 'date-fns'
+import WaitlistTable, { type WaitlistEntry } from '../components/WaitlistTable'
 
 function planColor(tier: string) {
   if (tier === 'shop') return 'var(--cyan)'
@@ -38,7 +39,10 @@ export default function ForgePilotTab() {
   const [shops,    setShops]    = useState<any[]>([])
   const [sessions, setSessions] = useState<any[]>([])
   const [loading,  setLoading]  = useState(true)
-  const [subTab,   setSubTab]   = useState<'overview' | 'users' | 'invites' | 'shops' | 'sessions'>('overview')
+  const [subTab,   setSubTab]   = useState<'overview' | 'users' | 'invites' | 'shops' | 'sessions' | 'waitlist'>('overview')
+
+  const [waitlist,       setWaitlist]       = useState<WaitlistEntry[]>([])
+  const [waitlistLoaded, setWaitlistLoaded] = useState(false)
 
   const [invites,       setInvites]       = useState<any[]>([])
   const [invitesLoaded, setInvitesLoaded] = useState(false)
@@ -70,6 +74,12 @@ export default function ForgePilotTab() {
       api.fp.invites().then(setInvites).finally(() => setInvitesLoaded(true))
     }
   }, [subTab, invitesLoaded])
+
+  useEffect(() => {
+    if ((subTab === 'waitlist' || subTab === 'overview') && !waitlistLoaded) {
+      api.cfp.forgePilotWaitlist().then(setWaitlist).finally(() => setWaitlistLoaded(true))
+    }
+  }, [subTab, waitlistLoaded])
 
   async function handleSendInvite() {
     setInviteBusy(true); setInviteError(null)
@@ -117,6 +127,7 @@ export default function ForgePilotTab() {
     { id: 'overview', label: 'OVERVIEW' },
     { id: 'users',    label: 'USERS'    },
     { id: 'invites',  label: 'INVITES'  },
+    { id: 'waitlist', label: 'WAITLIST' },
     { id: 'shops',    label: 'SHOPS'    },
     { id: 'sessions', label: 'SESSIONS' },
   ] as const
@@ -167,6 +178,7 @@ export default function ForgePilotTab() {
               { label: 'AI Messages (24h)',value: loading ? '...' : stats?.aiMessages24h ?? 0,    color: 'var(--yellow)'},
               { label: 'Active Shops',     value: loading ? '...' : stats?.activeShops ?? 0,      color: stats?.activeShops > 0 ? 'var(--green)' : 'var(--dim)' },
               { label: 'Motor Cache',      value: loading ? '...' : stats?.motorCacheEntries ?? 0, color: 'var(--dim)'  },
+              { label: 'Waitlist',         value: !waitlistLoaded ? '...' : waitlist.length, color: waitlist.length > 0 ? 'var(--cyan)' : 'var(--dim)' },
             ].map(k => (
               <div key={k.label} className="kpi">
                 <div className="kpi-label">{k.label}</div>
@@ -512,6 +524,17 @@ export default function ForgePilotTab() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* -- WAITLIST -- */}
+      {subTab === 'waitlist' && (
+        <div>
+          <WaitlistTable
+            entries={waitlist}
+            loading={!waitlistLoaded}
+            product="forgepilot"
+          />
         </div>
       )}
 
