@@ -21,6 +21,129 @@ function getAppUrl(): string {
   return process.env.FP_FRONTEND_URL || 'https://app.forgepilot.pro'
 }
 
+// ── ForgePilot invite email (Resend) ────────────────────────────────────────
+// Why this exists: Supabase's admin.generateLink returns an action_link but
+// does NOT send email. admin.inviteUserByEmail errors when the user already
+// exists. So for resend-to-existing-user (the 24hr-expired case), neither
+// SDK method sends an email on its own. We generate the link with the right
+// type and email it ourselves via Resend.
+
+const FP_INVITE_FROM = 'ForgePilot <invites@crimsonforge.pro>'
+
+function buildInviteEmailBody(actionLink: string, fullName: string | null): string {
+  const greeting = fullName ? `Hi ${fullName.split(' ')[0]},` : 'Hi,'
+  return [
+    greeting,
+    '',
+    'You\'ve been invited to ForgePilot — the AI diagnostic copilot for auto shops.',
+    '',
+    'Click the link below to set up your account:',
+    '',
+    actionLink,
+    '',
+    'This link is valid for 24 hours. If it expires, just reply to this email and we\'ll send a fresh one.',
+    '',
+    '— The ForgePilot team',
+  ].join('\n')
+}
+
+async function generateInviteLink(
+  sb: ReturnType<typeof getFPSupabase>,
+  email: string,
+  fullName: string | null,
+  role: string,
+  isConfirmed: boolean,
+): Promise<{ link: string | null; error?: string }> {
+  // 'invite' creates the user if needed and returns a signup/invite link.
+  // 'magiclink' is used when the user is already confirmed (can't re-invite).
+  const linkType = isConfirmed ? 'magiclink' : 'invite'
+  const { data, error } = await sb.auth.admin.generateLink({
+    type:    linkType as 'invite' | 'magiclink',
+    email,
+    options: {
+      redirectTo: getAppUrl(),
+      data: { full_name: fullName, invited_role: role },
+    },
+  })
+  if (error) return { link: null, error: error.message }
+  const link = data?.properties?.action_link ?? null
+  if (!link) return { link: null, error: 'No action_link returned from Supabase' }
+  return { link }
+}
+
+async function sendInviteViaResend(
+  email: string,
+  fullName: string | null,
+  actionLink: string,
+): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    return { success: false, error: 'RESEND_API_KEY not configured on Overseer' }
+  }
+  try {
+    const toName = fullName?.trim() || email.split('@')[0]
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from:    FP_INVITE_FROM,
+        to:      [`${toName} <${email}>`],
+        subject: 'You\'re invited to ForgePilot',
+        text:    buildInviteEmailBody(actionLink, fullName),
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { message?: string }
+      return { success: false, error: body.message || `Resend HTTP ${res.status}` }
+    }
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown Resend error' }
+  }
+}
+
+/**
+ * Full invite flow: look up auth user, generate link via Supabase admin,
+ * send via Resend. Hard-requires RESEND_API_KEY. Returns auth_user_id so
+ * the caller can store it in fp_invites.
+ */
+async function sendFPInviteEmail(
+  sb: ReturnType<typeof getFPSupabase>,
+  email: string,
+  fullName: string | null,
+  role: string,
+): Promise<{ success: boolean; authUserId: string | null; error?: string }> {
+  // Look up existing auth user
+  const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
+  const existingAuth = listed?.users?.find(u => (u.email ?? '').toLowerCase() === email.toLowerCase())
+  const isConfirmed = !!existingAuth?.email_confirmed_at
+
+  // Generate the link
+  const linkResult = await generateInviteLink(sb, email, fullName, role, isConfirmed)
+  if (linkResult.error || !linkResult.link) {
+    return { success: false, authUserId: existingAuth?.id ?? null, error: linkResult.error ?? 'No link' }
+  }
+
+  // Send it
+  const sendResult = await sendInviteViaResend(email, fullName, linkResult.link)
+  if (!sendResult.success) {
+    return { success: false, authUserId: existingAuth?.id ?? null, error: sendResult.error }
+  }
+
+  // Re-fetch in case generateLink created a new user
+  let authUserId = existingAuth?.id ?? null
+  if (!authUserId) {
+    const { data: listed2 } = await sb.auth.admin.listUsers({ perPage: 1000 })
+    authUserId = listed2?.users?.find(u => (u.email ?? '').toLowerCase() === email.toLowerCase())?.id ?? null
+  }
+
+  return { success: true, authUserId }
+}
+
 // ── Stats summary ───────────────────────────────────────────────────────────
 
 router.get('/stats', requireAuth, async (_req, res) => {
@@ -454,44 +577,15 @@ router.post('/invite', requireAuth, async (req, res): Promise<void> => {
       return
     }
 
-    // Check if auth user already exists — handles the "confirmed but stuck" case
-    // (e.g. user clicked a prior broken invite link and is now email-confirmed
-    // but has no shop yet). inviteUserByEmail errors on confirmed users, so we
-    // fall back to generateLink for those.
-    const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
-    const existingAuth = listed?.users?.find(u => (u.email ?? '').toLowerCase() === cleanEmail)
-
-    let authUserId: string | null = null
-
-    if (existingAuth && existingAuth.email_confirmed_at) {
-      // Confirmed user — send a branded magic link
-      const { error: linkErr } = await sb.auth.admin.generateLink({
-        type:    'magiclink',
-        email:   cleanEmail,
-        options: { redirectTo: getAppUrl() },
-      })
-      if (linkErr) {
-        console.error('[fp/invite] generateLink error:', linkErr)
-        res.status(500).json({ error: linkErr.message })
-        return
-      }
-      authUserId = existingAuth.id
-    } else {
-      // New user OR unconfirmed existing user — standard invite flow
-      const { data, error } = await sb.auth.admin.inviteUserByEmail(cleanEmail, {
-        redirectTo: getAppUrl(),
-        data: {
-          full_name:    cleanName,
-          invited_role: cleanRole,
-        },
-      })
-      if (error) {
-        console.error('[fp/invite] inviteUserByEmail error:', error)
-        res.status(500).json({ error: error.message })
-        return
-      }
-      authUserId = data.user?.id ?? null
+    // Generate the action link and send via Resend ourselves. Handles all
+    // three cases (new / unconfirmed-existing / confirmed-stuck) in one path.
+    const sendResult = await sendFPInviteEmail(sb, cleanEmail, cleanName, cleanRole)
+    if (!sendResult.success) {
+      console.error('[fp/invite] send error:', sendResult.error)
+      res.status(500).json({ error: sendResult.error ?? 'Failed to send invite' })
+      return
     }
+    const authUserId = sendResult.authUserId
 
     // Upsert tracking row (overwrite any prior revoked row for same email)
     const { data: inviteRow, error: insertErr } = await sb
@@ -580,26 +674,12 @@ router.post('/invites/:id/resend', requireAuth, async (req, res): Promise<void> 
       return
     }
 
-    // Determine which path to use (same logic as POST /invite)
-    const { data: listed } = await sb.auth.admin.listUsers({ perPage: 1000 })
-    const existingAuth = listed?.users?.find(u => (u.email ?? '').toLowerCase() === invite.email.toLowerCase())
-
-    if (existingAuth && existingAuth.email_confirmed_at) {
-      const { error } = await sb.auth.admin.generateLink({
-        type:    'magiclink',
-        email:   invite.email,
-        options: { redirectTo: getAppUrl() },
-      })
-      if (error) { res.status(500).json({ error: error.message }); return }
-    } else {
-      const { error } = await sb.auth.admin.inviteUserByEmail(invite.email, {
-        redirectTo: getAppUrl(),
-        data: {
-          full_name:    invite.full_name,
-          invited_role: invite.role,
-        },
-      })
-      if (error) { res.status(500).json({ error: error.message }); return }
+    // Same single path as POST /invite — generate link + send via Resend.
+    const sendResult = await sendFPInviteEmail(sb, invite.email, invite.full_name, invite.role)
+    if (!sendResult.success) {
+      console.error('[fp/invites/resend] send error:', sendResult.error)
+      res.status(500).json({ error: sendResult.error ?? 'Failed to resend invite' })
+      return
     }
 
     await sb
