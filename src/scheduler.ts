@@ -16,6 +16,7 @@ import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
 import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
 import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
 import type { MorningBriefing, Alert, ForgePilotBriefing } from './types/index.js'
+import { evaluateEndpointAlert } from './lib/alert-state.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
@@ -61,66 +62,47 @@ async function runSilentHealthCheck(): Promise<void> {
     const uptimeResult = await monitors.uptime()
     const railwayResult = await monitors.railway()
 
-    const isUptimeDown =
-      uptimeResult.success &&
-      Array.isArray(uptimeResult.data) &&
-      uptimeResult.data.some((e) => e.status === 'down')
+    const alerts: Alert[] = []
 
-    const isUptimeSlow =
-      uptimeResult.success &&
-      Array.isArray(uptimeResult.data) &&
-      uptimeResult.data.some((e) => e.status === 'degraded' && e.responseMs !== null && e.responseMs > 3000)
-
-    const isRailwayDown =
-      railwayResult.success && railwayResult.data.status === 'down'
-
-    if (isUptimeDown || isRailwayDown || isUptimeSlow) {
-      const alerts: Alert[] = []
-
-      if (isUptimeDown) {
-        const downEndpoints = (uptimeResult.data as Array<{ url: string; status: string }>)
-          .filter((e) => e.status === 'down')
-          .map((e) => e.url)
-          .join(', ')
-        alerts.push({
-          severity: 'critical',
-          tool: 'uptime',
-          message: 'Services are DOWN',
-          details: downEndpoints,
+    // Evaluate each uptime endpoint independently — the evaluator handles
+    // dedup, escalation, recovery, and safety re-alerts internally.
+    if (uptimeResult.success && Array.isArray(uptimeResult.data)) {
+      for (const ep of uptimeResult.data) {
+        const decision = evaluateEndpointAlert({
+          key: ep.url,
+          status: ep.status,
+          responseMs: ep.responseMs,
+          label: ep.url,
+          toolName: 'uptime',
         })
+        if (decision) alerts.push(decision)
       }
+    }
 
-      if (isUptimeSlow) {
-        const slowEndpoints = (uptimeResult.data as Array<{ url: string; status: string; responseMs: number | null }>)
-          .filter((e) => e.status === 'degraded' && e.responseMs !== null && e.responseMs > 3000)
-          .map((e) => `${e.url} (${e.responseMs}ms)`)
-          .join(', ')
-        alerts.push({
-          severity: 'warning',
-          tool: 'uptime',
-          message: 'Slow response time detected (>3s)',
-          details: slowEndpoints,
-        })
-      }
+    // Railway deployment — synthetic key, status normalized to healthy/down
+    if (railwayResult.success) {
+      const railwayStatus = railwayResult.data.status === 'down' ? 'down' : 'healthy'
+      const decision = evaluateEndpointAlert({
+        key: 'railway:deployment',
+        status: railwayStatus,
+        label: 'Railway deployment',
+        toolName: 'railway',
+        actionUrl: 'https://railway.app/project/' + process.env.CF_PROJECT_ID,
+      })
+      if (decision) alerts.push(decision)
+    }
 
-      if (isRailwayDown) {
-        alerts.push({
-          severity: 'critical',
-          tool: 'railway',
-          message: 'Railway deployment is DOWN',
-          actionUrl: 'https://railway.app/project/' + process.env.CF_PROJECT_ID,
-        })
-      }
-
+    if (alerts.length === 0) {
+      console.log('[SCHEDULER] Silent health check passed. No alerts needed.')
+    } else {
       for (const alert of alerts) {
         await sendAlert(alert)
         // P0 = critical severity — also SMS Clutch directly
+        // 'info' (recovery) never SMSes; 'warning' never SMSes.
         if (alert.severity === 'critical') {
           await sendSMSAlert(`${alert.message}${alert.details ? ` — ${alert.details}` : ''}`)
         }
       }
-    } else {
-      console.log('[SCHEDULER] Silent health check passed. No alerts needed.')
     }
 
     // ── Real-time new subscriber alerts ──────────────────────────────────
@@ -241,13 +223,20 @@ async function runSilentHealthCheck(): Promise<void> {
 
       const fpUptime = await runForgePilotUptimeCheck()
       if (fpUptime.success) {
-        const fpDown = [fpUptime.data.frontend, fpUptime.data.api].filter(u => u.status === 'down')
-        if (fpDown.length > 0) {
-          await sendAlertToChannel(fpChannelId, {
-            severity: 'critical',
-            tool: 'fp_uptime',
-            message: `ForgePilot service DOWN: ${fpDown.map(u => u.url).join(', ')}`,
+        for (const [name, ep] of [
+          ['Frontend', fpUptime.data.frontend] as const,
+          ['API',      fpUptime.data.api]      as const,
+        ]) {
+          const decision = evaluateEndpointAlert({
+            key: `fp:${name.toLowerCase()}`,
+            status: ep.status,
+            responseMs: ep.responseMs,
+            label: `ForgePilot ${name}`,
+            toolName: 'fp_uptime',
           })
+          if (decision) {
+            await sendAlertToChannel(fpChannelId, decision)
+          }
         }
       }
 

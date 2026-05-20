@@ -148,6 +148,9 @@ ERRORS
 | `MORNING_BRIEFING_HOUR` | ⭕ | Hour for morning briefing (default: `8`) |
 | `SILENT_SHOP_THRESHOLD_DAYS` | ⭕ | Days of inactivity to flag (default: `3`) |
 | `ANTHROPIC_API_KEY` | ⭕ | Enable AI agent (not active yet) |
+| `UPTIME_SLOWDOWN_RE_ALERT_MS` | ⭕ | How much slower (in ms) a degraded endpoint must get to re-alert (default: `10000`) |
+| `UPTIME_REALERT_DEGRADED_HOURS` | ⭕ | Re-alert interval (hours) for ongoing degraded status (default: `6`) |
+| `UPTIME_REALERT_DOWN_HOURS` | ⭕ | Re-alert interval (hours) for ongoing down status (default: `2`) |
 
 ---
 
