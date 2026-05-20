@@ -27,27 +27,27 @@
     "@sentry/node": "^10.40.0",
     "@slack/bolt": "^3.19.0",
     "@supabase/supabase-js": "^2.38.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "googleapis": "^140.0.0",
-    "jsonwebtoken": "^9.0.3",
-    "multer": "^2.1.1",
-    "node-cron": "^3.0.2",
-    "stripe": "^20.4.1"
-  },
-  "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
     "@types/node": "^20.10.0",
     "@types/node-cron": "^3.0.8",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "googleapis": "^140.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
+    "node-cron": "^3.0.2",
+    "stripe": "^20.4.1",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",
     "prettier": "^3.1.0",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=20.0.0"
