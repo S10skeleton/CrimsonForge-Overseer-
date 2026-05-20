@@ -15,7 +15,15 @@ export type EndpointStatus = 'healthy' | 'degraded' | 'down' | 'unknown'
 
 interface EndpointState {
   status: EndpointStatus
+  /** Most recent response time observed. Updated every check. */
   responseMs: number | null
+  /**
+   * Response time at the moment we last fired an alert for this key.
+   * Used as the anchored baseline for the "getting worse" slowdown check
+   * so the threshold doesn't drift upward as the endpoint slowly degrades.
+   * Null when we've never alerted (or after recovery).
+   */
+  lastAlertedResponseMs: number | null
   firstSeenAt: number   // when current status began
   lastAlertedAt: number // last time we fired any alert for this key
 }
@@ -71,18 +79,36 @@ export function evaluateEndpointAlert(input: EvaluateInput): Alert | null {
   // First observation of this key
   if (!prev) {
     if (status === 'healthy') {
-      stateByKey.set(key, { status, responseMs, firstSeenAt: now, lastAlertedAt: 0 })
+      stateByKey.set(key, {
+        status,
+        responseMs,
+        lastAlertedResponseMs: null,
+        firstSeenAt: now,
+        lastAlertedAt: 0,
+      })
       return null
     }
     // Bad on first observation — alert immediately
-    stateByKey.set(key, { status, responseMs, firstSeenAt: now, lastAlertedAt: now })
-    return buildAlert({ status, label, responseMs, toolName, actionUrl, reason: 'detected' })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: responseMs,
+      firstSeenAt: now,
+      lastAlertedAt: now,
+    })
+    return buildAlert({ status, label, responseMs, toolName, actionUrl })
   }
 
   // Recovery: was bad, now healthy
   if (status === 'healthy' && prev.status !== 'healthy') {
     const minutes = Math.round((now - prev.firstSeenAt) / 60_000)
-    stateByKey.set(key, { status, responseMs, firstSeenAt: now, lastAlertedAt: now })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: null,
+      firstSeenAt: now,
+      lastAlertedAt: now,
+    })
     return {
       severity: 'info',
       tool: toolName,
@@ -94,18 +120,32 @@ export function evaluateEndpointAlert(input: EvaluateInput): Alert | null {
 
   // Still healthy — silent
   if (status === 'healthy') {
-    stateByKey.set(key, { status, responseMs, firstSeenAt: prev.firstSeenAt, lastAlertedAt: prev.lastAlertedAt })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: null,
+      firstSeenAt: prev.firstSeenAt,
+      lastAlertedAt: prev.lastAlertedAt,
+    })
     return null
   }
 
   // Escalation: degraded -> down
   if (prev.status === 'degraded' && status === 'down') {
-    stateByKey.set(key, { status, responseMs, firstSeenAt: now, lastAlertedAt: now })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: responseMs,
+      firstSeenAt: now,
+      lastAlertedAt: now,
+    })
     return {
       severity: 'critical',
       tool: toolName,
       message: `🚨 ESCALATED — ${label}: degraded → DOWN`,
-      details: prev.responseMs != null ? `Was responding slowly (${prev.responseMs}ms), now unreachable` : 'Now unreachable',
+      details: prev.responseMs != null
+        ? `Was responding slowly (${prev.responseMs}ms), now unreachable`
+        : 'Now unreachable',
       ...(actionUrl ? { actionUrl } : {}),
     }
   }
@@ -113,31 +153,49 @@ export function evaluateEndpointAlert(input: EvaluateInput): Alert | null {
   // Partial recovery: down -> degraded
   if (prev.status === 'down' && status === 'degraded') {
     const minutes = Math.round((now - prev.firstSeenAt) / 60_000)
-    stateByKey.set(key, { status, responseMs, firstSeenAt: now, lastAlertedAt: now })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: responseMs,
+      firstSeenAt: now,
+      lastAlertedAt: now,
+    })
     return {
       severity: 'warning',
       tool: toolName,
       message: `🟡 PARTIAL RECOVERY — ${label}: down → degraded`,
-      details: `Was down for ${formatDuration(minutes)}. ${responseMs != null ? `Now responding in ${responseMs}ms.` : 'Now responding but slowly.'}`,
+      details: `Was down for ${formatDuration(minutes)}. ${
+        responseMs != null ? `Now responding in ${responseMs}ms.` : 'Now responding but slowly.'
+      }`,
       ...(actionUrl ? { actionUrl } : {}),
     }
   }
 
   // Same status (degraded->degraded or down->down)
-  // ── Check 1: significant slowdown (degraded only) ──
+
+  // ── Check 1: significant slowdown vs the last-alerted reading ──
+  // Compares against `prev.lastAlertedResponseMs`, NOT `prev.responseMs`,
+  // so the baseline doesn't drift upward across many small slowdowns.
   if (
     status === 'degraded' &&
     prev.status === 'degraded' &&
-    prev.responseMs != null &&
+    prev.lastAlertedResponseMs != null &&
     responseMs != null &&
-    responseMs >= prev.responseMs + SIGNIFICANT_SLOWDOWN_MS
+    responseMs >= prev.lastAlertedResponseMs + SIGNIFICANT_SLOWDOWN_MS
   ) {
-    stateByKey.set(key, { status, responseMs, firstSeenAt: prev.firstSeenAt, lastAlertedAt: now })
+    const baseline = prev.lastAlertedResponseMs
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: responseMs, // new anchored baseline
+      firstSeenAt: prev.firstSeenAt,
+      lastAlertedAt: now,
+    })
     return {
       severity: 'warning',
       tool: toolName,
       message: `⚠️ GETTING WORSE — ${label} is slowing down`,
-      details: `Response time ${prev.responseMs}ms → ${responseMs}ms`,
+      details: `Response time ${baseline}ms → ${responseMs}ms`,
       ...(actionUrl ? { actionUrl } : {}),
     }
   }
@@ -146,20 +204,35 @@ export function evaluateEndpointAlert(input: EvaluateInput): Alert | null {
   const reAlertInterval = status === 'down' ? REALERT_DOWN_MS : REALERT_DEGRADED_MS
   if (now - prev.lastAlertedAt >= reAlertInterval) {
     const minutes = Math.round((now - prev.firstSeenAt) / 60_000)
-    stateByKey.set(key, { status, responseMs, firstSeenAt: prev.firstSeenAt, lastAlertedAt: now })
+    stateByKey.set(key, {
+      status,
+      responseMs,
+      lastAlertedResponseMs: responseMs, // refresh baseline since we're firing
+      firstSeenAt: prev.firstSeenAt,
+      lastAlertedAt: now,
+    })
     return {
       severity: status === 'down' ? 'critical' : 'warning',
       tool: toolName,
       message: status === 'down'
         ? `🚨 STILL DOWN — ${label}`
         : `⚠️ STILL DEGRADED — ${label}`,
-      details: `Ongoing for ${formatDuration(minutes)}${responseMs != null ? ` · ${responseMs}ms` : ''}`,
+      details: `Ongoing for ${formatDuration(minutes)}${
+        responseMs != null ? ` · ${responseMs}ms` : ''
+      }`,
       ...(actionUrl ? { actionUrl } : {}),
     }
   }
 
-  // No meaningful change — update responseMs but don't alert
-  stateByKey.set(key, { status, responseMs, firstSeenAt: prev.firstSeenAt, lastAlertedAt: prev.lastAlertedAt })
+  // No meaningful change — update the *current* responseMs reading but
+  // preserve lastAlertedResponseMs so the slowdown baseline stays anchored.
+  stateByKey.set(key, {
+    status,
+    responseMs,
+    lastAlertedResponseMs: prev.lastAlertedResponseMs,
+    firstSeenAt: prev.firstSeenAt,
+    lastAlertedAt: prev.lastAlertedAt,
+  })
   return null
 }
 
@@ -171,7 +244,6 @@ function buildAlert(args: {
   responseMs: number | null
   toolName: string
   actionUrl?: string
-  reason: string
 }): Alert {
   const { status, label, responseMs, toolName, actionUrl } = args
 
