@@ -151,6 +151,9 @@ ERRORS
 | `UPTIME_SLOWDOWN_RE_ALERT_MS` | ⭕ | How much slower (in ms) a degraded endpoint must get to re-alert (default: `10000`) |
 | `UPTIME_REALERT_DEGRADED_HOURS` | ⭕ | Re-alert interval (hours) for ongoing degraded status (default: `6`) |
 | `UPTIME_REALERT_DOWN_HOURS` | ⭕ | Re-alert interval (hours) for ongoing down status (default: `2`) |
+| `FP_INSIGHTS_HOUR` | ⭕ | Hour-of-day (0-23) to run nightly ForgeAssist insight analysis (default: `5`) |
+| `FP_INSIGHTS_BATCH_LIMIT` | ⭕ | Max sessions analyzed per run (default: `100`) |
+| `FP_INSIGHTS_MIN_MESSAGES` | ⭕ | Skip sessions with fewer than this many messages (default: `2`) |
 
 ---
 

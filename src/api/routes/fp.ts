@@ -733,4 +733,20 @@ router.delete('/invites/:id', requireAuth, async (req, res): Promise<void> => {
   }
 })
 
+// ── ForgeAssist insight backfill ────────────────────────────────────────────
+// One-time use: populates fp_session_insights for any session that doesn't
+// have a row yet. Idempotent — re-running only analyzes sessions still
+// missing insights. Bounded by FP_INSIGHTS_BATCH_LIMIT per call.
+
+router.post('/backfill-insights', requireAuth, async (_req, res) => {
+  try {
+    const { runInsightAnalysis } = await import('../../jobs/fp-insights.js')
+    const summary = await runInsightAnalysis()
+    res.json(summary)
+  } catch (err) {
+    console.error('[fp/backfill-insights]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
 export default router

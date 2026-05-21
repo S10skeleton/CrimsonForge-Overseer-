@@ -12,6 +12,7 @@ import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
+import { runInsightAnalysis } from './jobs/fp-insights.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
 import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
 import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
@@ -21,6 +22,7 @@ import { evaluateEndpointAlert } from './lib/alert-state.js'
 // ─── Configuration ────────────────────────────────────────────────────────
 
 const MORNING_BRIEFING_HOUR = Number(process.env.MORNING_BRIEFING_HOUR || '8')
+const FP_INSIGHTS_HOUR = Number(process.env.FP_INSIGHTS_HOUR || '5')
 
 // ─── Briefing Storage ─────────────────────────────────────────────────────
 
@@ -578,6 +580,16 @@ export function startScheduler(): void {
   // Every morning at specified hour: full briefing
   cron.schedule(`0 ${MORNING_BRIEFING_HOUR} * * *`, runMorningBriefing, { timezone })
   console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00 (${timezone})`)
+
+  cron.schedule(`0 ${FP_INSIGHTS_HOUR} * * *`, async () => {
+    console.log(`[SCHEDULER] Running ForgeAssist insight analysis at ${FP_INSIGHTS_HOUR}:00 (${timezone})`)
+    try {
+      await runInsightAnalysis()
+    } catch (err) {
+      console.error('[SCHEDULER] Insight analysis failed:', err)
+    }
+  }, { timezone })
+  console.log(`[SCHEDULER] Scheduled: ForgeAssist insight analysis daily at ${FP_INSIGHTS_HOUR}:00 (${timezone})`)
 }
 
 export { runSilentHealthCheck, runMorningBriefing }
