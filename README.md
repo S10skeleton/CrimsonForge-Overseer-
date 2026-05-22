@@ -154,6 +154,7 @@ ERRORS
 | `FP_INSIGHTS_HOUR` | ⭕ | Hour-of-day (0-23) to run nightly ForgeAssist insight analysis (default: `5`) |
 | `FP_INSIGHTS_BATCH_LIMIT` | ⭕ | Max sessions analyzed per run (default: `100`) |
 | `FP_INSIGHTS_MIN_MESSAGES` | ⭕ | Skip sessions with fewer than this many messages (default: `2`) |
+| `FP_INSIGHTS_SLACK_CHANNEL_ID` | ⭕ | Slack channel ID for daily ForgeAssist briefing. Not used in Phase 2 — set when ready to enable the daily Slack post. |
 
 ---
 

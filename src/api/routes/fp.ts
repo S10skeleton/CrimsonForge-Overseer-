@@ -733,6 +733,45 @@ router.delete('/invites/:id', requireAuth, async (req, res): Promise<void> => {
   }
 })
 
+// ── ForgeAssist insights (read) ─────────────────────────────────────────────
+
+router.get('/insights', requireAuth, async (req, res) => {
+  try {
+    const daysRaw = Number(req.query.days ?? '7')
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, Math.floor(daysRaw))) : 7
+    const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+    const supabase = getFPSupabase()
+    const { data, error } = await supabase
+      .from('fp_session_insights')
+      .select(`
+        id,
+        session_id,
+        shop_id,
+        analyzed_at,
+        status,
+        ai_helpfulness,
+        ai_specificity,
+        tech_frustration,
+        resolution_score,
+        topic_tag,
+        outcome,
+        pattern_note,
+        session:fp_sessions(year, make, model, last_dtc, message_count, created_at)
+      `)
+      .eq('status', 'success')
+      .gte('analyzed_at', sinceIso)
+      .order('analyzed_at', { ascending: false })
+      .limit(500)
+
+    if (error) throw error
+    res.json(data ?? [])
+  } catch (err) {
+    console.error('[fp/insights]', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
 // ── ForgeAssist insight backfill ────────────────────────────────────────────
 // One-time use: populates fp_session_insights for any session that doesn't
 // have a row yet. Idempotent — re-running only analyzes sessions still

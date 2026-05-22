@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { api } from '../api'
 import { formatDistanceToNow } from 'date-fns'
 import WaitlistTable, { type WaitlistEntry } from '../components/WaitlistTable'
+import InsightsPanel, { type InsightRow } from '../components/InsightsPanel'
 
 function planColor(tier: string) {
   if (tier === 'shop') return 'var(--cyan)'
@@ -39,10 +40,14 @@ export default function ForgePilotTab() {
   const [shops,    setShops]    = useState<any[]>([])
   const [sessions, setSessions] = useState<any[]>([])
   const [loading,  setLoading]  = useState(true)
-  const [subTab,   setSubTab]   = useState<'overview' | 'users' | 'invites' | 'shops' | 'sessions' | 'waitlist'>('overview')
+  const [subTab,   setSubTab]   = useState<'overview' | 'users' | 'invites' | 'shops' | 'sessions' | 'waitlist' | 'insights'>('overview')
 
   const [waitlist,       setWaitlist]       = useState<WaitlistEntry[]>([])
   const [waitlistLoaded, setWaitlistLoaded] = useState(false)
+
+  const [insights,       setInsights]       = useState<InsightRow[]>([])
+  const [insightsLoaded, setInsightsLoaded] = useState(false)
+  const [insightsDays,   setInsightsDays]   = useState(7)
 
   const [invites,       setInvites]       = useState<any[]>([])
   const [invitesLoaded, setInvitesLoaded] = useState(false)
@@ -80,6 +85,14 @@ export default function ForgePilotTab() {
       api.cfp.forgePilotWaitlist().then(setWaitlist).finally(() => setWaitlistLoaded(true))
     }
   }, [subTab, waitlistLoaded])
+
+  useEffect(() => {
+    if (subTab !== 'insights') return
+    setInsightsLoaded(false)
+    api.fp.insights(insightsDays)
+      .then(setInsights)
+      .finally(() => setInsightsLoaded(true))
+  }, [subTab, insightsDays])
 
   async function handleSendInvite() {
     setInviteBusy(true); setInviteError(null)
@@ -130,6 +143,7 @@ export default function ForgePilotTab() {
     { id: 'waitlist', label: 'WAITLIST' },
     { id: 'shops',    label: 'SHOPS'    },
     { id: 'sessions', label: 'SESSIONS' },
+    { id: 'insights', label: 'INSIGHTS' },
   ] as const
 
   return (
@@ -577,6 +591,18 @@ export default function ForgePilotTab() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* -- INSIGHTS -- */}
+      {subTab === 'insights' && (
+        <div>
+          <InsightsPanel
+            insights={insights}
+            loading={!insightsLoaded}
+            daysFilter={insightsDays}
+            onDaysFilterChange={setInsightsDays}
+          />
         </div>
       )}
     </div>

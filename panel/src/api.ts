@@ -92,6 +92,7 @@ export const api = {
     users:    () => request<any[]>('/api/fp/users'),
     shops:    () => request<any[]>('/api/fp/shops'),
     sessions: () => request<any[]>('/api/fp/sessions'),
+    insights: (days: number = 7) => request<any[]>(`/api/fp/insights?days=${days}`),
     billing:  () => request<any>('/api/fp/billing'),
     messages:       () => request<any[]>('/api/fp/messages'),
     createMessage:  (payload: { title: string; body: string; type: string; active: boolean; expires_at?: string | null }) =>
