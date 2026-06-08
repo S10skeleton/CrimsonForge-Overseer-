@@ -4,8 +4,11 @@ import { formatDistanceToNow, format } from 'date-fns'
 
 type SubTab = 'chat' | 'memory' | 'knowledge' | 'parking' | 'checkins' | 'tools'
 
-export default function ElaraTab() {
+interface ElaraTabProps { role: string }
+
+export default function ElaraTab({ role }: ElaraTabProps) {
   const [sub, setSub] = useState<SubTab>('chat')
+  const readOnly = role !== 'owner'
 
   return (
     <div>
@@ -50,10 +53,10 @@ export default function ElaraTab() {
         ))}
       </div>
 
-      {sub === 'chat'      && <ElaraChat />}
+      {sub === 'chat'      && <ElaraChat readOnly={readOnly} />}
       {sub === 'memory'    && <ElaraMemory />}
-      {sub === 'knowledge' && <ElaraKnowledge />}
-      {sub === 'parking'   && <ElaraParkingLot />}
+      {sub === 'knowledge' && <ElaraKnowledge readOnly={readOnly} />}
+      {sub === 'parking'   && <ElaraParkingLot readOnly={readOnly} />}
       {sub === 'checkins'  && <ElaraCheckins />}
       {sub === 'tools'     && <ElaraTools />}
     </div>
@@ -64,7 +67,7 @@ export default function ElaraTab() {
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; via?: 'voice' }
 
-function ElaraChat() {
+function ElaraChat({ readOnly }: { readOnly: boolean }) {
   const [history, setHistory]         = useState<ChatMessage[]>([])
   const [input, setInput]             = useState('')
   const [loading, setLoading]         = useState(false)
@@ -231,8 +234,9 @@ function ElaraChat() {
             onMouseUp={stopRecording}
             onTouchStart={e => { e.preventDefault(); startRecording() }}
             onTouchEnd={e => { e.preventDefault(); stopRecording() }}
-            disabled={loading}
-            title="Hold to speak"
+            disabled={loading || readOnly}
+            title={readOnly ? 'Read-only — chat disabled for viewers' : 'Hold to speak'}
+            style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
           >
             🎤
           </button>
@@ -242,17 +246,17 @@ function ElaraChat() {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder={recording ? 'Listening...' : 'Message Elara... (Enter to send, Shift+Enter for newline)'}
+            placeholder={readOnly ? 'Chat is owner-only (view-only session)' : recording ? 'Listening...' : 'Message Elara... (Enter to send, Shift+Enter for newline)'}
             rows={2}
-            disabled={recording}
+            disabled={recording || readOnly}
             style={{ resize: 'none', paddingRight: 14 }}
           />
         </div>
         <button
           className="btn btn-primary"
           onClick={send}
-          disabled={loading || recording || !input.trim()}
-          style={{ alignSelf: 'flex-end', minWidth: 80 }}
+          disabled={loading || recording || !input.trim() || readOnly}
+          style={{ alignSelf: 'flex-end', minWidth: 80, opacity: readOnly ? 0.4 : 1, cursor: readOnly ? 'not-allowed' : 'pointer' }}
         >
           Send
         </button>
@@ -318,7 +322,7 @@ function ElaraMemory() {
 
 // ── Knowledge ─────────────────────────────────────────────────────────────────
 
-function ElaraKnowledge() {
+function ElaraKnowledge({ readOnly }: { readOnly: boolean }) {
   const [knowledge, setKnowledge] = useState<any[]>([])
   const [loading, setLoading]     = useState(true)
   const [editing, setEditing]     = useState<string | null>(null)
@@ -357,10 +361,10 @@ function ElaraKnowledge() {
                   {editing === k.section_key ? (
                     <>
                       <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>Cancel</button>
-                      <button className="btn btn-primary btn-sm" onClick={() => saveEdit(k.section_key)} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
+                      <button className="btn btn-primary btn-sm" onClick={() => saveEdit(k.section_key)} disabled={saving || readOnly} style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>{saving ? 'Saving...' : 'Save'}</button>
                     </>
                   ) : (
-                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit(k)}>Edit</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit(k)} disabled={readOnly} style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>Edit</button>
                   )}
                 </div>
               </div>
@@ -381,7 +385,7 @@ function ElaraKnowledge() {
 
 // ── Parking Lot ───────────────────────────────────────────────────────────────
 
-function ElaraParkingLot() {
+function ElaraParkingLot({ readOnly }: { readOnly: boolean }) {
   const [items, setItems]       = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
   const [filter, setFilter]     = useState<'parked' | 'resolved' | 'all'>('parked')
@@ -431,7 +435,12 @@ function ElaraParkingLot() {
                   {i.created_at && <div style={{ fontSize: 11, color: 'var(--dimmer)', marginTop: 6, fontFamily: 'Share Tech Mono' }}>{formatDistanceToNow(new Date(i.created_at), { addSuffix: true })}</div>}
                 </div>
                 {i.status === 'parked' && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => resolve(i.id)} disabled={resolving === i.id} style={{ flexShrink: 0 }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => resolve(i.id)}
+                    disabled={resolving === i.id || readOnly}
+                    style={{ flexShrink: 0, ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                  >
                     {resolving === i.id ? '...' : '✓ Resolve'}
                   </button>
                 )}

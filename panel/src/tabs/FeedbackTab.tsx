@@ -11,10 +11,11 @@ const STATUS_COLOR: Record<string, string> = {
   new: 'var(--yellow)', reviewed: 'var(--cyan)', actioned: 'var(--green)', dismissed: 'var(--dim)',
 }
 
-export default function FeedbackTab() {
+export default function FeedbackTab({ role }: { role: string }) {
   const [items, setItems]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState('all')
+  const readOnly = role !== 'owner'
 
   const load = () => {
     setLoading(true)
@@ -23,6 +24,7 @@ export default function FeedbackTab() {
   useEffect(load, [])
 
   const cycleStatus = async (id: string, current: string) => {
+    if (readOnly) return
     const next = current === 'new' ? 'reviewed' : current === 'reviewed' ? 'actioned' : current === 'actioned' ? 'dismissed' : 'new'
     await api.cfp.updateFeedback(id, next)
     setItems(prev => prev.map(f => f.id === id ? { ...f, status: next } : f))
@@ -65,8 +67,8 @@ export default function FeedbackTab() {
                   </span>
                   <span
                     onClick={() => cycleStatus(item.id, item.status)}
-                    title="Click to advance status"
-                    style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: .5, cursor: 'pointer', background: 'transparent', color: STATUS_COLOR[item.status] ?? 'var(--dim)', border: `1px solid ${STATUS_COLOR[item.status] ?? 'var(--border)'}` }}
+                    title={readOnly ? 'Read-only — owner can advance status' : 'Click to advance status'}
+                    style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: .5, cursor: readOnly ? 'not-allowed' : 'pointer', opacity: readOnly ? 0.6 : 1, background: 'transparent', color: STATUS_COLOR[item.status] ?? 'var(--dim)', border: `1px solid ${STATUS_COLOR[item.status] ?? 'var(--border)'}` }}
                   >
                     {item.status}
                   </span>

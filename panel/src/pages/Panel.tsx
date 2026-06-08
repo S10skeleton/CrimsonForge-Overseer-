@@ -82,9 +82,9 @@ const MOBILE_NAV: { id: Tab; glyph: string; label: string; dot?: string }[] = [
   { id: 'shops',      glyph: '\u2B21', label: 'CFP'     , dot: '#EA1823' },
 ]
 
-interface Props { onLogout: () => void }
+interface Props { role: string; onLogout: () => void }
 
-export default function Panel({ onLogout }: Props) {
+export default function Panel({ role, onLogout }: Props) {
   const [tab,        setTab]        = useState<Tab>('system')
   const [clock,      setClock]      = useState('')
   const [openGroups, setOpenGroups] = useState<Set<string>>(
@@ -285,6 +285,21 @@ export default function Panel({ onLogout }: Props) {
         </div>
 
         <div style={{ padding: '14px 16px 16px', borderTop: '1px solid var(--border)', marginTop: 12 }}>
+          {role === 'viewer' && (
+            <div style={{ textAlign: 'center', marginBottom: 8 }}>
+              <span style={{
+                fontSize: '0.7rem',
+                color: 'var(--dim)',
+                border: '1px solid var(--dim)',
+                borderRadius: '4px',
+                padding: '2px 6px',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+              }}>
+                View Only
+              </span>
+            </div>
+          )}
           <button onClick={onLogout} className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'center' }}>
             Sign Out
           </button>
@@ -299,18 +314,18 @@ export default function Panel({ onLogout }: Props) {
         <div style={{ height: 2, background: 'linear-gradient(90deg, rgba(89,73,172,.4), rgba(74,204,254,.2), transparent)' }} />
         <div className="panel-main" style={{ padding: '32px 36px', maxWidth: 1200 }}>
           {tab === 'system'     && <SystemTab />}
-          {tab === 'shops'      && <ShopsTab />}
+          {tab === 'shops'      && <ShopsTab role={role} />}
           {tab === 'users'      && <UsersTab />}
           {tab === 'billing'    && <BillingTab />}
-          {tab === 'messages'   && <MessagesTab />}
-          {tab === 'leads'      && <LeadsTab />}
-          {tab === 'feedback'   && <FeedbackTab />}
-          {tab === 'aiconfig'   && <AIConfigTab />}
-          {tab === 'elara'      && <ElaraTab />}
-          {tab === 'forgepilot' && <ForgePilotTab />}
+          {tab === 'messages'   && <MessagesTab role={role} />}
+          {tab === 'leads'      && <LeadsTab role={role} />}
+          {tab === 'feedback'   && <FeedbackTab role={role} />}
+          {tab === 'aiconfig'   && <AIConfigTab role={role} />}
+          {tab === 'elara'      && <ElaraTab role={role} />}
+          {tab === 'forgepilot' && <ForgePilotTab role={role} />}
           {tab === 'fp-billing' && <ForgePilotBillingTab />}
-          {tab === 'fp-messages' && <ForgePilotMessagesTab />}
-          {tab === 'fp-feedback' && <ForgePilotFeedbackTab />}
+          {tab === 'fp-messages' && <ForgePilotMessagesTab role={role} />}
+          {tab === 'fp-feedback' && <ForgePilotFeedbackTab role={role} />}
           {tab === 'forgepulse' && <ForgePulseTab />}
         </div>
       </div>

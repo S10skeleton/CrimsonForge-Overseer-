@@ -15,7 +15,8 @@ const STATUS_OPTIONS = [
   { value: 'lost',           label: 'Lost' },
 ]
 
-export default function LeadsTab() {
+export default function LeadsTab({ role }: { role: string }) {
+  const readOnly = role !== 'owner'
   const [leads, setLeads]           = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
   const [editingId, setEditingId]   = useState<string | null>(null)
@@ -26,11 +27,13 @@ export default function LeadsTab() {
   }, [])
 
   const updateLead = async (id: string, updates: Record<string, unknown>) => {
+    if (readOnly) return
     await api.cfp.updateLead(id, updates)
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updates } : l))
   }
 
   const deleteLead = async (id: string) => {
+    if (readOnly) return
     if (!confirm('Delete this lead? Cannot be undone.')) return
     await api.cfp.deleteLead(id)
     setLeads(prev => prev.filter(l => l.id !== id))
@@ -96,20 +99,34 @@ export default function LeadsTab() {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
                     <select
                       value={status}
+                      disabled={readOnly}
+                      title={readOnly ? 'Owner access required' : undefined}
                       onChange={async e => updateLead(lead.id, {
                         status: e.target.value,
                         last_contacted_at: ['contacted','demo_scheduled','invite_sent'].includes(e.target.value)
                           ? new Date().toISOString() : lead.last_contacted_at,
                       })}
-                      style={{ fontSize: 12, fontWeight: 700, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer' }}
+                      style={{ fontSize: 12, fontWeight: 700, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)', cursor: readOnly ? 'not-allowed' : 'pointer', opacity: readOnly ? 0.5 : 1 }}
                     >
                       {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={() => { setEditingId(isEditing ? null : lead.id); setNotesDraft(lead.notes || '') }} className="btn btn-ghost btn-sm">
+                      <button
+                        onClick={() => { setEditingId(isEditing ? null : lead.id); setNotesDraft(lead.notes || '') }}
+                        className="btn btn-ghost btn-sm"
+                        disabled={readOnly}
+                        style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                        title={readOnly ? 'Owner access required' : undefined}
+                      >
                         {isEditing ? 'Done' : 'Notes'}
                       </button>
-                      <button onClick={() => deleteLead(lead.id)} className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', borderColor: 'var(--red)' }}>{'\u2717'}</button>
+                      <button
+                        onClick={() => deleteLead(lead.id)}
+                        className="btn btn-ghost btn-sm"
+                        disabled={readOnly}
+                        style={{ color: 'var(--red)', borderColor: 'var(--red)', ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                        title={readOnly ? 'Owner access required' : undefined}
+                      >{'\u2717'}</button>
                     </div>
                   </div>
                 </div>

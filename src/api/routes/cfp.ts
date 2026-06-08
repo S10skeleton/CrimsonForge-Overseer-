@@ -5,7 +5,7 @@
 
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, requireOwner } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -214,7 +214,7 @@ router.get('/messages', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/messages', requireAuth, async (req, res) => {
+router.post('/messages', requireOwner, async (req, res) => {
   const { title, body, type, active, expires_at } = req.body as {
     title?: string
     body?: string
@@ -250,7 +250,7 @@ router.post('/messages', requireAuth, async (req, res) => {
   }
 })
 
-router.patch('/messages/:id', requireAuth, async (req, res) => {
+router.patch('/messages/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   const { title, body, type, active, expires_at } = req.body as {
     title?: string
@@ -284,7 +284,7 @@ router.patch('/messages/:id', requireAuth, async (req, res) => {
   }
 })
 
-router.delete('/messages/:id', requireAuth, async (req, res) => {
+router.delete('/messages/:id', requireOwner, async (req, res) => {
   const { id } = req.params
 
   try {
@@ -331,7 +331,7 @@ router.get('/ai-config', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/ai-config', requireAuth, async (req, res) => {
+router.patch('/ai-config', requireOwner, async (req, res) => {
   const { updates } = req.body as {
     updates?: Array<{ config_key: string; config_value: string }>
   }
@@ -362,7 +362,7 @@ router.patch('/ai-config', requireAuth, async (req, res) => {
 })
 
 // ── Shop founder notes ──────────────────────────────────────────────────────
-router.patch('/shops/:id/notes', requireAuth, async (req, res) => {
+router.patch('/shops/:id/notes', requireOwner, async (req, res) => {
   const { id } = req.params
   const { founder_notes } = req.body as { founder_notes: string }
   try {
@@ -376,7 +376,7 @@ router.patch('/shops/:id/notes', requireAuth, async (req, res) => {
 })
 
 // ── Leads PATCH / DELETE ────────────────────────────────────────────────────
-router.patch('/leads/:id', requireAuth, async (req, res) => {
+router.patch('/leads/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   const updates = req.body as Record<string, unknown>
   try {
@@ -389,7 +389,7 @@ router.patch('/leads/:id', requireAuth, async (req, res) => {
   }
 })
 
-router.delete('/leads/:id', requireAuth, async (req, res) => {
+router.delete('/leads/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   try {
     const sb = getCFPSupabase()
@@ -416,7 +416,7 @@ router.get('/feedback', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/feedback/:id', requireAuth, async (req, res) => {
+router.patch('/feedback/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status: string }
   try {

@@ -6,7 +6,7 @@
 import { Router } from 'express'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, requireOwner } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -418,7 +418,7 @@ router.get('/messages', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/messages', requireAuth, async (req, res): Promise<void> => {
+router.post('/messages', requireOwner, async (req, res): Promise<void> => {
   const { title, body, type, active, expires_at } = req.body
   if (!title?.trim() || !body?.trim()) {
     res.status(400).json({ error: 'title and body are required' })
@@ -445,7 +445,7 @@ router.post('/messages', requireAuth, async (req, res): Promise<void> => {
   }
 })
 
-router.patch('/messages/:id', requireAuth, async (req, res) => {
+router.patch('/messages/:id', requireOwner, async (req, res) => {
   const { title, body, type, active, expires_at } = req.body
   try {
     const sb = getFPSupabase()
@@ -467,7 +467,7 @@ router.patch('/messages/:id', requireAuth, async (req, res) => {
   }
 })
 
-router.delete('/messages/:id', requireAuth, async (req, res) => {
+router.delete('/messages/:id', requireOwner, async (req, res) => {
   try {
     const sb = getFPSupabase()
     const { error } = await sb
@@ -499,7 +499,7 @@ router.get('/feedback', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/feedback/:id', requireAuth, async (req, res) => {
+router.patch('/feedback/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status: string }
   try {
@@ -533,7 +533,7 @@ type InviteRow = {
   notes: string | null
 }
 
-router.post('/invite', requireAuth, async (req, res): Promise<void> => {
+router.post('/invite', requireOwner, async (req, res): Promise<void> => {
   const { email, full_name, role, notes } = req.body as {
     email?: string
     full_name?: string
@@ -655,7 +655,7 @@ router.get('/invites', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/invites/:id/resend', requireAuth, async (req, res): Promise<void> => {
+router.post('/invites/:id/resend', requireOwner, async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -694,7 +694,7 @@ router.post('/invites/:id/resend', requireAuth, async (req, res): Promise<void> 
   }
 })
 
-router.delete('/invites/:id', requireAuth, async (req, res): Promise<void> => {
+router.delete('/invites/:id', requireOwner, async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -777,7 +777,7 @@ router.get('/insights', requireAuth, async (req, res) => {
 // have a row yet. Idempotent — re-running only analyzes sessions still
 // missing insights. Bounded by FP_INSIGHTS_BATCH_LIMIT per call.
 
-router.post('/backfill-insights', requireAuth, async (_req, res) => {
+router.post('/backfill-insights', requireOwner, async (_req, res) => {
   try {
     const { runInsightAnalysis } = await import('../../jobs/fp-insights.js')
     const summary = await runInsightAnalysis()

@@ -23,7 +23,8 @@ const TYPE_CONFIG: Record<MsgType, { label: string; color: string; border: strin
 
 const EMPTY_FORM = { title: '', body: '', type: 'info' as MsgType, active: false, expires_at: '' }
 
-export default function MessagesTab() {
+export default function MessagesTab({ role }: { role: string }) {
+  const readOnly = role !== 'owner'
   const [messages, setMessages]     = useState<SysMessage[]>([])
   const [loading, setLoading]       = useState(true)
   const [showModal, setShowModal]   = useState(false)
@@ -141,7 +142,15 @@ export default function MessagesTab() {
             Push platform-wide notices to all shops and users.
           </div>
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ New Message</button>
+        <button
+          className="btn btn-primary"
+          onClick={openNew}
+          disabled={readOnly}
+          style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+          title={readOnly ? 'Owner access required' : undefined}
+        >
+          + New Message
+        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 28 }}>
@@ -254,11 +263,12 @@ export default function MessagesTab() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     <button
                       onClick={() => handleToggleActive(msg)}
-                      disabled={isToggling}
+                      disabled={isToggling || readOnly}
+                      title={readOnly ? 'Owner access required' : undefined}
                       style={{
-                        padding: '6px 14px', borderRadius: 6, cursor: 'pointer',
+                        padding: '6px 14px', borderRadius: 6, cursor: readOnly ? 'not-allowed' : 'pointer',
                         fontFamily: 'Rajdhani', fontWeight: 700, fontSize: 13, letterSpacing: .5,
-                        border: '1px solid', transition: 'all .15s', opacity: isToggling ? .5 : 1,
+                        border: '1px solid', transition: 'all .15s', opacity: readOnly ? 0.4 : isToggling ? .5 : 1,
                         ...(msg.active
                           ? { background: 'rgba(239,68,68,.1)', borderColor: 'rgba(239,68,68,.3)', color: 'var(--red)' }
                           : { background: 'rgba(34,197,94,.1)', borderColor: 'rgba(34,197,94,.3)', color: 'var(--green)' }
@@ -268,20 +278,29 @@ export default function MessagesTab() {
                       {isToggling ? '...' : msg.active ? 'Deactivate' : '⚡ Activate'}
                     </button>
 
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(msg)}>Edit</button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => openEdit(msg)}
+                      disabled={readOnly}
+                      style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                      title={readOnly ? 'Owner access required' : undefined}
+                    >
+                      Edit
+                    </button>
 
                     <button
                       onClick={() => handleDelete(msg.id)}
-                      disabled={isDeleting}
+                      disabled={isDeleting || readOnly}
+                      title={readOnly ? 'Owner access required' : undefined}
                       style={{
-                        padding: '5px 10px', borderRadius: 6, cursor: 'pointer',
+                        padding: '5px 10px', borderRadius: 6, cursor: readOnly ? 'not-allowed' : 'pointer',
                         fontFamily: 'Rajdhani', fontWeight: 700, fontSize: 12,
                         border: '1px solid rgba(239,68,68,.2)',
                         background: 'transparent', color: 'var(--red)',
-                        opacity: isDeleting ? .4 : .6, transition: 'opacity .15s',
+                        opacity: readOnly ? 0.4 : isDeleting ? .4 : .6, transition: 'opacity .15s',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = isDeleting ? '.4' : '.6')}
+                      onMouseEnter={e => { if (!readOnly) e.currentTarget.style.opacity = '1' }}
+                      onMouseLeave={e => { if (!readOnly) e.currentTarget.style.opacity = isDeleting ? '.4' : '.6' }}
                     >
                       {isDeleting ? '...' : '✕'}
                     </button>

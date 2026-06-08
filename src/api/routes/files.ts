@@ -11,7 +11,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import { google } from 'googleapis'
 import { Readable } from 'stream'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, requireOwner } from '../middleware/auth.js'
 import { runAgent } from '../../agent/index.js'
 import { createOAuthClient } from '../../lib/google-auth.js'
 
@@ -63,7 +63,7 @@ router.get('/list', requireAuth, async (_req, res) => {
 
 // ── POST /api/files/upload ─────────────────────────────────────────────────
 
-router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
+router.post('/upload', requireOwner, upload.single('file'), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: 'No file provided' })
     return
@@ -184,7 +184,7 @@ router.get('/:id/link', requireAuth, async (req, res) => {
 
 // ── POST /api/files/ask ────────────────────────────────────────────────────
 
-router.post('/ask', requireAuth, async (req, res) => {
+router.post('/ask', requireOwner, async (req, res) => {
   const { fileId, question } = req.body as { fileId?: string; question?: string }
 
   if (!fileId || !question?.trim()) {

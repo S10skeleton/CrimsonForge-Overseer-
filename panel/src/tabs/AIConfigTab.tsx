@@ -10,7 +10,8 @@ const MODELS = [
 
 const TOKEN_OPTIONS = [256, 512, 768, 1024, 1536, 2048, 3072, 4096]
 
-export default function AIConfigTab() {
+export default function AIConfigTab({ role }: { role: string }) {
+  const readOnly = role !== 'owner'
   const [rows, setRows]                 = useState<any[]>([])
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
@@ -101,7 +102,13 @@ export default function AIConfigTab() {
               ● unsaved changes
             </span>
           )}
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading || !dirty}>
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || loading || !dirty || readOnly}
+            style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+            title={readOnly ? 'Owner access required' : undefined}
+          >
             {saving ? 'Saving...' : 'Save Config'}
           </button>
         </div>
@@ -257,7 +264,13 @@ export default function AIConfigTab() {
 
           {/* Save footer */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 8 }}>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading || !dirty} style={{ minWidth: 140 }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleSave}
+              disabled={saving || loading || !dirty || readOnly}
+              style={{ minWidth: 140, ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+              title={readOnly ? 'Owner access required' : undefined}
+            >
               {saving ? 'Saving...' : 'Save Config'}
             </button>
             {dirty && (

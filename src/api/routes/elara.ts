@@ -5,7 +5,7 @@
 
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, requireOwner } from '../middleware/auth.js'
 import { runAgent } from '../../agent/index.js'
 import { allAgentTools } from '../../tools/index.js'
 
@@ -54,7 +54,7 @@ router.get('/knowledge', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/knowledge/:key', requireAuth, async (req, res) => {
+router.patch('/knowledge/:key', requireOwner, async (req, res) => {
   const { key } = req.params
   const { content, label } = req.body as { content?: string; label?: string }
 
@@ -101,7 +101,7 @@ router.get('/parking-lot', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/parking-lot/:id', requireAuth, async (req, res) => {
+router.patch('/parking-lot/:id', requireOwner, async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status?: string }
 
@@ -225,7 +225,7 @@ router.get('/doc-debt', requireAuth, async (_req, res) => {
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
-router.post('/chat', requireAuth, async (req, res) => {
+router.post('/chat', requireOwner, async (req, res) => {
   const { message, history } = req.body as {
     message?: string
     history?: Array<{ role: 'user' | 'assistant'; content: string }>

@@ -47,7 +47,8 @@ function OnboardingBar({ shop }: { shop: any }) {
   )
 }
 
-export default function ShopsTab() {
+export default function ShopsTab({ role }: { role: string }) {
+  const readOnly = role !== 'owner'
   const [shops, setShops]             = useState<any[]>([])
   const [loading, setLoading]         = useState(true)
   const [inviteShopId, setInviteShopId] = useState<string | null>(null)
@@ -68,6 +69,7 @@ export default function ShopsTab() {
   const partnerCount = shops.filter(s => s.subscription_tier === 'partner' || s.subscription_status === 'partner').length
 
   const saveNotes = async (shopId: string) => {
+    if (readOnly) return
     await api.cfp.saveShopNotes(shopId, notesDraft)
     setShops(prev => prev.map(s => s.id === shopId ? { ...s, founder_notes: notesDraft } : s))
     setEditingNotes(null)
@@ -202,10 +204,11 @@ export default function ShopsTab() {
                   </div>
                 ) : (
                   <div
-                    onClick={() => { setEditingNotes(shop.id); setNotesDraft(shop.founder_notes || '') }}
-                    style={{ fontSize: 12, color: 'var(--dim)', cursor: 'pointer' }}
+                    onClick={() => { if (readOnly) return; setEditingNotes(shop.id); setNotesDraft(shop.founder_notes || '') }}
+                    style={{ fontSize: 12, color: 'var(--dim)', cursor: readOnly ? 'default' : 'pointer' }}
+                    title={readOnly ? 'Owner access required to edit notes' : undefined}
                   >
-                    {shop.founder_notes ? <span>{shop.founder_notes}</span> : <span style={{ opacity: .5 }}>+ Add notes</span>}
+                    {shop.founder_notes ? <span>{shop.founder_notes}</span> : !readOnly && <span style={{ opacity: .5 }}>+ Add notes</span>}
                   </div>
                 )}
               </div>

@@ -1,5 +1,7 @@
 /**
- * JWT auth middleware for the control panel API
+ * JWT auth middleware for the control panel API.
+ * requireAuth   — any valid login (owner or viewer)
+ * requireOwner  — owner only; viewers get 403
  */
 
 import type { Request, Response, NextFunction } from 'express'
@@ -31,4 +33,14 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' })
   }
+}
+
+export function requireOwner(req: AuthRequest, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.panelUser?.role !== 'owner') {
+      res.status(403).json({ error: 'Owner access required' })
+      return
+    }
+    next()
+  })
 }

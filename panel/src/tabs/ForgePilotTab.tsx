@@ -34,7 +34,8 @@ function smallBtn(color: string): CSSProperties {
   }
 }
 
-export default function ForgePilotTab() {
+export default function ForgePilotTab({ role }: { role: string }) {
+  const readOnly = role !== 'owner'
   const [stats,    setStats]    = useState<any>(null)
   const [users,    setUsers]    = useState<any[]>([])
   const [shops,    setShops]    = useState<any[]>([])
@@ -290,6 +291,8 @@ export default function ForgePilotTab() {
             <div className="section-label">INVITES &mdash; {invites.length} total</div>
             <button
               onClick={() => { setInviteModal(true); setInviteError(null) }}
+              disabled={readOnly}
+              title={readOnly ? 'Owner access required' : undefined}
               style={{
                 marginLeft: 'auto',
                 background: 'var(--accent)',
@@ -299,8 +302,9 @@ export default function ForgePilotTab() {
                 padding: '7px 14px',
                 fontSize: 12,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: readOnly ? 'not-allowed' : 'pointer',
                 letterSpacing: 0.5,
+                opacity: readOnly ? 0.4 : 1,
               }}
             >
               + INVITE USER
@@ -362,8 +366,18 @@ export default function ForgePilotTab() {
                 <div style={{ display: 'flex', gap: 6 }}>
                   {inv.status === 'pending' && (
                     <>
-                      <button onClick={() => handleResend(inv.id)} style={smallBtn('var(--cyan)')}>RESEND</button>
-                      <button onClick={() => handleRevoke(inv.id, inv.email)} style={smallBtn('var(--red)')}>REVOKE</button>
+                      <button
+                        onClick={() => handleResend(inv.id)}
+                        disabled={readOnly}
+                        title={readOnly ? 'Owner access required' : undefined}
+                        style={{ ...smallBtn('var(--cyan)'), ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                      >RESEND</button>
+                      <button
+                        onClick={() => handleRevoke(inv.id, inv.email)}
+                        disabled={readOnly}
+                        title={readOnly ? 'Owner access required' : undefined}
+                        style={{ ...smallBtn('var(--red)'), ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
+                      >REVOKE</button>
                     </>
                   )}
                 </div>

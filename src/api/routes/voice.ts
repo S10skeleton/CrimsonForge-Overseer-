@@ -14,7 +14,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { DeepgramClient } from '@deepgram/sdk'
-import { requireAuth } from '../middleware/auth.js'
+import { requireOwner } from '../middleware/auth.js'
 import { runAgent } from '../../agent/index.js'
 
 const router = Router()
@@ -80,7 +80,7 @@ Critical formatting rules for voice responses:
 
 // ── POST /api/voice/message ────────────────────────────────────────────────
 
-router.post('/message', requireAuth, upload.single('audio'), async (req, res) => {
+router.post('/message', requireOwner, upload.single('audio'), async (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: 'No audio file provided' })
     return
@@ -140,7 +140,7 @@ router.post('/message', requireAuth, upload.single('audio'), async (req, res) =>
 // ── POST /api/voice/speak ──────────────────────────────────────────────────
 // Convert arbitrary text to Elara's voice — used for proactive alerts
 
-router.post('/speak', requireAuth, async (req, res) => {
+router.post('/speak', requireOwner, async (req, res) => {
   const { text } = req.body as { text?: string }
 
   if (!text?.trim()) {
