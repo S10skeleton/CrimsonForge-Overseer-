@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 
-interface Leaf { to: string; label: string; glyph: string }
+interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean }
 interface Section { id: string; label: string; accent?: string; online?: boolean; items: Leaf[] }
 
 // ─── Function-based information architecture (Overseer 2.0) ──────────────────
@@ -44,10 +44,10 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'settings', label: 'Settings', items: [
-      { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉' },
-      { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤' },
+      { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉', adminOnly: true },
+      { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤', adminOnly: true },
       { to: '/settings/integrations', label: 'Integrations',   glyph: '◈' },
-      { to: '/activity',              label: 'Activity',       glyph: '◎' },
+      { to: '/activity',              label: 'Activity',       glyph: '◎', adminOnly: true },
     ],
   },
 ]
@@ -149,19 +149,23 @@ export default function Panel({ role, onLogout }: Props) {
           ))}
 
           {/* Functional sections */}
-          {SECTIONS.map(section => (
+          {SECTIONS.map(section => {
+            const items = section.items.filter(it => !it.adminOnly || role !== 'read_only')
+            if (items.length === 0) return null
+            return (
             <div key={section.id} style={{ marginTop: 14 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: 'var(--text-hint)', textTransform: 'uppercase', padding: '0 12px 6px' }}>
                 {section.label}
               </div>
-              {section.items.map(item => (
+              {items.map(item => (
                 <NavLink key={item.to} to={item.to} style={navLinkStyle()}>
                   <span style={{ width: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-hint)' }}>{item.glyph}</span>
                   {item.label}
                 </NavLink>
               ))}
             </div>
-          ))}
+            )
+          })}
         </nav>
 
         {/* Clock */}

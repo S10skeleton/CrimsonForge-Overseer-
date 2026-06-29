@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Panel from './pages/Panel'
 import Placeholder from './components/Placeholder'
+import AdminsTab from './tabs/AdminsTab'
+import ActivityTab from './tabs/ActivityTab'
+import type { LoginResult } from './api'
 
 import SystemTab             from './tabs/SystemTab'
 import ShopsTab              from './tabs/ShopsTab'
@@ -37,15 +41,17 @@ export default function App() {
     const stored = localStorage.getItem('panel_token')
     if (stored) {
       setToken(stored)
-      setRole(getRoleFromToken(stored))
+      setRole(localStorage.getItem('panel_role') ?? getRoleFromToken(stored))
     }
     setChecking(false)
   }, [])
 
-  const handleLogin = (t: string) => {
-    localStorage.setItem('panel_token', t)
-    setToken(t)
-    setRole(getRoleFromToken(t))
+  const handleLogin = (result: LoginResult) => {
+    localStorage.setItem('panel_token', result.token)
+    localStorage.setItem('panel_role', result.role)
+    localStorage.setItem('panel_user', JSON.stringify(result.user))
+    setToken(result.token)
+    setRole(result.role)
   }
 
   const handleLogout = () => {
@@ -64,6 +70,9 @@ export default function App() {
         path="/login"
         element={token ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />}
       />
+
+      {/* Public: email reset (?token=) and the logged-in must-change flow */}
+      <Route path="/reset" element={<ResetPassword />} />
 
       <Route
         path="/"
@@ -101,10 +110,10 @@ export default function App() {
         <Route path="forgepulse" element={<ForgePulseTab />} />
 
         {/* Settings */}
-        <Route path="settings/admins"       element={<Placeholder title="Admins & Roles" phase="Phase 2 (P0a)" note="Named accounts, owner/admin/read-only, add/suspend/reset." />} />
-        <Route path="settings/audit"        element={<Placeholder title="Audit Log" phase="Phase 2 (P0a)" note="overseer_audit viewer." />} />
+        <Route path="settings/admins"       element={<AdminsTab role={role} />} />
+        <Route path="settings/audit"        element={<Placeholder title="Audit Log" phase="Phase 2" note="overseer_audit viewer (events available now under Activity)." />} />
         <Route path="settings/integrations" element={<Placeholder title="Integrations" phase="Phase 2" note="Slack, Gmail, Calendar, Twilio, Resend, Stripe, Railway, Sentry, Netlify." />} />
-        <Route path="activity"              element={<Placeholder title="Activity" phase="Phase 2 (P0a)" note="In-app twin of #cf-activity — payments, signups, leads, key mints." />} />
+        <Route path="activity"              element={<ActivityTab />} />
 
         <Route path="*" element={<Navigate to="/home" replace />} />
       </Route>

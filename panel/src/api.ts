@@ -36,13 +36,108 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+export interface PanelUser {
+  id: string
+  username: string
+  email: string
+  must_change_password: boolean
+}
+
+export interface LoginResult {
+  token: string
+  role: string
+  user: PanelUser
+}
+
+export interface Admin {
+  id: string
+  username: string
+  email: string
+  role: 'owner' | 'admin' | 'read_only'
+  status: 'active' | 'suspended'
+  must_change_password: boolean
+  last_login_at: string | null
+  created_at: string
+  created_by: string | null
+}
+
+export interface ActivityEvent {
+  id: number
+  type: string
+  title: string
+  body: string | null
+  severity: 'info' | 'success' | 'warning' | 'critical'
+  channel: string | null
+  meta: Record<string, unknown>
+  created_at: string
+}
+
+export interface Page<T> {
+  data: T[]
+  meta: { next_cursor: number | null }
+}
+
 export const api = {
   auth: {
-    login: (passphrase: string) =>
-      request<{ token: string }>('/api/auth/login', {
+    login: (username: string, password: string) =>
+      request<LoginResult>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ passphrase }),
+        body: JSON.stringify({ username, password }),
       }),
+    forgot: (usernameOrEmail: string) =>
+      request<{ ok: boolean }>('/api/auth/forgot', {
+        method: 'POST',
+        body: JSON.stringify({ usernameOrEmail }),
+      }),
+    reset: (token: string, newPassword: string) =>
+      request<{ ok: boolean }>('/api/auth/reset', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ ok: boolean }>('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }),
+    status: () => request<{ locked: boolean; secondsRemaining?: number }>('/api/auth/status'),
+  },
+
+  admins: {
+    list: () => request<Admin[]>('/api/admins'),
+    create: (payload: { username: string; email: string; role: string }) =>
+      request<{ admin: Admin; emailed: boolean; tempPassword?: string }>('/api/admins', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    update: (id: string, payload: Partial<{ role: string; status: string; email: string }>) =>
+      request<{ admin: Admin }>(`/api/admins/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    resetPassword: (id: string) =>
+      request<{ ok: boolean; emailed: boolean; tempPassword?: string }>(`/api/admins/${id}/reset-password`, {
+        method: 'POST',
+      }),
+  },
+
+  activity: {
+    events: (params?: { limit?: number; cursor?: number | null; type?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.cursor != null) q.set('cursor', String(params.cursor))
+      if (params?.type) q.set('type', params.type)
+      const qs = q.toString()
+      return request<Page<ActivityEvent>>(`/api/activity${qs ? `?${qs}` : ''}`)
+    },
+    audit: (params?: { limit?: number; cursor?: number | null; action?: string; actor?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.cursor != null) q.set('cursor', String(params.cursor))
+      if (params?.action) q.set('action', params.action)
+      if (params?.actor) q.set('actor', params.actor)
+      const qs = q.toString()
+      return request<Page<Record<string, unknown>>>(`/api/activity/audit${qs ? `?${qs}` : ''}`)
+    },
   },
 
   status: {
