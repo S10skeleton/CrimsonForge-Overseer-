@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
 import Panel from './pages/Panel'
 import Placeholder from './components/Placeholder'
+import HomeTab from './tabs/HomeTab'
 import AdminsTab from './tabs/AdminsTab'
 import ActivityTab from './tabs/ActivityTab'
 import type { LoginResult } from './api'
@@ -81,7 +82,7 @@ export default function App() {
         <Route index element={<Navigate to="/home" replace />} />
 
         {/* Home */}
-        <Route path="home" element={<Placeholder title="Home" phase="Phase 3" note="Business dashboard — revenue, leads, runway, live activity." />} />
+        <Route path="home" element={<HomeTab />} />
 
         {/* Elara */}
         <Route path="elara"    element={<ElaraTab role={role} />} />

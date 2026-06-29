@@ -77,6 +77,13 @@ export interface Page<T> {
   meta: { next_cursor: number | null }
 }
 
+export interface HomeSummary {
+  signupsThisWeek: number | null
+  leads: { open: number | null; hot: number | null; total: number | null }
+  runway: { available: boolean }
+  pipeline: { available: boolean }
+}
+
 export const api = {
   auth: {
     login: (username: string, password: string) =>
@@ -118,6 +125,10 @@ export const api = {
       request<{ ok: boolean; emailed: boolean; tempPassword?: string }>(`/api/admins/${id}/reset-password`, {
         method: 'POST',
       }),
+  },
+
+  home: {
+    summary: () => request<HomeSummary>('/api/home/summary'),
   },
 
   activity: {

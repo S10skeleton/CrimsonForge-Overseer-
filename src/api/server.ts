@@ -7,6 +7,7 @@ import cors from 'cors'
 import authRouter from './routes/auth.js'
 import adminsRouter from './routes/admins.js'
 import activityRouter from './routes/activity.js'
+import homeRouter from './routes/home.js'
 import statusRouter from './routes/status.js'
 import cfpRouter from './routes/cfp.js'
 import elaraRouter from './routes/elara.js'
@@ -39,6 +40,7 @@ export function createApiServer(): express.Express {
   app.use('/api/auth', authRouter)
   app.use('/api/admins', adminsRouter)
   app.use('/api/activity', activityRouter)
+  app.use('/api/home', homeRouter)
   app.use('/api/status', statusRouter)
   app.use('/api/cfp', cfpRouter)
   app.use('/api/elara', elaraRouter)

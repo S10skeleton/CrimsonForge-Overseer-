@@ -321,4 +321,6 @@ select option { background: var(--bg-surface); color: var(--text-primary); }
   .subtab-row { flex-wrap: wrap !important; }
 
   .chat-area { height: calc(100vh - 200px) !important; }
+
+  .home-grid { grid-template-columns: 1fr !important; }
 }
