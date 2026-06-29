@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "briefing": "tsx --env-file=.env src/trigger-briefing.ts",
-    "google-auth": "tsx --env-file=.env scripts/google-oauth-setup.ts"
+    "google-auth": "tsx --env-file=.env scripts/google-oauth-setup.ts",
+    "create-admin": "tsx --env-file=.env scripts/create-admin.ts"
   },
   "keywords": [
     "crimson-forge",
@@ -33,6 +34,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^20.10.0",
     "@types/node-cron": "^3.0.8",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "googleapis": "^140.0.0",
@@ -43,6 +45,7 @@
     "typescript": "^5.3.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "eslint": "^8.54.0",

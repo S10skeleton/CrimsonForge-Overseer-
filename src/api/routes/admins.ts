@@ -1,0 +1,220 @@
+/**
+ * Admin management — named operator accounts (overseer_admins).
+ * List/read: requireAdmin. All mutations: requireOwner. Everything audited;
+ * account-changing actions emit activity events. Never returns secrets.
+ */
+
+import { Router } from 'express'
+import crypto from 'crypto'
+import type { Role, AuthRequest } from '../middleware/auth.js'
+import { requireAdmin, requireOwner } from '../middleware/auth.js'
+import { overseerDb } from '../../lib/overseerDb.js'
+import { hashPassword } from '../../lib/password.js'
+import { audit } from '../../lib/audit.js'
+import { sendEmail, isEmailConfigured } from '../../notifications/email.js'
+
+const router = Router()
+
+const SAFE_COLUMNS = 'id, username, email, role, status, must_change_password, last_login_at, created_at, created_by'
+const ROLES: Role[] = ['owner', 'admin', 'read_only']
+
+function tempPassword(): string {
+  // 18 bytes base64url → 24 chars, comfortably above the 12-char policy.
+  return crypto.randomBytes(18).toString('base64url')
+}
+
+async function activeOwnerCount(): Promise<number> {
+  const { count } = await overseerDb
+    .from('overseer_admins')
+    .select('id', { count: 'exact', head: true })
+    .eq('role', 'owner')
+    .eq('status', 'active')
+  return count ?? 0
+}
+
+// ─── GET /api/admins ─────────────────────────────────────────────────────────
+router.get('/', requireAdmin, async (_req, res) => {
+  const { data, error } = await overseerDb
+    .from('overseer_admins')
+    .select(SAFE_COLUMNS)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    res.status(500).json({ error: 'Could not load admins' })
+    return
+  }
+  res.json(data ?? [])
+})
+
+// ─── POST /api/admins  { username, email, role } ─────────────────────────────
+router.post('/', requireOwner, async (req: AuthRequest, res) => {
+  const { username, email, role } = req.body as { username?: string; email?: string; role?: Role }
+
+  const uname = String(username ?? '').toLowerCase().trim()
+  const mail = String(email ?? '').toLowerCase().trim()
+  if (!uname || !mail || !role || !ROLES.includes(role)) {
+    res.status(400).json({ error: 'username, email and a valid role are required' })
+    return
+  }
+
+  const temp = tempPassword()
+  const password_hash = await hashPassword(temp)
+
+  const { data, error } = await overseerDb
+    .from('overseer_admins')
+    .insert({
+      username: uname,
+      email: mail,
+      password_hash,
+      role,
+      status: 'active',
+      must_change_password: true,
+      created_by: req.panelUser?.id ?? null,
+    })
+    .select(SAFE_COLUMNS)
+    .single()
+
+  if (error) {
+    const dup = /duplicate|unique/i.test(error.message)
+    res.status(dup ? 409 : 500).json({ error: dup ? 'That username or email already exists' : 'Could not create admin' })
+    return
+  }
+
+  audit(req, { action: 'admin.create', targetType: 'admin', targetId: data.id, meta: { username: uname, role } })
+
+  // Email the temp password; fall back to returning it once if email is off/failed.
+  let emailed = false
+  if (isEmailConfigured()) {
+    const base = process.env.PANEL_RESET_URL_BASE || ''
+    const sent = await sendEmail({
+      to: mail,
+      subject: 'Your Crimson Forge Overseer account',
+      text: `An Overseer account was created for you.\n\nUsername: ${uname}\nTemporary password: ${temp}\n\nSign in at ${base} and you'll be prompted to set a new password.`,
+      html: `<p>An Overseer account was created for you.</p><p><b>Username:</b> ${uname}<br/><b>Temporary password:</b> <code>${temp}</code></p><p>Sign in at <a href="${base}">${base || 'the Overseer panel'}</a> and set a new password.</p>`,
+    })
+    emailed = sent.success
+  }
+
+  res.status(201).json({ admin: data, emailed, tempPassword: emailed ? undefined : temp })
+})
+
+// ─── PATCH /api/admins/:id  { role?, status?, email? } ───────────────────────
+router.patch('/:id', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { role, status, email } = req.body as { role?: Role; status?: string; email?: string }
+
+  const { data: current } = await overseerDb
+    .from('overseer_admins')
+    .select('id, username, role, status')
+    .eq('id', id)
+    .maybeSingle()
+
+  const target = current as { id: string; username: string; role: Role; status: string } | null
+  if (!target) {
+    res.status(404).json({ error: 'Admin not found' })
+    return
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (role !== undefined) {
+    if (!ROLES.includes(role)) {
+      res.status(400).json({ error: 'Invalid role' })
+      return
+    }
+    updates.role = role
+  }
+  if (status !== undefined) {
+    if (status !== 'active' && status !== 'suspended') {
+      res.status(400).json({ error: 'Invalid status' })
+      return
+    }
+    updates.status = status
+  }
+  if (email !== undefined) updates.email = String(email).toLowerCase().trim()
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: 'Nothing to update' })
+    return
+  }
+
+  // Last-active-owner guard: block demoting/suspending the only owner.
+  const demoting = updates.role !== undefined && updates.role !== 'owner' && target.role === 'owner'
+  const suspending = updates.status === 'suspended' && target.role === 'owner' && target.status === 'active'
+  if (demoting || suspending) {
+    if ((await activeOwnerCount()) <= 1) {
+      res.status(409).json({ error: 'Cannot demote or suspend the last active owner' })
+      return
+    }
+  }
+
+  const { data, error } = await overseerDb
+    .from('overseer_admins')
+    .update(updates)
+    .eq('id', id)
+    .select(SAFE_COLUMNS)
+    .single()
+
+  if (error) {
+    res.status(500).json({ error: 'Could not update admin' })
+    return
+  }
+
+  if (updates.role !== undefined && updates.role !== target.role) {
+    audit(req, { action: 'admin.role_change', targetType: 'admin', targetId: id, meta: { username: target.username, role: updates.role } })
+  }
+  if (updates.status !== undefined && updates.status !== target.status) {
+    audit(req, {
+      action: updates.status === 'suspended' ? 'admin.suspend' : 'admin.reactivate',
+      targetType: 'admin', targetId: id, meta: { username: target.username, status: updates.status },
+    })
+  }
+
+  res.json({ admin: data })
+})
+
+// ─── POST /api/admins/:id/reset-password ─────────────────────────────────────
+router.post('/:id/reset-password', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+
+  const { data: current } = await overseerDb
+    .from('overseer_admins')
+    .select('id, username, email')
+    .eq('id', id)
+    .maybeSingle()
+
+  const target = current as { id: string; username: string; email: string } | null
+  if (!target) {
+    res.status(404).json({ error: 'Admin not found' })
+    return
+  }
+
+  const temp = tempPassword()
+  const password_hash = await hashPassword(temp)
+  const { error } = await overseerDb
+    .from('overseer_admins')
+    .update({ password_hash, must_change_password: true, reset_token_hash: null, reset_token_expires_at: null })
+    .eq('id', id)
+
+  if (error) {
+    res.status(500).json({ error: 'Could not reset password' })
+    return
+  }
+
+  audit(req, { action: 'admin.password_reset', targetType: 'admin', targetId: id, meta: { username: target.username } })
+
+  let emailed = false
+  if (isEmailConfigured()) {
+    const base = process.env.PANEL_RESET_URL_BASE || ''
+    const sent = await sendEmail({
+      to: target.email,
+      subject: 'Your Crimson Forge Overseer password was reset',
+      text: `Your Overseer password was reset by an owner.\n\nUsername: ${target.username}\nTemporary password: ${temp}\n\nSign in at ${base} and set a new password.`,
+      html: `<p>Your Overseer password was reset by an owner.</p><p><b>Username:</b> ${target.username}<br/><b>Temporary password:</b> <code>${temp}</code></p><p>Sign in at <a href="${base}">${base || 'the Overseer panel'}</a> and set a new password.</p>`,
+    })
+    emailed = sent.success
+  }
+
+  res.json({ ok: true, emailed, tempPassword: emailed ? undefined : temp })
+})
+
+export default router
