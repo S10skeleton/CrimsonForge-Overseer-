@@ -24,15 +24,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'customers', label: 'Customers', items: [
-      { to: '/shops',       label: 'Shops',        glyph: '⬡' },
-      { to: '/users',       label: 'Users',        glyph: '◉' },
-      { to: '/billing',     label: 'Billing',      glyph: '⬨' },
-      { to: '/messages',    label: 'Messages',     glyph: '◎' },
-      { to: '/feedback',    label: 'Feedback',     glyph: '◈' },
-      { to: '/forgepilot',  label: 'ForgePilot',   glyph: '◈' },
-      { to: '/fp-billing',  label: 'FP Billing',   glyph: '⬨' },
-      { to: '/fp-messages', label: 'FP Messages',  glyph: '◎' },
-      { to: '/fp-feedback', label: 'FP Feedback',  glyph: '◈' },
+      { to: '/customers', label: 'Customers', glyph: '⬡' },
     ],
   },
   {
@@ -55,11 +47,11 @@ const SECTIONS: Section[] = [
 
 // Mobile nav — priority items + sign out
 const MOBILE_NAV: Leaf[] = [
-  { to: '/home',   label: 'HOME',   glyph: '⌂' },
-  { to: '/elara',  label: 'ELARA',  glyph: '⬟' },
-  { to: '/shops',  label: 'SHOPS',  glyph: '⬡' },
-  { to: '/leads',  label: 'LEADS',  glyph: '◇' },
-  { to: '/system', label: 'SYSTEM', glyph: '◈' },
+  { to: '/home',      label: 'HOME',   glyph: '⌂' },
+  { to: '/elara',     label: 'ELARA',  glyph: '⬟' },
+  { to: '/customers', label: 'CUST',   glyph: '⬡' },
+  { to: '/leads',     label: 'LEADS',  glyph: '◇' },
+  { to: '/system',    label: 'SYSTEM', glyph: '◈' },
 ]
 
 interface Props { role: string; onLogout: () => void }

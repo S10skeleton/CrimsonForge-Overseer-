@@ -10,20 +10,11 @@ import AdminsTab from './tabs/AdminsTab'
 import ActivityTab from './tabs/ActivityTab'
 import type { LoginResult } from './api'
 
-import SystemTab             from './tabs/SystemTab'
-import ShopsTab              from './tabs/ShopsTab'
-import UsersTab              from './tabs/UsersTab'
-import BillingTab            from './tabs/BillingTab'
-import MessagesTab           from './tabs/MessagesTab'
-import AIConfigTab           from './tabs/AIConfigTab'
-import ElaraTab              from './tabs/ElaraTab'
-import LeadsTab              from './tabs/LeadsTab'
-import FeedbackTab           from './tabs/FeedbackTab'
-import ForgePilotTab         from './tabs/ForgePilotTab'
-import ForgePilotBillingTab  from './tabs/ForgePilotBillingTab'
-import ForgePilotMessagesTab from './tabs/ForgePilotMessagesTab'
-import ForgePilotFeedbackTab from './tabs/ForgePilotFeedbackTab'
-import ForgePulseTab         from './tabs/ForgePulseTab'
+import SystemTab    from './tabs/SystemTab'
+import AIConfigTab  from './tabs/AIConfigTab'
+import ElaraTab     from './tabs/ElaraTab'
+import LeadsTab     from './tabs/LeadsTab'
+import CustomersTab from './tabs/CustomersTab'
 
 function getRoleFromToken(token: string): string {
   try {
@@ -95,22 +86,27 @@ export default function App() {
         <Route path="pipeline" element={<Placeholder title="Pipeline" phase="Phase 5" note="Deal stages — Investors, Enterprise, Beta partners." />} />
         <Route path="contacts" element={<Placeholder title="Contacts" phase="Phase 5" note="People & companies across the CRM." />} />
 
-        {/* Customers */}
-        <Route path="shops"       element={<ShopsTab role={role} />} />
-        <Route path="users"       element={<UsersTab />} />
-        <Route path="billing"     element={<BillingTab />} />
-        <Route path="messages"    element={<MessagesTab role={role} />} />
-        <Route path="feedback"    element={<FeedbackTab role={role} />} />
-        <Route path="forgepilot"  element={<ForgePilotTab role={role} />} />
-        <Route path="fp-billing"  element={<ForgePilotBillingTab />} />
-        <Route path="fp-messages" element={<ForgePilotMessagesTab role={role} />} />
-        <Route path="fp-feedback" element={<ForgePilotFeedbackTab role={role} />} />
+        {/* Customers — product is a filter, not separate trees (STEP5a) */}
+        <Route path="customers"                  element={<CustomersTab role={role} />} />
+        <Route path="customers/:product"         element={<CustomersTab role={role} />} />
+        <Route path="customers/:product/:view"   element={<CustomersTab role={role} />} />
+
+        {/* Redirects from the old per-product paths so saved links don't 404 */}
+        <Route path="shops"       element={<Navigate to="/customers/crimsonforge-pro/shops" replace />} />
+        <Route path="users"       element={<Navigate to="/customers/crimsonforge-pro/users" replace />} />
+        <Route path="billing"     element={<Navigate to="/customers/crimsonforge-pro/billing" replace />} />
+        <Route path="messages"    element={<Navigate to="/customers/crimsonforge-pro/messages" replace />} />
+        <Route path="feedback"    element={<Navigate to="/customers/crimsonforge-pro/feedback" replace />} />
+        <Route path="forgepilot"  element={<Navigate to="/customers/forgepilot/overview" replace />} />
+        <Route path="fp-billing"  element={<Navigate to="/customers/forgepilot/billing" replace />} />
+        <Route path="fp-messages" element={<Navigate to="/customers/forgepilot/messages" replace />} />
+        <Route path="fp-feedback" element={<Navigate to="/customers/forgepilot/feedback" replace />} />
+        <Route path="forgepulse"  element={<Navigate to="/customers/forgepulse/waitlist" replace />} />
 
         {/* Platform */}
         <Route path="enterprise" element={<Placeholder title="Enterprise" phase="Phase 6" note="Org accounts, seats, API keys, usage." />} />
         <Route path="financials" element={<Placeholder title="Financials" phase="Phase 6" note="MRR/ARR, burn, runway, cap table." />} />
         <Route path="system"     element={<SystemTab />} />
-        <Route path="forgepulse" element={<ForgePulseTab />} />
 
         {/* Settings */}
         <Route path="settings/admins"       element={<AdminsTab role={role} />} />
