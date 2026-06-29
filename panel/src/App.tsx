@@ -13,8 +13,12 @@ import type { LoginResult } from './api'
 import SystemTab    from './tabs/SystemTab'
 import AIConfigTab  from './tabs/AIConfigTab'
 import ElaraTab     from './tabs/ElaraTab'
-import LeadsTab     from './tabs/LeadsTab'
 import CustomersTab from './tabs/CustomersTab'
+import CrmLayout      from './tabs/crm/CrmLayout'
+import LeadsView      from './tabs/crm/LeadsView'
+import PipelineView   from './tabs/crm/PipelineView'
+import CompaniesView  from './tabs/crm/CompaniesView'
+import CompanyDetail  from './tabs/crm/CompanyDetail'
 
 function getRoleFromToken(token: string): string {
   try {
@@ -81,10 +85,18 @@ export default function App() {
         <Route path="elara/controls" element={<ElaraControlsTab role={role} />} />
         <Route path="aiconfig"       element={<AIConfigTab role={role} />} />
 
-        {/* CRM */}
-        <Route path="leads"    element={<LeadsTab role={role} />} />
-        <Route path="pipeline" element={<Placeholder title="Pipeline" phase="Phase 5" note="Deal stages — Investors, Enterprise, Beta partners." />} />
-        <Route path="contacts" element={<Placeholder title="Contacts" phase="Phase 5" note="People & companies across the CRM." />} />
+        {/* CRM (STEP5b) */}
+        <Route path="crm" element={<CrmLayout />}>
+          <Route index element={<Navigate to="/crm/leads" replace />} />
+          <Route path="leads"           element={<LeadsView role={role} />} />
+          <Route path="pipeline"        element={<PipelineView role={role} />} />
+          <Route path="companies"       element={<CompaniesView role={role} />} />
+          <Route path="companies/:id"   element={<CompanyDetail role={role} />} />
+        </Route>
+        {/* Old standalone Leads → folded into CRM */}
+        <Route path="leads"    element={<Navigate to="/crm/leads" replace />} />
+        <Route path="pipeline" element={<Navigate to="/crm/pipeline" replace />} />
+        <Route path="contacts" element={<Navigate to="/crm/companies" replace />} />
 
         {/* Customers — product is a filter, not separate trees (STEP5a) */}
         <Route path="customers"                  element={<CustomersTab role={role} />} />

@@ -17,9 +17,9 @@ const ELARA: Section = {
 const SECTIONS: Section[] = [
   {
     id: 'crm', label: 'CRM', items: [
-      { to: '/leads',    label: 'Leads',    glyph: '◇' },
-      { to: '/pipeline', label: 'Pipeline', glyph: '▤' },
-      { to: '/contacts', label: 'Contacts', glyph: '◉' },
+      { to: '/crm/leads',     label: 'Leads',     glyph: '◇' },
+      { to: '/crm/pipeline',  label: 'Pipeline',  glyph: '▤' },
+      { to: '/crm/companies', label: 'Companies', glyph: '◉' },
     ],
   },
   {
@@ -50,7 +50,7 @@ const MOBILE_NAV: Leaf[] = [
   { to: '/home',      label: 'HOME',   glyph: '⌂' },
   { to: '/elara',     label: 'ELARA',  glyph: '⬟' },
   { to: '/customers', label: 'CUST',   glyph: '⬡' },
-  { to: '/leads',     label: 'LEADS',  glyph: '◇' },
+  { to: '/crm/leads', label: 'LEADS',  glyph: '◇' },
   { to: '/system',    label: 'SYSTEM', glyph: '◈' },
 ]
 

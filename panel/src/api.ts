@@ -97,6 +97,21 @@ export interface ElaraConfig {
   customJobs: ElaraCustomJob[]
 }
 
+export interface CrmCompany {
+  id: string; name: string; type: string; status: string; website: string | null
+  fp_shop_id: string | null; fp_customer_id: string | null; source_lead_id: string | null
+  owner: string | null; notes: string | null; tags: string[]; created_at: string; updated_at: string
+}
+export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; created_at: string }
+export interface CrmDeal {
+  id: string; company_id: string; company_name?: string | null; name: string; pipeline: string; stage: string
+  amount: number | null; currency: string; probability: number | null; status: string; expected_close: string | null
+  owner: string | null; notes: string | null; created_at: string; updated_at: string
+}
+export interface CrmActivity { id: string; company_id: string; contact_id: string | null; deal_id: string | null; type: string; subject: string | null; body: string | null; due_at: string | null; done: boolean; created_by: string | null; created_at: string }
+export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
+export interface CompanyDetail { company: CrmCompany; contacts: CrmContact[]; deals: CrmDeal[]; activities: CrmActivity[] }
+
 export interface HomeSummary {
   signupsThisWeek: number | null
   leads: { open: number | null; hot: number | null; total: number | null }
@@ -149,6 +164,53 @@ export const api = {
 
   home: {
     summary: () => request<HomeSummary>('/api/home/summary'),
+  },
+
+  crm: {
+    companies: (params?: { type?: string; q?: string; tag?: string; limit?: number; cursor?: string | null }) => {
+      const p = new URLSearchParams()
+      if (params?.type) p.set('type', params.type)
+      if (params?.q) p.set('q', params.q)
+      if (params?.tag) p.set('tag', params.tag)
+      if (params?.limit) p.set('limit', String(params.limit))
+      if (params?.cursor) p.set('cursor', params.cursor)
+      const qs = p.toString()
+      return request<{ data: CrmCompany[]; meta: { next_cursor: string | null } }>(`/api/crm/companies${qs ? `?${qs}` : ''}`)
+    },
+    company: (id: string) => request<{ data: CompanyDetail }>(`/api/crm/companies/${id}`).then(r => r.data),
+    createCompany: (c: Partial<CrmCompany>) => request<{ data: CrmCompany }>('/api/crm/companies', { method: 'POST', body: JSON.stringify(c) }).then(r => r.data),
+    updateCompany: (id: string, c: Partial<CrmCompany>) => request(`/api/crm/companies/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
+    deleteCompany: (id: string) => request(`/api/crm/companies/${id}`, { method: 'DELETE' }),
+
+    createContact: (c: Partial<CrmContact> & { company_id: string; name: string }) => request<{ data: CrmContact }>('/api/crm/contacts', { method: 'POST', body: JSON.stringify(c) }),
+    updateContact: (id: string, c: Partial<CrmContact>) => request(`/api/crm/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
+    deleteContact: (id: string) => request(`/api/crm/contacts/${id}`, { method: 'DELETE' }),
+
+    deals: (params?: { pipeline?: string; status?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.pipeline) p.set('pipeline', params.pipeline)
+      if (params?.status) p.set('status', params.status)
+      const qs = p.toString()
+      return request<{ data: CrmDeal[] }>(`/api/crm/deals${qs ? `?${qs}` : ''}`).then(r => r.data)
+    },
+    pipeline: (pipeline: string) => request<{ data: CrmPipeline }>(`/api/crm/deals/pipeline/${pipeline}`).then(r => r.data),
+    createDeal: (d: Partial<CrmDeal> & { company_id: string; name: string }) => request<{ data: CrmDeal }>('/api/crm/deals', { method: 'POST', body: JSON.stringify(d) }),
+    updateDeal: (id: string, d: Partial<CrmDeal>) => request(`/api/crm/deals/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
+    deleteDeal: (id: string) => request(`/api/crm/deals/${id}`, { method: 'DELETE' }),
+
+    activities: (params: { company_id?: string; contact_id?: string; deal_id?: string }) => {
+      const p = new URLSearchParams()
+      if (params.company_id) p.set('company_id', params.company_id)
+      if (params.contact_id) p.set('contact_id', params.contact_id)
+      if (params.deal_id) p.set('deal_id', params.deal_id)
+      return request<{ data: CrmActivity[] }>(`/api/crm/activities?${p.toString()}`).then(r => r.data)
+    },
+    createActivity: (a: Partial<CrmActivity> & { company_id: string }) => request<{ data: CrmActivity }>('/api/crm/activities', { method: 'POST', body: JSON.stringify(a) }),
+    updateActivity: (id: string, a: Partial<CrmActivity>) => request(`/api/crm/activities/${id}`, { method: 'PATCH', body: JSON.stringify(a) }),
+    deleteActivity: (id: string) => request(`/api/crm/activities/${id}`, { method: 'DELETE' }),
+
+    convertLead: (id: string, body: { type?: string; pipeline?: string; dealName?: string; amount?: number }) =>
+      request<{ data: { company: CrmCompany; alreadyConverted?: boolean } }>(`/api/crm/leads/${id}/convert`, { method: 'POST', body: JSON.stringify(body) }).then(r => r.data),
   },
 
   elaraConfig: {

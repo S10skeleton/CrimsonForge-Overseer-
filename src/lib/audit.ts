@@ -33,6 +33,19 @@ export const AUDIT_ACTIONS = [
   'elara.custom_job_create',
   'elara.custom_job_update',
   'elara.custom_job_delete',
+  'crm.company_create',
+  'crm.company_update',
+  'crm.company_delete',
+  'crm.contact_create',
+  'crm.contact_update',
+  'crm.contact_delete',
+  'crm.deal_create',
+  'crm.deal_update',
+  'crm.deal_delete',
+  'crm.activity_create',
+  'crm.activity_update',
+  'crm.activity_delete',
+  'crm.lead_convert',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number] | (string & {})
