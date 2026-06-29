@@ -12,12 +12,24 @@ function headers(): Record<string, string> {
   }
 }
 
+// Centralized 401 handling: an expired/invalid token clears local auth and
+// bounces to /login from anywhere. Skipped on the auth endpoints themselves so
+// a bad passphrase surfaces its own error instead of a redirect loop.
+function handleUnauthorized(path: string) {
+  if (path.startsWith('/api/auth/')) return
+  localStorage.removeItem('panel_token')
+  localStorage.removeItem('panel_role')
+  localStorage.removeItem('panel_user')
+  if (window.location.pathname !== '/login') window.location.assign('/login')
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: { ...headers(), ...(options?.headers ?? {}) },
   })
   if (!res.ok) {
+    if (res.status === 401) handleUnauthorized(path)
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error ?? `HTTP ${res.status}`)
   }
