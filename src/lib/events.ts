@@ -5,7 +5,8 @@
  */
 
 import { overseerDb } from './overseerDb.js'
-import { sendAgentMessage } from '../notifications/slack.js'
+import { sendAgentMessage, sendRawMessage } from '../notifications/slack.js'
+import { resolveDestination } from './elaraConfig.js'
 
 export type EventSeverity = 'info' | 'success' | 'warning' | 'critical'
 
@@ -25,22 +26,21 @@ const SEVERITY_EMOJI: Record<EventSeverity, string> = {
   critical: '🚨', // 🚨
 }
 
-/**
- * Per-event-type channel overrides. Resolution order:
- *   explicit channelId arg → EVENT_CHANNEL_ROUTES[type] → SLACK_ACTIVITY_CHANNEL_ID
- * TODO: move routing to an overseer_event_config table in a later phase.
- */
-export const EVENT_CHANNEL_ROUTES: Record<string, string | undefined> = {
-  // e.g. 'fp.signup': process.env.FP_SLACK_CHANNEL_ID,
-}
-
-function resolveChannel(type: string, explicit?: string): string | undefined {
-  return explicit ?? EVENT_CHANNEL_ROUTES[type] ?? process.env.SLACK_ACTIVITY_CHANNEL_ID
-}
-
 export async function emitEvent(input: EmitEventInput): Promise<void> {
   const severity = input.severity ?? 'info'
-  const channel = resolveChannel(input.type, input.channelId)
+
+  // Resolve the 'activity' route via DB-backed config (falls back to
+  // SLACK_ACTIVITY_CHANNEL_ID / default webhook). An explicit channelId still wins.
+  let channel = input.channelId
+  if (!channel) {
+    try {
+      const dest = await resolveDestination('activity')
+      if (dest && dest.kind === 'slack' && dest.target && dest.target !== 'webhook') channel = dest.target
+    } catch (err) {
+      console.error('[events] route resolve failed:', err)
+      channel = process.env.SLACK_ACTIVITY_CHANNEL_ID
+    }
+  }
 
   // 1) Persist the event (fail-safe)
   try {
@@ -60,7 +60,8 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
   try {
     let line = `${SEVERITY_EMOJI[severity]} *${input.title}*`
     if (input.body) line += `\n${input.body}`
-    await sendAgentMessage(line, channel)
+    if (channel) await sendAgentMessage(line, channel)
+    else await sendRawMessage(line)
   } catch (err) {
     console.error('[events] slack post failed:', err)
   }

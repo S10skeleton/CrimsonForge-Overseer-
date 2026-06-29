@@ -1,90 +1,89 @@
 -- ============================================================
--- OVERSEER 2.0 — PHASE 4 (Elara Controls config tables)
--- Apply in the ELARA Supabase project (same DB as agent_* / overseer_* tables).
--- Idempotent — safe to re-run.
+-- OVERSEER 2.0 — STEP 4 (Elara Controls config tables)  [REFERENCE]
+-- Authoritative schema per build-instructions/OVERSEER-STEP4.
+-- The PM applies these tables + seeds via the Supabase MCP on ElaraAssist
+-- (ELARA_SUPABASE_*). Claude Code reads/writes ROWS via overseerDb — never DDL.
 --
--- ADDITIVE + SAFE: tables start EMPTY. The backend computes effective config
--- by merging today's env/constants with any DB override row, so behavior is
--- unchanged until a control is actually saved from the panel.
+-- Seeds (PM applies = today's behavior):
+--   elara_schedules: morning_briefing '0 8 * * *', fp_insights '0 5 * * *',
+--     health_check '*/15 * * * *', checkins_summarize '* * * * *' (all enabled)
+--   elara_briefing_config(id=1): all sections true, ai_summary true
+--   elara_notify_destinations: slack default(webhook), #cf-activity, #forgepilot-ops, sms clutch
+--   elara_notify_routes: briefing→default, health_alert→default, fp_alert→#forgepilot-ops,
+--     activity→#cf-activity, new_subscriber→default
+--   elara_alert_rules: the 8 rules at current severities/thresholds
+--   elara_recipients: sms = CLUTCH_PHONE_NUMBER
 -- ============================================================
 
 create extension if not exists pgcrypto;
 
--- ── elara_briefing_config ── single active row: which sections, AI summary, time
-create table if not exists elara_briefing_config (
-  id                  uuid primary key default gen_random_uuid(),
-  sections            jsonb not null default '{}',   -- { sectionKey: boolean }
-  ai_summary_enabled  boolean,                        -- null = use default (true)
-  time_hour           int,                            -- 0–23; null = use env MORNING_BRIEFING_HOUR
-  timezone            text,                           -- null = use env TIMEZONE
-  active              boolean not null default true,
-  updated_at          timestamptz not null default now()
-);
-
--- ── elara_schedules ── built-in recurring jobs (enable/disable + timing)
 create table if not exists elara_schedules (
-  job_key      text primary key,         -- 'morning_briefing','fp_insights','health_check','checkins','summarize'
-  cron_or_time text,                      -- 'HH:MM' or a cron expression; null = use code default
-  timezone     text,
-  enabled      boolean not null default true,
-  updated_at   timestamptz not null default now()
+  job_key    text primary key,              -- 'morning_briefing','fp_insights','health_check','checkins_summarize'
+  label      text not null,
+  cron       text not null,                 -- node-cron expr
+  timezone   text,                          -- null → process TIMEZONE
+  enabled    boolean not null default true,
+  is_custom  boolean not null default false,
+  updated_at timestamptz not null default now()
 );
 
--- ── elara_custom_jobs ── user-defined recurring Elara tasks
-create table if not exists elara_custom_jobs (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  schedule    text not null,              -- cron expression
-  prompt      text,                       -- what Elara should do
-  enabled     boolean not null default true,
-  last_run_at timestamptz,
-  created_at  timestamptz not null default now()
+create table if not exists elara_briefing_config (
+  id         int primary key default 1 check (id = 1),
+  sections   jsonb not null default '{}',   -- { system_health, sentry, stripe_revenue, payment_failures, new_signups, feedback, gmail, calendar, forgepilot }
+  ai_summary boolean not null default true,
+  timezone   text,
+  updated_at timestamptz not null default now()
 );
 
--- ── elara_notify_destinations ── channel-typed routing targets
 create table if not exists elara_notify_destinations (
-  id         uuid primary key default gen_random_uuid(),
-  kind       text not null default 'slack' check (kind in ('slack','sms','email')),
-  target     text not null,               -- slack channel id / phone number / email
-  label      text,
-  created_at timestamptz not null default now()
+  id      uuid primary key default gen_random_uuid(),
+  kind    text not null check (kind in ('slack','sms','email')),
+  label   text not null,
+  target  text not null,                    -- slack channel id | phone | email | 'webhook'
+  enabled boolean not null default true
 );
 
--- ── elara_notify_routes ── notification_type → destination
 create table if not exists elara_notify_routes (
-  notification_type text primary key,     -- 'briefing','health_alert','fp_alert','activity','new_subscriber', ...
-  destination_id    uuid references elara_notify_destinations(id) on delete set null,
-  updated_at        timestamptz not null default now()
+  notification_type text primary key,       -- 'briefing','health_alert','fp_alert','activity','new_subscriber',...
+  destination_id    uuid references elara_notify_destinations(id)
 );
 
--- ── elara_alert_rules ── per-rule enable / threshold / severity / sms / destination
 create table if not exists elara_alert_rules (
-  rule_key       text primary key,        -- 'service_down','payment_failure','sms_fail_rate','email_bounce_rate', ...
+  rule_key       text primary key,          -- 'service_down','payment_failure','sms_failure','email_bounce','new_subscriber','new_shop','forgepulse_signup','sentry_new'
+  label          text not null,
   enabled        boolean not null default true,
-  threshold      jsonb,                   -- e.g. { "pct": 5 }
-  severity       text,                    -- 'info'|'warning'|'critical'
+  severity       text not null default 'warning' check (severity in ('info','warning','critical')),
   sms_enabled    boolean not null default false,
-  destination_id uuid references elara_notify_destinations(id) on delete set null,
+  threshold      jsonb,                     -- e.g. {"rate":0.05}; null = no numeric threshold
+  destination_id uuid references elara_notify_destinations(id),  -- null → route by notification_type
   updated_at     timestamptz not null default now()
 );
 
--- ── elara_recipients ── briefing recipients + critical-SMS numbers
 create table if not exists elara_recipients (
-  id         uuid primary key default gen_random_uuid(),
-  kind       text not null check (kind in ('briefing','sms_critical')),
-  value      text not null,               -- email or E.164 number
-  label      text,
-  enabled    boolean not null default true,
-  created_at timestamptz not null default now()
+  id      uuid primary key default gen_random_uuid(),
+  kind    text not null check (kind in ('briefing','sms')),
+  value   text not null,                    -- email or E.164 number
+  label   text,
+  enabled boolean not null default true
 );
 
--- ── elara_quiet_hours ── single row do-not-disturb window
+create table if not exists elara_custom_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null,
+  cron        text not null,
+  timezone    text,
+  action_type text not null check (action_type in ('slack_message','agent_prompt')),
+  payload     jsonb not null default '{}',  -- { text } or { prompt, destination_id }
+  enabled     boolean not null default true,
+  created_by  text,
+  created_at  timestamptz not null default now()
+);
+
 create table if not exists elara_quiet_hours (
-  id                uuid primary key default gen_random_uuid(),
+  id                int primary key default 1 check (id = 1),
   enabled           boolean not null default false,
-  start_min         int,                  -- minutes from midnight (local tz)
-  end_min           int,
+  start_local       time not null default '21:00',
+  end_local         time not null default '07:00',
   timezone          text,
-  exempt_severities jsonb not null default '["critical"]',  -- always paged through quiet hours
-  updated_at        timestamptz not null default now()
+  exempt_severities text[] not null default '{critical}'
 );

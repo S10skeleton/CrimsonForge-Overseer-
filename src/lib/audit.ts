@@ -19,6 +19,20 @@ export const AUDIT_ACTIONS = [
   'admin.suspend',
   'admin.reactivate',
   'admin.password_reset',
+  'elara.schedule_update',
+  'elara.briefing_update',
+  'elara.briefing_preview',
+  'elara.briefing_send_now',
+  'elara.alert_update',
+  'elara.routing_update',
+  'elara.destination_create',
+  'elara.destination_update',
+  'elara.destination_delete',
+  'elara.recipients_update',
+  'elara.quiet_hours_update',
+  'elara.custom_job_create',
+  'elara.custom_job_update',
+  'elara.custom_job_delete',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number] | (string & {})

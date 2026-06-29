@@ -77,11 +77,24 @@ export interface Page<T> {
   meta: { next_cursor: number | null }
 }
 
-export interface BriefingConfig {
-  timeHour: number
-  timezone: string
-  aiSummaryEnabled: boolean
-  sections: Record<string, boolean>
+export interface ElaraSchedule { job_key: string; label: string; cron: string; timezone: string | null; enabled: boolean }
+export interface ElaraBriefing { sections: Record<string, boolean>; ai_summary: boolean; timezone: string | null }
+export interface ElaraAlertRule { rule_key: string; label: string; enabled: boolean; severity: string; sms_enabled: boolean; threshold: Record<string, number> | null; destination_id: string | null }
+export interface ElaraDestination { id: string; kind: string; label: string; target: string; enabled: boolean }
+export interface ElaraRoute { notification_type: string; destination_id: string | null }
+export interface ElaraRecipient { id: string; kind: string; value: string; label: string | null; enabled: boolean }
+export interface ElaraQuietHours { enabled: boolean; start_local: string; end_local: string; timezone: string | null; exempt_severities: string[] }
+export interface ElaraCustomJob { id: string; name: string; cron: string; timezone: string | null; action_type: string; payload: Record<string, unknown>; enabled: boolean }
+
+export interface ElaraConfig {
+  schedules: ElaraSchedule[]
+  briefing: ElaraBriefing | null
+  alertRules: ElaraAlertRule[]
+  destinations: ElaraDestination[]
+  routes: ElaraRoute[]
+  recipients: ElaraRecipient[]
+  quietHours: ElaraQuietHours | null
+  customJobs: ElaraCustomJob[]
 }
 
 export interface HomeSummary {
@@ -138,12 +151,36 @@ export const api = {
     summary: () => request<HomeSummary>('/api/home/summary'),
   },
 
-  elaraControls: {
-    getBriefingConfig: () => request<BriefingConfig>('/api/elara/controls/briefing-config'),
-    saveBriefingConfig: (patch: Partial<{ timeHour: number; timezone: string; aiSummaryEnabled: boolean; sections: Record<string, boolean> }>) =>
-      request<BriefingConfig>('/api/elara/controls/briefing-config', { method: 'PUT', body: JSON.stringify(patch) }),
-    previewBriefing: () => request<{ text: string }>('/api/elara/controls/briefing/preview', { method: 'POST' }),
-    sendBriefingNow: () => request<{ ok: boolean }>('/api/elara/controls/briefing/send-now', { method: 'POST' }),
+  elaraConfig: {
+    get: () => request<{ data: ElaraConfig }>('/api/elara/config').then(r => r.data),
+    saveBriefing: (patch: Partial<{ sections: Record<string, boolean>; ai_summary: boolean; timezone: string | null }>) =>
+      request('/api/elara/config/briefing', { method: 'PUT', body: JSON.stringify(patch) }),
+    saveSchedule: (jobKey: string, patch: Partial<{ cron: string; timezone: string | null; enabled: boolean }>) =>
+      request(`/api/elara/config/schedules/${jobKey}`, { method: 'PUT', body: JSON.stringify(patch) }),
+    saveAlert: (ruleKey: string, patch: Partial<{ enabled: boolean; severity: string; sms_enabled: boolean; threshold: Record<string, number> | null; destination_id: string | null }>) =>
+      request(`/api/elara/config/alerts/${ruleKey}`, { method: 'PUT', body: JSON.stringify(patch) }),
+    saveRoutes: (routes: ElaraRoute[]) =>
+      request('/api/elara/config/routes', { method: 'PUT', body: JSON.stringify({ routes }) }),
+    createDestination: (d: { kind: string; label: string; target: string; enabled?: boolean }) =>
+      request<{ data: ElaraDestination }>('/api/elara/config/destinations', { method: 'POST', body: JSON.stringify(d) }),
+    updateDestination: (id: string, d: Partial<{ kind: string; label: string; target: string; enabled: boolean }>) =>
+      request(`/api/elara/config/destinations/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+    deleteDestination: (id: string) =>
+      request(`/api/elara/config/destinations/${id}`, { method: 'DELETE' }),
+    createRecipient: (r: { kind: string; value: string; label?: string; enabled?: boolean }) =>
+      request<{ data: ElaraRecipient }>('/api/elara/config/recipients', { method: 'POST', body: JSON.stringify(r) }),
+    deleteRecipient: (id: string) =>
+      request(`/api/elara/config/recipients/${id}`, { method: 'DELETE' }),
+    saveQuietHours: (q: Partial<ElaraQuietHours>) =>
+      request('/api/elara/config/quiet-hours', { method: 'PUT', body: JSON.stringify(q) }),
+    createCustomJob: (j: { name: string; cron: string; timezone?: string | null; action_type: string; payload: Record<string, unknown>; enabled?: boolean }) =>
+      request<{ data: ElaraCustomJob }>('/api/elara/config/custom-jobs', { method: 'POST', body: JSON.stringify(j) }),
+    updateCustomJob: (id: string, j: Partial<{ enabled: boolean; cron: string; name: string; payload: Record<string, unknown> }>) =>
+      request(`/api/elara/config/custom-jobs/${id}`, { method: 'PUT', body: JSON.stringify(j) }),
+    deleteCustomJob: (id: string) =>
+      request(`/api/elara/config/custom-jobs/${id}`, { method: 'DELETE' }),
+    previewBriefing: () => request<{ data: { text: string } }>('/api/elara/config/briefing/preview', { method: 'POST' }).then(r => r.data),
+    sendBriefingNow: () => request<{ data: { ok: boolean } }>('/api/elara/config/briefing/send-now', { method: 'POST' }).then(r => r.data),
   },
 
   activity: {
