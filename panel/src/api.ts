@@ -77,6 +77,13 @@ export interface Page<T> {
   meta: { next_cursor: number | null }
 }
 
+export interface BriefingConfig {
+  timeHour: number
+  timezone: string
+  aiSummaryEnabled: boolean
+  sections: Record<string, boolean>
+}
+
 export interface HomeSummary {
   signupsThisWeek: number | null
   leads: { open: number | null; hot: number | null; total: number | null }
@@ -129,6 +136,14 @@ export const api = {
 
   home: {
     summary: () => request<HomeSummary>('/api/home/summary'),
+  },
+
+  elaraControls: {
+    getBriefingConfig: () => request<BriefingConfig>('/api/elara/controls/briefing-config'),
+    saveBriefingConfig: (patch: Partial<{ timeHour: number; timezone: string; aiSummaryEnabled: boolean; sections: Record<string, boolean> }>) =>
+      request<BriefingConfig>('/api/elara/controls/briefing-config', { method: 'PUT', body: JSON.stringify(patch) }),
+    previewBriefing: () => request<{ text: string }>('/api/elara/controls/briefing/preview', { method: 'POST' }),
+    sendBriefingNow: () => request<{ ok: boolean }>('/api/elara/controls/briefing/send-now', { method: 'POST' }),
   },
 
   activity: {

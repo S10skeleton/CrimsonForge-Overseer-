@@ -8,8 +8,9 @@ interface Section { id: string; label: string; accent?: string; online?: boolean
 const ELARA: Section = {
   id: 'elara', label: 'Elara', accent: 'var(--elara)', online: true,
   items: [
-    { to: '/elara',    label: 'Assistant', glyph: '⬟' },
-    { to: '/aiconfig', label: 'Forge AI',  glyph: '◈' },
+    { to: '/elara',          label: 'Assistant', glyph: '⬟' },
+    { to: '/elara/controls', label: 'Controls',  glyph: '⚙', adminOnly: true },
+    { to: '/aiconfig',       label: 'Forge AI',  glyph: '◈' },
   ],
 }
 
@@ -141,7 +142,7 @@ export default function Panel({ role, onLogout }: Props) {
             </span>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'pulse-ring 3s ease-in-out infinite' }} />
           </div>
-          {ELARA.items.map(item => (
+          {ELARA.items.filter(it => !it.adminOnly || role !== 'read_only').map(item => (
             <NavLink key={item.to} to={item.to} style={navLinkStyle('var(--elara)')}>
               <span style={{ width: 18, textAlign: 'center', fontSize: 13 }}>{item.glyph}</span>
               {item.label}

@@ -60,7 +60,7 @@ async function main(): Promise<void> {
   validateEnvironment()
 
   // Start the cron scheduler (health checks + morning briefing)
-  startScheduler()
+  await startScheduler()
 
   // Start the two-way Slack bot (optional — only if tokens are configured)
   await startSlackBot()

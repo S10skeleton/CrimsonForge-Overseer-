@@ -18,11 +18,15 @@ import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
 import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
 import type { MorningBriefing, Alert, ForgePilotBriefing } from './types/index.js'
 import { evaluateEndpointAlert } from './lib/alert-state.js'
+import { getBriefingConfig } from './lib/elaraConfig.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
-const MORNING_BRIEFING_HOUR = Number(process.env.MORNING_BRIEFING_HOUR || '8')
 const FP_INSIGHTS_HOUR = Number(process.env.FP_INSIGHTS_HOUR || '5')
+
+// Handle to the morning-briefing cron task so it can be live-rescheduled when
+// the time/timezone is changed from the Elara Controls panel.
+let briefingTask: cron.ScheduledTask | null = null
 
 // ─── Briefing Storage ─────────────────────────────────────────────────────
 
@@ -291,8 +295,12 @@ async function runSilentHealthCheck(): Promise<void> {
 
 // ─── Morning Briefing Job ─────────────────────────────────────────────────
 
-async function runMorningBriefing(): Promise<void> {
-  console.log('[SCHEDULER] Running morning briefing...')
+async function runMorningBriefing(opts: { preview?: boolean } = {}): Promise<string> {
+  const preview = opts.preview === true
+  console.log(`[SCHEDULER] ${preview ? 'Building briefing preview' : 'Running morning briefing'}...`)
+
+  // Effective briefing config (env defaults overlaid with any saved overrides).
+  const cfg = await getBriefingConfig()
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
@@ -473,18 +481,23 @@ async function runMorningBriefing(): Promise<void> {
       alerts,
     }
 
-    // Store for the Slack bot's context
-    setLastBriefing(briefing)
+    // Store for the Slack bot's context (skip on preview — don't mutate state)
+    if (!preview) setLastBriefing(briefing)
+
+    // Section gating — a section turned off in Elara Controls is omitted from
+    // the briefing. Default config has every section on, so behavior is
+    // unchanged until the founder toggles one.
+    const sec = cfg.sections
 
     // Try AI-enhanced briefing first
-    const gmailData = gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
-    const calendarData = calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
+    const gmailData = sec.gmail && gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
+    const calendarData = sec.calendar && calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
 
     const twilioSummary = twilioResult.success
       ? (twilioResult.data as { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean })
       : undefined
 
-    const stripeForBriefing = stripeResult.success
+    const stripeForBriefing = sec.stripe && stripeResult.success
       ? (stripeResult.data as import('./types/index.js').StripeData)
       : undefined
 
@@ -524,40 +537,75 @@ async function runMorningBriefing(): Promise<void> {
     } catch (err) {
       console.error('[SCHEDULER] Error fetching feedback for briefing:', err)
     }
+    if (!sec.feedback) feedbackForBriefing = []
 
-    const aiBriefingText = await generateAIBriefing({
-      briefing,
-      gmailData,
-      calendarData,
-      twilioData: twilioSummary,
-      stripeData: stripeForBriefing,
-      resendData: resendForBriefing,
-      netlifyData: netlifyForBriefing,
-      feedbackData: feedbackForBriefing,
-      fpData: fpBriefing ?? undefined,
-    })
+    // AI summary honors the toggle; when off (or unavailable) we use the
+    // structured briefing instead.
+    const aiBriefingText = cfg.aiSummaryEnabled
+      ? await generateAIBriefing({
+          briefing,
+          gmailData,
+          calendarData,
+          twilioData: twilioSummary,
+          stripeData: stripeForBriefing,
+          resendData: resendForBriefing,
+          netlifyData: netlifyForBriefing,
+          feedbackData: feedbackForBriefing,
+          fpData: sec.forgepilot ? (fpBriefing ?? undefined) : undefined,
+        })
+      : null
+
+    let outText: string
 
     if (aiBriefingText) {
-      // Post the AI-generated briefing
-      await sendRawMessage(aiBriefingText)
-      await storeBriefing(aiBriefingText)
-      console.log('[SCHEDULER] AI morning briefing sent.')
+      outText = aiBriefingText
+      if (!preview) {
+        await sendRawMessage(aiBriefingText)
+        await storeBriefing(aiBriefingText)
+        console.log('[SCHEDULER] AI morning briefing sent.')
+      }
     } else {
-      // Fall back to the structured briefing if AI is unavailable
-      console.log('[SCHEDULER] AI unavailable — sending structured briefing.')
-      await sendBriefing(briefing)
-      await storeBriefing(`[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
+      // Structured briefing (AI off or unavailable)
+      const statusEmoji = overallStatus === 'down' ? '🔴' : overallStatus === 'degraded' ? '🟡' : '🟢'
+      outText = `${statusEmoji} Status: ${overallStatus}\n` +
+        (alerts.length ? alerts.map((a) => `• ${a.message}`).join('\n') : 'No alerts.')
+      if (!preview) {
+        console.log('[SCHEDULER] AI unavailable/off — sending structured briefing.')
+        await sendBriefing(briefing)
+        await storeBriefing(`[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
+      }
     }
 
-    console.log('[SCHEDULER] Morning briefing complete.')
+    if (!preview) console.log('[SCHEDULER] Morning briefing complete.')
+    return outText
   } catch (err) {
     console.error('[SCHEDULER] Error in morning briefing:', err)
+    return preview ? `Preview failed: ${err instanceof Error ? err.message : 'unknown error'}` : ''
   }
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
 
-export function startScheduler(): void {
+// Schedule (or re-schedule) the morning briefing from current config.
+async function scheduleMorningBriefing(fallbackTz: string): Promise<void> {
+  const cfg = await getBriefingConfig()
+  const tz = cfg.timezone || fallbackTz
+  if (briefingTask) {
+    briefingTask.stop()
+    briefingTask = null
+  }
+  briefingTask = cron.schedule(`0 ${cfg.timeHour} * * *`, () => {
+    runMorningBriefing().catch((err) => console.error('[SCHEDULER] briefing error:', err))
+  }, { timezone: tz })
+  console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${cfg.timeHour}:00 (${tz})`)
+}
+
+/** Re-read briefing config and reschedule the cron — called after a config save. */
+export async function rescheduleMorningBriefing(): Promise<void> {
+  await scheduleMorningBriefing(process.env.TIMEZONE || 'America/Denver')
+}
+
+export async function startScheduler(): Promise<void> {
   console.log('[SCHEDULER] Starting cron jobs...')
 
   const timezone = process.env.TIMEZONE || 'America/Denver'
@@ -577,9 +625,8 @@ export function startScheduler(): void {
   cron.schedule('*/15 * * * *', runSilentHealthCheck, { timezone })
   console.log('[SCHEDULER] Scheduled: Silent health check every 15 minutes')
 
-  // Every morning at specified hour: full briefing
-  cron.schedule(`0 ${MORNING_BRIEFING_HOUR} * * *`, runMorningBriefing, { timezone })
-  console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00 (${timezone})`)
+  // Every morning: full briefing — time/timezone come from Elara Controls config
+  await scheduleMorningBriefing(timezone)
 
   cron.schedule(`0 ${FP_INSIGHTS_HOUR} * * *`, async () => {
     console.log(`[SCHEDULER] Running ForgeAssist insight analysis at ${FP_INSIGHTS_HOUR}:00 (${timezone})`)

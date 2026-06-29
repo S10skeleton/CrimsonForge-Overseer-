@@ -5,6 +5,7 @@ import ResetPassword from './pages/ResetPassword'
 import Panel from './pages/Panel'
 import Placeholder from './components/Placeholder'
 import HomeTab from './tabs/HomeTab'
+import ElaraControlsTab from './tabs/ElaraControlsTab'
 import AdminsTab from './tabs/AdminsTab'
 import ActivityTab from './tabs/ActivityTab'
 import type { LoginResult } from './api'
@@ -85,8 +86,9 @@ export default function App() {
         <Route path="home" element={<HomeTab />} />
 
         {/* Elara */}
-        <Route path="elara"    element={<ElaraTab role={role} />} />
-        <Route path="aiconfig" element={<AIConfigTab role={role} />} />
+        <Route path="elara"          element={<ElaraTab role={role} />} />
+        <Route path="elara/controls" element={<ElaraControlsTab role={role} />} />
+        <Route path="aiconfig"       element={<AIConfigTab role={role} />} />
 
         {/* CRM */}
         <Route path="leads"    element={<LeadsTab role={role} />} />

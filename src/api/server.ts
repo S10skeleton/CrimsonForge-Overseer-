@@ -11,6 +11,7 @@ import homeRouter from './routes/home.js'
 import statusRouter from './routes/status.js'
 import cfpRouter from './routes/cfp.js'
 import elaraRouter from './routes/elara.js'
+import elaraControlsRouter from './routes/elara-controls.js'
 import voiceRouter from './routes/voice.js'
 import filesRouter from './routes/files.js'
 import fpRouter from './routes/fp.js'
@@ -43,6 +44,7 @@ export function createApiServer(): express.Express {
   app.use('/api/home', homeRouter)
   app.use('/api/status', statusRouter)
   app.use('/api/cfp', cfpRouter)
+  app.use('/api/elara/controls', elaraControlsRouter)
   app.use('/api/elara', elaraRouter)
   app.use('/api/voice', voiceRouter)
   app.use('/api/files', filesRouter)
