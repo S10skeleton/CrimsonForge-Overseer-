@@ -5,3 +5,12 @@ dist/
 *.log
 .DS_Store
 .vscode/
+
+# Build/debug snapshots (full-project copies — never commit)
+elara-build/
+elara-debug-extract/
+*.zip
+
+# Assistant-local (not shared project source)
+memory/
+.claude/settings.local.json
