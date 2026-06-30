@@ -20,6 +20,7 @@ import elaraConfigRouter from './routes/elara-config.js'
 import voiceRouter from './routes/voice.js'
 import filesRouter from './routes/files.js'
 import fpRouter from './routes/fp.js'
+import elaraChatRouter from './routes/elara-chat.js'
 import quoRouter from './routes/quo.js'
 import quoWebhookRouter from './routes/quo-webhook.js'
 
@@ -88,6 +89,7 @@ export function createApiServer(): express.Express {
   app.use('/api/status', area('system'), statusRouter)
   app.use('/api/cfp', cfpGuard, cfpRouter)
   app.use('/api/elara/config', area('elara'), elaraConfigRouter)
+  app.use('/api/elara', elaraChatRouter)           // Ask-Elara chat/action (owner/admin gates internal)
   app.use('/api/elara', elaraRouter)               // assistant/voice/files keep their own requireAuth
   app.use('/api/voice', voiceRouter)
   app.use('/api/files', filesRouter)

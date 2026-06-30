@@ -23,13 +23,15 @@ function getClient(): Anthropic | null {
 export async function runAgent(
   userMessage: string,
   recentBriefing?: MorningBriefing,
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  extraSystem?: string
 ): Promise<string> {
   const client = getClient()
   if (!client) return `[Elara offline] Set ANTHROPIC_API_KEY to activate.`
 
-  // Build system prompt fresh each call (loads runtime memory from Supabase)
-  const systemPrompt = await buildSystemPrompt(recentBriefing)
+  // Build system prompt fresh each call (loads runtime memory from Supabase).
+  // extraSystem carries per-request context (panel page + propose-mode rules).
+  const systemPrompt = (await buildSystemPrompt(recentBriefing)) + (extraSystem ? `\n\n${extraSystem}` : '')
 
   const tools: Anthropic.Tool[] = allAgentTools.map(t => ({
     name: t.name,

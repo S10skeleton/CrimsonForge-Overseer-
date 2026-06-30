@@ -123,6 +123,8 @@ export interface CrmFieldDef {
   type: CrmFieldType; options: string[] | null; position: number; archived: boolean; created_at: string
 }
 export type CrmCustom = Record<string, unknown>
+export interface ElaraProposal { kind: string; summary: string; payload: Record<string, unknown>; editable?: string[] }
+export interface ElaraChatReply { reply: string; proposals: ElaraProposal[] }
 export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; created_at: string }
 export interface CrmBlocklistEntry { id: string; pattern: string; reason: string | null; created_at: string }
 export interface CrmThreadMessage { id: string; from: string; to: string; date: string; subject: string; body: string }
@@ -347,6 +349,13 @@ export const api = {
     scheduled: () => request<{ data: QuoScheduled[]; enabled: boolean }>('/api/quo/scheduled'),
     schedule: (p: { to_number: string; body: string; send_at: string }) => request<{ data: QuoScheduled }>('/api/quo/scheduled', { method: 'POST', body: JSON.stringify(p) }).then(r => r.data),
     cancelScheduled: (id: string) => request(`/api/quo/scheduled/${id}`, { method: 'DELETE' }),
+  },
+
+  elaraChat: {
+    send: (body: { message: string; history?: Array<{ role: 'user' | 'assistant'; content: string }>; pageContext?: { area?: string; recordId?: string; recordType?: string } }) =>
+      request<ElaraChatReply>('/api/elara/chat', { method: 'POST', body: JSON.stringify(body) }),
+    action: (body: { kind: string; payload: Record<string, unknown> }) =>
+      request<{ ok: boolean; result?: unknown; error?: string }>('/api/elara/action', { method: 'POST', body: JSON.stringify(body) }),
   },
 
   elaraConfig: {
