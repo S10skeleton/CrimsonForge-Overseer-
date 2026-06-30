@@ -8,6 +8,9 @@ const TABS = [
   { to: '/crm/companies', label: 'Companies', key: 'crm.companies' },
   { to: '/crm/table', label: 'Table', key: 'crm.companies' },
   { to: '/crm/phone', label: 'Phone', key: 'crm.phone' },
+  // Connected inboxes + sync status ride normal CRM access. The sensitive
+  // blocklist moved to the owner-only SuperAdmin area (SUPERADMIN).
+  { to: '/crm/inboxes', label: 'Inboxes', key: 'crm.companies' },
 ]
 
 export default function CrmLayout() {
@@ -15,8 +18,6 @@ export default function CrmLayout() {
   const loc = useLocation()
   const navigate = useNavigate()
   const tabs = TABS.filter(t => canView(permissions, role, t.key))
-  // Connected inboxes + blocklist are OWNER-ONLY (the blocklist is sensitive).
-  if (role === 'owner') tabs.push({ to: '/crm/inboxes', label: 'Inboxes', key: 'crm.companies' })
 
   // Land on the first allowed sub-tab (and bounce off hidden ones).
   useEffect(() => {

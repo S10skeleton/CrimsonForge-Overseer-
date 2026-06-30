@@ -356,14 +356,21 @@ async function buildCustom(
 
 // ─── Email/calendar sync (P1b) ───────────────────────────────────────────────
 // Connected accounts + a blocklist + on-demand thread fetch. Rollout-safe +
-// audited. The connected-inbox surface (accounts + blocklist) is OWNER-ONLY: the
-// blocklist reveals sensitive info-flow decisions, so admins must not see it.
-// (The mount guard only enforces crm.companies — admins can have manage — so we
-// add an explicit owner check here. /sync/thread stays on the normal CRM gate.)
-router.use(['/sync/accounts', '/sync/blocklist'], (req: AuthRequest, res, next) => {
+// audited. Split gating (SUPERADMIN):
+//   • Viewing connected accounts + sync status is useful to the team → the
+//     normal CRM gate (crm.companies via the mount) is enough for GET accounts.
+//   • Account WRITES (add/enable/remove) stay owner-only.
+//   • The blocklist (all routes) stays owner-only — it reveals sensitive
+//     info-flow decisions and now lives behind the SuperAdmin area.
+//   • /sync/thread stays on the normal CRM gate (unchanged).
+const ownerOnly = (req: AuthRequest, res: import('express').Response, next: import('express').NextFunction): void => {
   if (req.panelUser?.role !== 'owner') { res.status(403).json({ error: 'Owner access required' }); return }
   next()
-})
+}
+router.use('/sync/blocklist', ownerOnly)                       // blocklist: owner-only (read + write)
+router.post('/sync/accounts', ownerOnly)                       // account writes: owner-only
+router.patch('/sync/accounts/:email', ownerOnly)
+router.delete('/sync/accounts/:email', ownerOnly)
 
 router.get('/sync/accounts', async (_req, res) => {
   const { data, error } = await overseerDb.from('crm_sync_accounts').select('*').order('created_at', { ascending: true })
