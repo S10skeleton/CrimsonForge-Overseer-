@@ -13,6 +13,7 @@ import type { AuthRequest } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { audit } from '../../lib/audit.js'
 import { stagesFor, defaultStage, isPipeline } from '../../lib/crmPipelines.js'
+import { isSyncConfigured, workspaceDomain, clientFor, fetchThreadFull } from '../../lib/googleSync.js'
 
 const router = Router()
 
@@ -352,6 +353,89 @@ async function buildCustom(
   }
   return { value: { ...base, ...incoming } }
 }
+
+// ─── Email/calendar sync (P1b) ───────────────────────────────────────────────
+// Connected accounts + a blocklist + on-demand thread fetch. Reads =
+// crm.companies@view, writes = @manage (owner/admin) via the mount guard.
+// Rollout-safe (tables may not be migrated yet) + audited.
+router.get('/sync/accounts', async (_req, res) => {
+  const { data, error } = await overseerDb.from('crm_sync_accounts').select('*').order('created_at', { ascending: true })
+  res.json({ data: error ? [] : (data ?? []), configured: isSyncConfigured(), domain: workspaceDomain() })
+})
+
+router.post('/sync/accounts', async (req: AuthRequest, res) => {
+  const b = req.body as Record<string, unknown>
+  const email = String(b.email ?? '').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { res.status(400).json({ error: 'valid email required' }); return }
+  const method = b.method === 'delegation' ? 'delegation' : 'oauth'
+  const { data, error } = await overseerDb.from('crm_sync_accounts').insert({ email, method, enabled: b.enabled ?? true }).select('*').single()
+  if (error) {
+    if (error.code === '23505') { res.status(409).json({ error: 'Account already added' }); return }
+    res.status(500).json({ error: 'Could not add account' }); return
+  }
+  audit(req, { action: 'crm.account_add', targetType: 'crm_sync_account', targetId: email, meta: { method } })
+  res.status(201).json({ data })
+})
+
+router.patch('/sync/accounts/:email', async (req: AuthRequest, res) => {
+  const email = decodeURIComponent(String(req.params.email)).toLowerCase()
+  const b = req.body as Record<string, unknown>
+  if (b.enabled === undefined) { res.status(400).json({ error: 'nothing to update' }); return }
+  const { data, error } = await overseerDb.from('crm_sync_accounts').update({ enabled: b.enabled }).eq('email', email).select('*').single()
+  if (error) { res.status(500).json({ error: 'Could not update account' }); return }
+  audit(req, { action: 'crm.account_update', targetType: 'crm_sync_account', targetId: email, meta: { enabled: b.enabled } })
+  res.json({ data })
+})
+
+router.delete('/sync/accounts/:email', async (req: AuthRequest, res) => {
+  const email = decodeURIComponent(String(req.params.email)).toLowerCase()
+  const { error } = await overseerDb.from('crm_sync_accounts').delete().eq('email', email)
+  if (error) { res.status(500).json({ error: 'Could not remove account' }); return }
+  audit(req, { action: 'crm.account_delete', targetType: 'crm_sync_account', targetId: email })
+  res.json({ data: { ok: true } })
+})
+
+// Blocklist — addresses/domains that must never become CRM contacts/activities.
+router.get('/sync/blocklist', async (_req, res) => {
+  const { data, error } = await overseerDb.from('crm_sync_blocklist').select('*').order('created_at', { ascending: true })
+  res.json({ data: error ? [] : (data ?? []) })
+})
+
+router.post('/sync/blocklist', async (req: AuthRequest, res) => {
+  const b = req.body as Record<string, unknown>
+  const pattern = String(b.pattern ?? '').trim().toLowerCase()
+  if (!pattern) { res.status(400).json({ error: 'pattern required (domain or email)' }); return }
+  const { data, error } = await overseerDb.from('crm_sync_blocklist').insert({ pattern, reason: b.reason ?? null }).select('*').single()
+  if (error) { res.status(500).json({ error: 'Could not add to blocklist' }); return }
+  audit(req, { action: 'crm.blocklist_add', targetType: 'crm_sync_blocklist', targetId: data.id, meta: { pattern } })
+  res.status(201).json({ data })
+})
+
+router.delete('/sync/blocklist/:id', async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { error } = await overseerDb.from('crm_sync_blocklist').delete().eq('id', id)
+  if (error) { res.status(500).json({ error: 'Could not remove from blocklist' }); return }
+  audit(req, { action: 'crm.blocklist_delete', targetType: 'crm_sync_blocklist', targetId: id })
+  res.json({ data: { ok: true } })
+})
+
+// On-demand: fetch a logged email's full thread LIVE from Gmail (never stored).
+// Resolves the activity → crm_sync_seen.external_id (thread id), then fetches.
+router.get('/sync/thread', async (req, res) => {
+  if (!isSyncConfigured()) { res.status(503).json({ error: 'Google not configured' }); return }
+  const activityId = typeof req.query.activity_id === 'string' ? req.query.activity_id : ''
+  if (!activityId) { res.status(400).json({ error: 'activity_id required' }); return }
+  const { data: seen } = await overseerDb.from('crm_sync_seen').select('source, external_id').eq('activity_id', activityId).maybeSingle()
+  if (!seen || seen.source !== 'gmail') { res.status(404).json({ error: 'No Gmail thread for this activity' }); return }
+  try {
+    const { gmail } = clientFor()
+    const thread = await fetchThreadFull(gmail, seen.external_id)
+    res.json({ data: thread })
+  } catch (err) {
+    console.error('[crm] thread fetch failed:', err)
+    res.status(502).json({ error: 'Could not fetch thread from Gmail' })
+  }
+})
 
 // ─── Lead conversion ─────────────────────────────────────────────────────────
 router.post('/leads/:id/convert', async (req: AuthRequest, res) => {
