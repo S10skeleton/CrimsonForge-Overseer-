@@ -57,11 +57,26 @@ export interface Admin {
   email: string
   role: 'owner' | 'admin' | 'read_only'
   status: 'active' | 'suspended'
+  permissions: Record<string, 'none' | 'view' | 'manage'>
   must_change_password: boolean
   last_login_at: string | null
   created_at: string
   created_by: string | null
 }
+
+export interface Invite {
+  id: string
+  email: string
+  display_name: string | null
+  username: string | null
+  role: string
+  status: 'invited' | 'accepted' | 'revoked'
+  expires_at: string
+  created_at: string
+  accepted_at: string | null
+}
+
+export interface Me { id: string; username: string; role: string; permissions: Record<string, 'none' | 'view' | 'manage'> }
 
 export interface ActivityEvent {
   id: number
@@ -155,6 +170,9 @@ export const api = {
         body: JSON.stringify({ currentPassword, newPassword }),
       }),
     status: () => request<{ locked: boolean; secondsRemaining?: number }>('/api/auth/status'),
+    acceptInvite: (token: string, username: string, password: string) =>
+      request<LoginResult>('/api/auth/accept-invite', { method: 'POST', body: JSON.stringify({ token, username, password }) }),
+    me: () => request<Me>('/api/auth/me'),
   },
 
   admins: {
@@ -164,7 +182,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
-    update: (id: string, payload: Partial<{ role: string; status: string; email: string }>) =>
+    update: (id: string, payload: Partial<{ role: string; status: string; email: string; permissions: Record<string, string> }>) =>
       request<{ admin: Admin }>(`/api/admins/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
@@ -173,6 +191,11 @@ export const api = {
       request<{ ok: boolean; emailed: boolean; tempPassword?: string }>(`/api/admins/${id}/reset-password`, {
         method: 'POST',
       }),
+    invite: (payload: { email: string; displayName?: string; username?: string; role: string; permissions: Record<string, string> }) =>
+      request<{ invite: Invite; emailed: boolean; acceptUrl?: string }>('/api/admins/invite', { method: 'POST', body: JSON.stringify(payload) }),
+    invites: () => request<Invite[]>('/api/admins/invites'),
+    resendInvite: (id: string) => request<{ ok: boolean; emailed: boolean; acceptUrl?: string }>(`/api/admins/invites/${id}/resend`, { method: 'POST' }),
+    revokeInvite: (id: string) => request<{ ok: boolean }>(`/api/admins/invites/${id}/revoke`, { method: 'POST' }),
   },
 
   home: {

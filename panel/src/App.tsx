@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
+import AcceptInvite from './pages/AcceptInvite'
 import Panel from './pages/Panel'
+import { PermissionsProvider } from './lib/permissions'
+import type { Permissions } from './lib/permissions'
+import { api } from './api'
 import Placeholder from './components/Placeholder'
 import HomeTab from './tabs/HomeTab'
 import ElaraControlsTab from './tabs/ElaraControlsTab'
@@ -47,6 +51,7 @@ function isExpired(token: string): boolean {
 export default function App() {
   const [token, setToken] = useState<string | null>(null)
   const [role, setRole] = useState<string>('viewer')
+  const [permissions, setPermissions] = useState<Permissions>({})
   const [mustChange, setMustChange] = useState(false)
   const [checking, setChecking] = useState(true)
 
@@ -80,6 +85,14 @@ export default function App() {
     return () => clearInterval(t)
   }, [token, clearSession])
 
+  // Load current role + permissions whenever logged in (refreshes without re-login).
+  useEffect(() => {
+    if (!token) { setPermissions({}); return }
+    api.auth.me()
+      .then(me => { setRole(me.role); setPermissions(me.permissions ?? {}) })
+      .catch(() => { /* 401 handled centrally; other errors leave prior perms */ })
+  }, [token])
+
   const handleLogin = (result: LoginResult) => {
     localStorage.setItem('panel_token', result.token)
     localStorage.setItem('panel_role', result.role)
@@ -104,12 +117,19 @@ export default function App() {
       {/* Public: email reset (?token=) and the logged-in must-change flow */}
       <Route path="/reset" element={<ResetPassword onPasswordChanged={() => setMustChange(false)} />} />
 
+      {/* Public: invite acceptance (set-password link) */}
+      <Route path="/accept" element={token ? <Navigate to="/" replace /> : <AcceptInvite onLogin={handleLogin} />} />
+
       <Route
         path="/"
         element={
           !token ? <Navigate to="/login" replace />
             : mustChange ? <Navigate to="/reset" replace />
-            : <Panel role={role} onLogout={handleLogout} onIdleLogout={() => clearSession('idle')} />
+            : (
+              <PermissionsProvider value={{ permissions, role }}>
+                <Panel role={role} onLogout={handleLogout} onIdleLogout={() => clearSession('idle')} />
+              </PermissionsProvider>
+            )
         }
       >
         <Route index element={<Navigate to="/home" replace />} />

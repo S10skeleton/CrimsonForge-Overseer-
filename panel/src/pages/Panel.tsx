@@ -1,58 +1,59 @@
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIdleLogout } from '../lib/useIdleLogout'
+import { usePermissions, canViewArea } from '../lib/permissions'
 
-interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean }
+interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean; permKey?: string }
 interface Section { id: string; label: string; accent?: string; online?: boolean; items: Leaf[] }
 
 // ─── Function-based information architecture (Overseer 2.0) ──────────────────
 const ELARA: Section = {
   id: 'elara', label: 'Elara', accent: 'var(--elara)', online: true,
   items: [
-    { to: '/elara',          label: 'Assistant', glyph: '⬟' },
-    { to: '/elara/controls', label: 'Controls',  glyph: '⚙', adminOnly: true },
-    { to: '/aiconfig',       label: 'Forge AI',  glyph: '◈' },
+    { to: '/elara',          label: 'Assistant', glyph: '⬟', permKey: 'elara' },
+    { to: '/elara/controls', label: 'Controls',  glyph: '⚙', adminOnly: true, permKey: 'elara' },
+    { to: '/aiconfig',       label: 'Forge AI',  glyph: '◈', permKey: 'elara' },
   ],
 }
 
 const SECTIONS: Section[] = [
   {
     id: 'crm', label: 'CRM', items: [
-      { to: '/crm/leads',     label: 'Leads',     glyph: '◇' },
-      { to: '/crm/pipeline',  label: 'Pipeline',  glyph: '▤' },
-      { to: '/crm/companies', label: 'Companies', glyph: '◉' },
+      { to: '/crm/leads',     label: 'Leads',     glyph: '◇', permKey: 'crm.leads' },
+      { to: '/crm/pipeline',  label: 'Pipeline',  glyph: '▤', permKey: 'crm.pipeline' },
+      { to: '/crm/companies', label: 'Companies', glyph: '◉', permKey: 'crm.companies' },
     ],
   },
   {
     id: 'customers', label: 'Customers', items: [
-      { to: '/customers', label: 'Customers', glyph: '⬡' },
+      { to: '/customers', label: 'Customers', glyph: '⬡', permKey: 'customers' },
     ],
   },
   {
     id: 'platform', label: 'Platform', items: [
-      { to: '/enterprise', label: 'Enterprise', glyph: '◰' },
-      { to: '/financials', label: 'Financials', glyph: '⬨' },
-      { to: '/system',     label: 'System',     glyph: '◈' },
-      { to: '/forgepulse', label: 'ForgePulse', glyph: '◎' },
+      { to: '/enterprise', label: 'Enterprise', glyph: '◰', permKey: 'enterprise' },
+      { to: '/financials', label: 'Financials', glyph: '⬨', permKey: 'financials' },
+      { to: '/system',     label: 'System',     glyph: '◈', permKey: 'system' },
+      { to: '/forgepulse', label: 'ForgePulse', glyph: '◎', permKey: 'customers' },
     ],
   },
   {
     id: 'settings', label: 'Settings', items: [
-      { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉', adminOnly: true },
-      { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤', adminOnly: true },
-      { to: '/settings/integrations', label: 'Integrations',   glyph: '◈' },
-      { to: '/activity',              label: 'Activity',       glyph: '◎', adminOnly: true },
+      { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉', adminOnly: true, permKey: 'settings' },
+      { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤', adminOnly: true, permKey: 'settings' },
+      { to: '/settings/integrations', label: 'Integrations',   glyph: '◈', permKey: 'settings' },
+      { to: '/activity',              label: 'Activity',       glyph: '◎', adminOnly: true, permKey: 'settings' },
     ],
   },
 ]
 
 // Mobile nav — priority items + sign out
 const MOBILE_NAV: Leaf[] = [
-  { to: '/home',      label: 'HOME',   glyph: '⌂' },
-  { to: '/elara',     label: 'ELARA',  glyph: '⬟' },
-  { to: '/customers', label: 'CUST',   glyph: '⬡' },
-  { to: '/crm/leads', label: 'LEADS',  glyph: '◇' },
-  { to: '/system',    label: 'SYSTEM', glyph: '◈' },
+  { to: '/home',      label: 'HOME',   glyph: '⌂', permKey: 'home' },
+  { to: '/elara',     label: 'ELARA',  glyph: '⬟', permKey: 'elara' },
+  { to: '/customers', label: 'CUST',   glyph: '⬡', permKey: 'customers' },
+  { to: '/crm/leads', label: 'LEADS',  glyph: '◇', permKey: 'crm.leads' },
+  { to: '/system',    label: 'SYSTEM', glyph: '◈', permKey: 'system' },
 ]
 
 interface Props { role: string; onLogout: () => void; onIdleLogout: () => void }
@@ -71,9 +72,28 @@ function navLinkStyle(accent = 'var(--accent)') {
   })
 }
 
+const HOME_LEAF: Leaf = { to: '/home', label: 'Home', glyph: '⌂', permKey: 'home' }
+
 export default function Panel({ role, onLogout, onIdleLogout }: Props) {
   const [clock, setClock] = useState('')
   const idle = useIdleLogout(onIdleLogout)
+  const { permissions } = usePermissions()
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // A nav leaf shows if the role/permission allows it (owner sees everything).
+  const visible = (it: Leaf) =>
+    (!it.adminOnly || role !== 'read_only') && (!it.permKey || canViewArea(permissions, role, it.permKey))
+
+  const allLeaves: Leaf[] = [HOME_LEAF, ...ELARA.items, ...SECTIONS.flatMap(s => s.items)]
+  const firstVisible = allLeaves.find(visible)?.to ?? '/home'
+
+  // Land a limited user on the first tab they can see (not a 403 Home).
+  useEffect(() => {
+    if (location.pathname === '/home' && !canViewArea(permissions, role, 'home') && firstVisible !== '/home') {
+      navigate(firstVisible, { replace: true })
+    }
+  }, [location.pathname, permissions, role, firstVisible, navigate])
 
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString('en-US', { hour12: false }))
@@ -122,21 +142,25 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
         <nav style={{ flex: 1, padding: '0 10px' }}>
 
           {/* Home */}
-          <NavLink to="/home" style={navLinkStyle()}>
-            <span style={{ width: 18, textAlign: 'center', fontSize: 14 }}>{'⌂'}</span>
-            Home
-          </NavLink>
+          {visible(HOME_LEAF) && (
+            <NavLink to="/home" style={navLinkStyle()}>
+              <span style={{ width: 18, textAlign: 'center', fontSize: 14 }}>{'⌂'}</span>
+              Home
+            </NavLink>
+          )}
 
           <div style={{ height: 12 }} />
 
           {/* Elara — violet identity + live dot */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 12px 6px' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: ELARA.accent, textTransform: 'uppercase' }}>
-              {ELARA.label}
-            </span>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'pulse-ring 3s ease-in-out infinite' }} />
-          </div>
-          {ELARA.items.filter(it => !it.adminOnly || role !== 'read_only').map(item => (
+          {ELARA.items.some(visible) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 12px 6px' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, color: ELARA.accent, textTransform: 'uppercase' }}>
+                {ELARA.label}
+              </span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', animation: 'pulse-ring 3s ease-in-out infinite' }} />
+            </div>
+          )}
+          {ELARA.items.filter(visible).map(item => (
             <NavLink key={item.to} to={item.to} style={navLinkStyle('var(--elara)')}>
               <span style={{ width: 18, textAlign: 'center', fontSize: 13 }}>{item.glyph}</span>
               {item.label}
@@ -145,7 +169,7 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
 
           {/* Functional sections */}
           {SECTIONS.map(section => {
-            const items = section.items.filter(it => !it.adminOnly || role !== 'read_only')
+            const items = section.items.filter(visible)
             if (items.length === 0) return null
             return (
             <div key={section.id} style={{ marginTop: 14 }}>
@@ -220,7 +244,7 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
 
       {/* -- Mobile Bottom Tab Bar ------------------------------------------ */}
       <nav className="mobile-tabs">
-        {MOBILE_NAV.map(item => (
+        {MOBILE_NAV.filter(visible).map(item => (
           <NavLink
             key={item.to}
             to={item.to}
