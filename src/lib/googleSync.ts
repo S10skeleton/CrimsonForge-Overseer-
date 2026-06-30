@@ -25,12 +25,40 @@ export function workspaceDomain(): string {
   return (process.env.GOOGLE_WORKSPACE_DOMAIN || 'crimsonforge.pro').toLowerCase()
 }
 
+const DELEGATION_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly',
+]
+
+/** Whether the service-account (domain-wide delegation) credentials are present. */
+export function isDelegationConfigured(): boolean {
+  return !!(process.env.GOOGLE_SA_CLIENT_EMAIL && process.env.GOOGLE_SA_PRIVATE_KEY)
+}
+
 /**
- * Gmail + Calendar clients for an account. v1: the shared OAuth account
- * (the `account` arg is the seam for per-mailbox delegation later).
+ * Gmail + Calendar clients for an account. Two auth paths:
+ *  - method 'oauth' (default) → the existing single-account OAuth client (admin@).
+ *  - method 'delegation'      → a service-account JWT that IMPERSONATES the row's
+ *    mailbox (matt@/shane@) with read-only scopes. Additive — the OAuth path is
+ *    untouched. Throws if a delegation account is requested without GOOGLE_SA_*
+ *    (the per-account try/catch in the sync engine logs + skips it).
  */
-export function clientFor(_account?: SyncAccount) {
-  const auth = createOAuthClient()
+export function clientFor(account?: SyncAccount) {
+  let auth
+  if (account?.method === 'delegation') {
+    if (!isDelegationConfigured()) {
+      throw new Error(`delegation account ${account.email} requires GOOGLE_SA_CLIENT_EMAIL/GOOGLE_SA_PRIVATE_KEY`)
+    }
+    const key = (process.env.GOOGLE_SA_PRIVATE_KEY || '').replace(/\\n/g, '\n')
+    auth = new google.auth.JWT({
+      email: process.env.GOOGLE_SA_CLIENT_EMAIL,
+      key,
+      scopes: DELEGATION_SCOPES,
+      subject: account.email, // impersonate this mailbox
+    })
+  } else {
+    auth = createOAuthClient()
+  }
   return {
     gmail: google.gmail({ version: 'v1', auth }),
     calendar: google.calendar({ version: 'v3', auth }),
