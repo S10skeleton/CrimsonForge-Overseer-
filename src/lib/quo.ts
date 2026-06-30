@@ -52,6 +52,19 @@ export async function listPhoneNumbers(): Promise<QuoPhoneNumber[]> {
   return r.data ?? []
 }
 
+// ── Conversations (enumerate an inbox without `participants`) ────────────────
+// Quo's /v1/messages + /v1/calls REQUIRE a `participants` param — there's no
+// "list everything on this number" mode. /v1/conversations is the way to list a
+// number's threads, then fetch messages/calls per participant.
+export interface QuoConversation { id: string; participants: string[]; lastActivityAt?: string; name?: string; phoneNumberId?: string }
+export async function listConversations(opts: { phoneNumbers: string; maxResults?: number; pageToken?: string }): Promise<QuoList<QuoConversation>> {
+  return quoFetch<QuoList<QuoConversation>>(`/conversations${qs({
+    phoneNumbers: opts.phoneNumbers,           // plural param (singular is deprecated)
+    maxResults: opts.maxResults ?? 100,        // required
+    pageToken: opts.pageToken,
+  })}`)
+}
+
 // ── Messages (texts) ────────────────────────────────────────────────────────
 export interface QuoMessage {
   id: string; from: string; to: string[]; direction: 'incoming' | 'outgoing'

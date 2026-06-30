@@ -10,7 +10,7 @@ import { overseerDb } from '../../lib/overseerDb.js'
 import { audit } from '../../lib/audit.js'
 import {
   isQuoConfigured, QuoError,
-  listPhoneNumbers, listMessages, listCalls, sendMessage,
+  listPhoneNumbers, listConversations, listMessages, listCalls, sendMessage,
   getCallTranscript, getCallSummary, getCallRecordings,
 } from '../../lib/quo.js'
 import { ingestMessage, ingestCall } from '../../lib/quoIngest.js'
@@ -41,22 +41,24 @@ router.get('/inboxes', async (_req, res) => {
   } catch (err) { quoErr(res, err) }
 })
 
-// Conversations — recent messages on an inbox, grouped into threads by the
-// external participant. Newest thread first.
+// Conversations — list the inbox's threads via /v1/conversations (Quo's /messages
+// requires `participants`, so we can't list everything that way). Newest first.
 router.get('/conversations', async (req, res) => {
   const phoneNumberId = String(req.query.phoneNumberId ?? '')
   if (!phoneNumberId) { res.status(400).json({ error: 'phoneNumberId required' }); return }
   try {
-    const r = await listMessages({ phoneNumberId, maxResults: 100 })
-    const threads = new Map<string, { participant: string; lastText: string; lastAt: string; direction: string; count: number }>()
-    for (const m of r.data ?? []) {
-      const other = m.direction === 'incoming' ? m.from : (m.to?.[0] ?? m.from)
-      const cur = threads.get(other)
-      if (!cur || m.createdAt > cur.lastAt) {
-        threads.set(other, { participant: other, lastText: m.text ?? m.body ?? '', lastAt: m.createdAt, direction: m.direction, count: (cur?.count ?? 0) + 1 })
-      } else if (cur) { cur.count++ }
-    }
-    res.json({ data: [...threads.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt)) })
+    const r = await listConversations({ phoneNumbers: phoneNumberId, maxResults: 100 })
+    const threads = (r.data ?? []).map((c) => {
+      const others = c.participants ?? []
+      return {
+        participant: others[0] ?? '',
+        lastText: others.length > 1 ? `Group · ${others.length} people` : (c.name ?? ''),
+        lastAt: c.lastActivityAt ?? '',
+        direction: 'incoming',
+        count: others.length,
+      }
+    }).filter((t) => t.participant).sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''))
+    res.json({ data: threads })
   } catch (err) { quoErr(res, err) }
 })
 
@@ -72,13 +74,20 @@ router.get('/thread', async (req, res) => {
   } catch (err) { quoErr(res, err) }
 })
 
-// Calls log.
+// Calls log — /v1/calls also needs `participants`, so merge the calls from the
+// inbox's recent conversations (no per-inbox "all calls" mode in the API).
 router.get('/calls', async (req, res) => {
   const phoneNumberId = String(req.query.phoneNumberId ?? '')
   if (!phoneNumberId) { res.status(400).json({ error: 'phoneNumberId required' }); return }
   try {
-    const r = await listCalls({ phoneNumberId, maxResults: 100 })
-    res.json({ data: (r.data ?? []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)) })
+    const conv = await listConversations({ phoneNumbers: phoneNumberId, maxResults: 50 })
+    const calls: Awaited<ReturnType<typeof listCalls>>['data'] = []
+    for (const c of (conv.data ?? []).slice(0, 15)) {
+      const participant = c.participants?.[0]
+      if (!participant) continue
+      try { const r = await listCalls({ phoneNumberId, participants: [participant], maxResults: 50 }); calls.push(...(r.data ?? [])) } catch { /* skip thread */ }
+    }
+    res.json({ data: calls.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100) })
   } catch (err) { quoErr(res, err) }
 })
 
@@ -115,10 +124,13 @@ router.post('/backfill', async (req: AuthRequest, res) => {
     let messages = 0, calls = 0
     for (const n of numbers) {
       try {
-        const m = await listMessages({ phoneNumberId: n.id, maxResults: 100 })
-        for (const msg of m.data ?? []) { try { await ingestMessage(msg); messages++ } catch { /* skip */ } }
-        const c = await listCalls({ phoneNumberId: n.id, maxResults: 100 })
-        for (const call of c.data ?? []) { try { await ingestCall(call); calls++ } catch { /* skip */ } }
+        const conv = await listConversations({ phoneNumbers: n.id, maxResults: 100 })
+        for (const c of (conv.data ?? []).slice(0, 50)) { // cap recent conversations
+          const participant = c.participants?.[0]
+          if (!participant) continue
+          try { const m = await listMessages({ phoneNumberId: n.id, participants: [participant], maxResults: 100 }); for (const msg of m.data ?? []) { try { await ingestMessage(msg); messages++ } catch { /* skip */ } } } catch { /* skip thread msgs */ }
+          try { const cl = await listCalls({ phoneNumberId: n.id, participants: [participant], maxResults: 100 }); for (const call of cl.data ?? []) { try { await ingestCall(call); calls++ } catch { /* skip */ } } } catch { /* skip thread calls */ }
+        }
       } catch (err) { console.error('[quo] backfill inbox failed:', n.id, err) }
     }
     audit(req, { action: 'quo.backfill', targetType: 'quo', targetId: 'all', meta: { messages, calls } })

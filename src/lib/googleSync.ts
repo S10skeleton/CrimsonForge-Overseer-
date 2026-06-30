@@ -82,6 +82,36 @@ export function isExternal(email: string, ourDomain: string): boolean {
   return !!d && d !== ourDomain
 }
 
+// ── Junk/ESP sender hardening (FIX 3) — never let marketing/transactional or
+// machine-generated senders become CRM contacts/companies. ──────────────────
+const ESP_DOMAINS = [
+  'customer.io', 'sendgrid.net', 'sendgrid.com', 'mailgun.org', 'sparkpostmail.com', 'sparkpost.com',
+  'amazonses.com', 'mailchimp.com', 'mcsv.net', 'mcdlv.net', 'mandrillapp.com', 'postmarkapp.com',
+  'sendinblue.com', 'mailjet.com', 'rsgsv.net', 'list-manage.com', 'cmail19.com', 'sendpulse.com',
+]
+const JUNK_TOKENS = /(unsubscribe|bounce|mailer|no-?reply|do-?not-?reply|notifications?|mailer-daemon)/i
+
+/** Domain (or subdomain) belongs to a known ESP / bulk-mail platform. */
+export function isEspDomain(domain: string): boolean {
+  return ESP_DOMAINS.some((d) => domain === d || domain.endsWith('.' + d))
+}
+
+/** Local-part looks machine-generated (long, or a digit-heavy hash). */
+export function isMachineLocalPart(local: string): boolean {
+  if (local.length >= 30) return true
+  const digits = (local.match(/\d/g) ?? []).length
+  return local.length >= 16 && digits / local.length >= 0.3
+}
+
+/** A participant we must never turn into a contact/company (even if not blocklisted). */
+export function isJunkSender(email: string): boolean {
+  const [local, domain] = email.toLowerCase().split('@')
+  if (!domain) return true
+  if (isEspDomain(domain)) return true
+  if (JUNK_TOKENS.test(local) || JUNK_TOKENS.test(domain)) return true
+  return isMachineLocalPart(local)
+}
+
 // Automated/bulk sender local-parts (P1b junk filter #3).
 const AUTOMATED_RE = /^(no-?reply|do-?not-?reply|mailer-daemon|bounce[s]?|notifications?|postmaster|donotreply|automated|alerts?)@/i
 export function isAutomatedAddress(email: string): boolean { return AUTOMATED_RE.test(email) }

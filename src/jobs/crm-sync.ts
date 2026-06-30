@@ -15,7 +15,7 @@
 import { overseerDb } from '../lib/overseerDb.js'
 import {
   isSyncConfigured, isDelegationConfigured, workspaceDomain, clientFor,
-  fetchThreads, fetchEvents, isExternal, domainOf, isFreeMail,
+  fetchThreads, fetchEvents, isExternal, domainOf, isFreeMail, isEspDomain, isJunkSender,
   type Party,
 } from '../lib/googleSync.js'
 
@@ -29,12 +29,19 @@ async function loadBlocklist(): Promise<Set<string>> {
   return new Set((data ?? []).map((r: { pattern: string }) => r.pattern.toLowerCase()))
 }
 function isBlocked(email: string, blocklist: Set<string>): boolean {
-  return blocklist.has(email.toLowerCase()) || blocklist.has(domainOf(email))
+  const e = email.toLowerCase()
+  if (blocklist.has(e)) return true               // exact address pattern
+  const domain = domainOf(e)
+  for (const p of blocklist) {
+    if (p.includes('@')) continue                 // address patterns are exact-only
+    if (domain === p || domain.endsWith('.' + p)) return true // domain + subdomains (FIX 3)
+  }
+  return false
 }
 
 // ── Upserts ───────────────────────────────────────────────────────────────
 async function upsertCompanyByDomain(domain: string): Promise<string | null> {
-  if (!domain || isFreeMail(domain)) return null
+  if (!domain || isFreeMail(domain) || isEspDomain(domain)) return null // never company-ify ESP/bulk (FIX 3)
   const { data: existing } = await overseerDb
     .from('crm_companies').select('id').or(`website.eq.${domain},name.eq.${domain}`).limit(1).maybeSingle()
   if (existing) return existing.id
@@ -74,7 +81,7 @@ async function logOnce(
 }
 
 async function resolveParties(parties: Party[], ourDomain: string, blocklist: Set<string>): Promise<{ contactId: string | null; companyId: string | null }> {
-  const external = parties.filter((p) => isExternal(p.email, ourDomain) && !isBlocked(p.email, blocklist))
+  const external = parties.filter((p) => isExternal(p.email, ourDomain) && !isBlocked(p.email, blocklist) && !isJunkSender(p.email))
   let contactId: string | null = null
   let companyId: string | null = null
   for (const p of external) {
@@ -98,7 +105,7 @@ async function syncAccount(acct: Account, ourDomain: string, blocklist: Set<stri
     if (!t.sentByAccount) continue                       // 1. outbound participation
     if (t.skipCategory) continue                         // 2. Primary only
     if (t.automated) continue                            // 3. not automated/bulk
-    const external = t.participants.filter((p) => isExternal(p.email, ourDomain))
+    const external = t.participants.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
     if (external.length === 0) continue                  // 5. external human present
     if (external.every((p) => isBlocked(p.email, blocklist))) continue // 4. blocklist
     const { contactId, companyId } = await resolveParties(t.participants, ourDomain, blocklist)
@@ -111,7 +118,7 @@ async function syncAccount(acct: Account, ourDomain: string, blocklist: Set<stri
   const events = await fetchEvents(calendar, sinceIso, sinceIso)
   for (const e of events) {
     if (!e.selfInvolved) continue                        // organizer or accepted
-    const external = e.attendees.filter((p) => isExternal(p.email, ourDomain))
+    const external = e.attendees.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
     if (external.length === 0) continue
     if (external.every((p) => isBlocked(p.email, blocklist))) continue
     const { contactId, companyId } = await resolveParties(e.attendees, ourDomain, blocklist)
