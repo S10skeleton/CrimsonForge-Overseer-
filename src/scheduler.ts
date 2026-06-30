@@ -11,6 +11,7 @@ import { sendBriefing, sendRawMessage, sendAgentMessage, notifyAlert } from './n
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
+import { runDmarcDigest, getDmarcBriefingLine } from './jobs/dmarc-digest.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
 import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
@@ -541,11 +542,13 @@ async function runMorningBriefing(opts: { preview?: boolean } = {}): Promise<str
 
     // AI summary honors the toggle; when off (or unavailable) we use the
     // structured briefing instead.
+    const emailSecurity = (await getDmarcBriefingLine().catch(() => null)) ?? undefined
     const aiBriefingText = cfg.aiSummary
       ? await generateAIBriefing({
           briefing,
           gmailData,
           calendarData,
+          emailSecurity,
           twilioData: twilioSummary,
           stripeData: stripeForBriefing,
           resendData: resendForBriefing,
@@ -598,6 +601,7 @@ const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
     try { await runSummarizationDispatcher() } catch (err) { console.error('[SCHEDULER] summarization dispatcher:', err) }
   },
   mrr_snapshot: () => runMrrSnapshot(),
+  dmarc_digest: () => runDmarcDigest(),
 }
 
 /** Post text to a resolved destination (slack channel or webhook). */
