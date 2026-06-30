@@ -58,6 +58,8 @@ export function createApiServer(): express.Express {
   const crmGuard: RequestHandler = (req, res, next) => {
     const p = req.path
     const key = p.includes('/deals') ? 'crm.pipeline' : p.includes('/leads') ? 'crm.leads' : 'crm.companies'
+    // The grid query endpoint (P3) is a POST but semantically a read → view-gate it.
+    if (p.endsWith('/query')) { requireArea(key, 'view')(req, res, next); return }
     area(key)(req, res, next)
   }
   // Financials spans revenue / runway / raise.

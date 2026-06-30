@@ -437,6 +437,134 @@ router.get('/sync/thread', async (req, res) => {
   }
 })
 
+// ─── Table grid: server-side query + saved views (P3) ───────────────────────
+// A fast, filterable, sortable, paged query over each CRM object — built-in
+// columns + P1a custom fields (read from the row's `custom` jsonb). Field names
+// are whitelisted against real columns + crm_field_defs keys (no jsonb path
+// injection). Read-gated (POST /query is view via the mount guard).
+const OBJECT_TABLE: Record<string, 'crm_companies' | 'crm_contacts' | 'crm_deals'> = {
+  companies: 'crm_companies', contacts: 'crm_contacts', deals: 'crm_deals',
+}
+const OBJECT_KEY: Record<string, 'company' | 'contact' | 'deal'> = {
+  companies: 'company', contacts: 'contact', deals: 'deal',
+}
+const BUILTIN_COLS: Record<string, Set<string>> = {
+  companies: new Set(['id', 'name', 'type', 'status', 'website', 'owner', 'notes', 'tags', 'created_at', 'updated_at']),
+  contacts: new Set(['id', 'company_id', 'name', 'title', 'email', 'phone', 'is_primary', 'notes', 'sms_opt_in', 'created_at']),
+  deals: new Set(['id', 'company_id', 'name', 'pipeline', 'stage', 'amount', 'currency', 'probability', 'status', 'expected_close', 'owner', 'notes', 'created_at', 'updated_at']),
+}
+
+async function customKeysFor(object: string): Promise<Set<string>> {
+  const { data } = await overseerDb.from('crm_field_defs').select('key').eq('object', OBJECT_KEY[object]).eq('archived', false)
+  return new Set((data ?? []).map((d: { key: string }) => d.key))
+}
+
+/** Resolve a requested field to a safe Supabase column expression, or null. */
+function resolveColumn(field: string, builtins: Set<string>, custom: Set<string>): string | null {
+  if (builtins.has(field)) return field
+  if (field.startsWith('custom.')) {
+    const key = field.slice('custom.'.length)
+    if (custom.has(key)) return `custom->>${key}`
+  }
+  return null
+}
+
+router.post('/:object/query', async (req, res) => {
+  const object = String(req.params.object)
+  const table = OBJECT_TABLE[object]
+  if (!table) { res.status(400).json({ error: 'unknown object' }); return }
+  const b = req.body as { filters?: Array<{ field: string; op: string; value: unknown }>; sort?: { field: string; dir?: string }; page?: number; pageSize?: number }
+  const page = Math.max(1, Number(b.page) || 1)
+  const pageSize = Math.min(200, Math.max(1, Number(b.pageSize) || 50))
+  const builtins = BUILTIN_COLS[object]
+  const custom = await customKeysFor(object)
+
+  let q = overseerDb.from(table).select('*', { count: 'exact' })
+  for (const f of b.filters ?? []) {
+    const col = resolveColumn(f.field, builtins, custom)
+    if (!col) continue // whitelist: silently drop unknown fields
+    const v = f.value
+    switch (f.op) {
+      case 'eq': q = q.eq(col, v as never); break
+      case 'neq': q = q.neq(col, v as never); break
+      case 'gt': q = q.gt(col, v as never); break
+      case 'lt': q = q.lt(col, v as never); break
+      case 'gte': q = q.gte(col, v as never); break
+      case 'lte': q = q.lte(col, v as never); break
+      case 'contains': q = q.ilike(col, `%${String(v)}%`); break
+      case 'in': q = q.in(col, Array.isArray(v) ? v : String(v).split(',').map((s) => s.trim())); break
+      case 'is_empty': q = q.is(col, null); break
+      case 'is_not_empty': q = q.not(col, 'is', null); break
+      default: break
+    }
+  }
+  if (b.sort?.field) {
+    const col = resolveColumn(b.sort.field, builtins, custom)
+    if (col) q = q.order(col, { ascending: b.sort.dir !== 'desc', nullsFirst: false })
+  } else {
+    q = q.order('created_at', { ascending: false })
+  }
+  q = q.range((page - 1) * pageSize, (page - 1) * pageSize + pageSize - 1)
+
+  const { data, count, error } = await q
+  if (error) { res.status(500).json({ error: 'Query failed' }); return }
+  res.json({ rows: data ?? [], total: count ?? 0, page, pageSize })
+})
+
+// ─── Saved views ─────────────────────────────────────────────────────────────
+router.get('/views', async (req: AuthRequest, res) => {
+  const object = typeof req.query.object === 'string' ? req.query.object : null
+  const user = req.panelUser?.username ?? ''
+  let q = overseerDb.from('crm_saved_views').select('*').order('position', { ascending: true }).order('created_at', { ascending: true })
+  if (object) q = q.eq('object', object)
+  const { data, error } = await q
+  if (error) { res.json({ data: [] }); return } // table not migrated yet
+  // A user sees shared views + their own private ones.
+  const visible = (data ?? []).filter((v: { shared: boolean; owner: string | null }) => v.shared || v.owner === user)
+  res.json({ data: visible })
+})
+
+router.post('/views', async (req: AuthRequest, res) => {
+  const b = req.body as Record<string, unknown>
+  const object = String(b.object ?? '')
+  if (!OBJECT_TABLE[object]) { res.status(400).json({ error: 'unknown object' }); return }
+  if (!String(b.name ?? '').trim()) { res.status(400).json({ error: 'name required' }); return }
+  if (b.is_default) await overseerDb.from('crm_saved_views').update({ is_default: false }).eq('object', object)
+  const { data, error } = await overseerDb.from('crm_saved_views').insert({
+    object, name: String(b.name).trim(), owner: req.panelUser?.username ?? null,
+    shared: b.shared ?? true, is_default: b.is_default ?? false, config: b.config ?? {}, position: typeof b.position === 'number' ? b.position : 0,
+  }).select('*').single()
+  if (error) { res.status(500).json({ error: 'Could not save view' }); return }
+  audit(req, { action: 'crm.view_create', targetType: 'crm_saved_view', targetId: data.id, meta: { object, name: data.name } })
+  res.status(201).json({ data })
+})
+
+router.patch('/views/:id', async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { data: existing } = await overseerDb.from('crm_saved_views').select('owner, object').eq('id', id).maybeSingle()
+  if (!existing) { res.status(404).json({ error: 'view not found' }); return }
+  // Only the creator or an owner-role admin can edit a view.
+  if (existing.owner !== req.panelUser?.username && req.panelUser?.role !== 'owner') { res.status(403).json({ error: 'Not your view' }); return }
+  const b = req.body as Record<string, unknown>
+  const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  for (const k of ['name', 'shared', 'is_default', 'config', 'position']) if (b[k] !== undefined) row[k] = b[k]
+  if (b.is_default === true) await overseerDb.from('crm_saved_views').update({ is_default: false }).eq('object', existing.object).neq('id', id)
+  const { data, error } = await overseerDb.from('crm_saved_views').update(row).eq('id', id).select('*').single()
+  if (error) { res.status(500).json({ error: 'Could not update view' }); return }
+  audit(req, { action: 'crm.view_update', targetType: 'crm_saved_view', targetId: id, meta: row })
+  res.json({ data })
+})
+
+router.delete('/views/:id', async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { data: existing } = await overseerDb.from('crm_saved_views').select('owner').eq('id', id).maybeSingle()
+  if (existing && existing.owner !== req.panelUser?.username && req.panelUser?.role !== 'owner') { res.status(403).json({ error: 'Not your view' }); return }
+  const { error } = await overseerDb.from('crm_saved_views').delete().eq('id', id)
+  if (error) { res.status(500).json({ error: 'Could not delete view' }); return }
+  audit(req, { action: 'crm.view_delete', targetType: 'crm_saved_view', targetId: id })
+  res.json({ data: { ok: true } })
+})
+
 // ─── Lead conversion ─────────────────────────────────────────────────────────
 router.post('/leads/:id/convert', async (req: AuthRequest, res) => {
   const leadId = String(req.params.id)
