@@ -21,6 +21,8 @@ function validateEnvironment(): void {
     'RAILWAY_API_TOKEN',
     'CF_PROJECT_ID',
     'CF_SERVICE_ID',
+    'PANEL_JWT_SECRET',  // signs panel sessions
+    'MFA_ENC_KEY',       // encrypts TOTP secrets at rest (no insecure fallback)
   ]
 
   const optional = [

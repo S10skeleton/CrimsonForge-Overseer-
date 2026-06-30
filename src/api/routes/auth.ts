@@ -147,7 +147,7 @@ router.post('/login', async (req: AuthRequest, res) => {
 
   // 24h session for a god-mode panel (was 7d) — paired with the panel's
   // proactive expiry + "session expired" message. Adjust with Clutch if needed.
-  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role }, secret, { expiresIn: '24h' })
+  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role, scope: 'session' }, secret, { expiresIn: '24h' })
 
   // Fail-safe: last_login update + audit must not block the response.
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id)
@@ -170,15 +170,18 @@ router.post('/forgot', async (req: AuthRequest, res) => {
 
   try {
     const needle = String(usernameOrEmail ?? '').toLowerCase().trim()
-    if (needle) {
-      const { data } = await overseerDb
-        .from('overseer_admins')
-        .select('id, username, email')
-        .or(`username.eq.${needle},email.eq.${needle}`)
-        .eq('status', 'active')
-        .maybeSingle()
+    // Reject anything that isn't a plausible username/email so untrusted input
+    // never reaches a query filter (no PostgREST filter injection).
+    if (needle && /^[a-z0-9._%+@-]+$/.test(needle)) {
+      // Two scoped lookups instead of an interpolated .or().
+      const byUser = await overseerDb
+        .from('overseer_admins').select('id, username, email')
+        .eq('username', needle).eq('status', 'active').maybeSingle()
+      const found = byUser.data ?? (await overseerDb
+        .from('overseer_admins').select('id, username, email')
+        .eq('email', needle).eq('status', 'active').maybeSingle()).data
 
-      const account = data as { id: string; username: string; email: string } | null
+      const account = found as { id: string; username: string; email: string } | null
       if (account) {
         const rawToken = crypto.randomBytes(32).toString('base64url')
         const expires = new Date(Date.now() + 30 * 60 * 1000).toISOString()
@@ -357,7 +360,7 @@ router.post('/accept-invite', async (req: AuthRequest, res) => {
   req.panelUser = { id: admin.id, username: admin.username, role: adminRole as 'owner' | 'admin' | 'read_only', permissions: {} }
   audit(req, { action: 'admin.invite_accepted', targetType: 'admin', targetId: admin.id, meta: { username: uname } })
 
-  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole }, secret, { expiresIn: '24h' })
+  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole, scope: 'session' }, secret, { expiresIn: '24h' })
   res.status(201).json({
     token: sessionToken,
     role: adminRole,
@@ -421,7 +424,7 @@ router.post('/login/2fa', async (req: AuthRequest, res) => {
     overseerDb.from('overseer_admins').update({ recovery_codes: remaining }).eq('id', acct.id).then(() => {}, () => {})
   }
 
-  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true }, secret, { expiresIn: '24h' })
+  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true, scope: 'session' }, secret, { expiresIn: '24h' })
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', acct.id).then(() => {}, () => {})
   req.panelUser = { id: acct.id, username: acct.username, role: acct.role, permissions: {} }
   audit(req, { action: 'auth.login', meta: { mfa: true } })

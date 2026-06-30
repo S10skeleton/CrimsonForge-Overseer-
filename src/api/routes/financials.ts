@@ -1,7 +1,9 @@
 /**
  * Financials — revenue (live, reusing the billing lib), MRR history (snapshots),
  * manual burn/expense/income entries, runway, and raise progress (from CRM
- * fundraising deals). Reads/writes requireAdmin; deletes requireOwner; audited.
+ * fundraising deals). Access enforced at the router mount by per-area guards
+ * (financials.revenue/runway/raise; GET=view, writes=manage; owner bypasses).
+ * Audited.
  */
 
 import { Router } from 'express'

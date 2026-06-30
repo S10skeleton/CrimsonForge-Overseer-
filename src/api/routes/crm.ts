@@ -1,7 +1,9 @@
 /**
  * CRM — companies, contacts, deals, activities, and lead conversion.
  * Owned by the Overseer DB (overseerDb); links to ForgePilot by stored ids.
- * Reads/writes: requireAdmin. Deletes: requireOwner. All mutations audited.
+ * Access is enforced at the router mount (server.ts) by per-area guards —
+ * crm.leads / crm.pipeline / crm.companies, GET=view + writes=manage (owner
+ * bypasses). All mutations audited.
  * Envelope: { data } / { data, meta } with keyset pagination (created_at).
  */
 
@@ -251,7 +253,16 @@ router.post('/leads/:id/convert', async (req: AuthRequest, res) => {
     name: companyName, type: b.type ?? 'prospect', source_lead_id: leadId,
     owner: req.panelUser?.username ?? null, notes: lead.message ?? null,
   }).select('*').single()
-  if (cErr || !company) { res.status(500).json({ error: 'Could not create company' }); return }
+  if (cErr || !company) {
+    // Concurrent convert: the unique index on source_lead_id rejected the dupe
+    // (Postgres 23505). Treat as already-converted and return the winner.
+    if (cErr && (cErr.code === '23505' || /duplicate|unique/i.test(cErr.message))) {
+      const { data: winner } = await overseerDb.from('crm_companies').select('*').eq('source_lead_id', leadId).maybeSingle()
+      if (winner) { res.json({ data: { company: winner, alreadyConverted: true } }); return }
+    }
+    res.status(500).json({ error: 'Could not create company' })
+    return
+  }
 
   let contact = null
   if (lead.contact_name || lead.email || lead.phone) {

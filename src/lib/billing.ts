@@ -45,23 +45,25 @@ async function computeBilling(include: (sub: Stripe.Subscription) => boolean): P
   const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100 })
   const active = allActive.data.filter(include)
 
-  const mrr = active.reduce((sum, sub) => {
-    const item = sub.items.data[0]
-    if (!item) return sum
+  // Sum every recurring line item (e.g. Additional Seat is a separate item),
+  // not just items.data[0].
+  const mrr = active.reduce((sum, sub) => sum + sub.items.data.reduce((s, item) => {
     const amount = item.price.unit_amount || 0
     const interval = item.price.recurring?.interval
-    return sum + (interval === 'year' ? amount / 12 : amount) / 100
-  }, 0)
+    const monthly = (interval === 'year' ? amount / 12 : amount) / 100
+    return s + monthly * (item.quantity ?? 1)
+  }, 0), 0)
 
   const startOfMonth = new Date()
   startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
+  const startSec = Math.floor(startOfMonth.getTime() / 1000)
 
   const newThisMonth = active.filter((s) => new Date(s.created * 1000) >= startOfMonth).length
 
-  const cancelled = await stripe.subscriptions.list({
-    status: 'canceled', created: { gte: Math.floor(startOfMonth.getTime() / 1000) }, limit: 100,
-  })
-  const cancelledThisMonth = cancelled.data.filter(include).length
+  // Churn = subscriptions CANCELED this month (Stripe `created` is creation time;
+  // there's no canceled_at list filter, so fetch recent canceled and filter).
+  const cancelled = await stripe.subscriptions.list({ status: 'canceled', limit: 100 })
+  const cancelledThisMonth = cancelled.data.filter((s) => include(s) && (s.canceled_at ?? 0) >= startSec).length
 
   const planBreakdown = { solo: 0, shop: 0 }
   for (const sub of active) {

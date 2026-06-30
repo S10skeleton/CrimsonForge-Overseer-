@@ -34,8 +34,11 @@ export async function verifyToken(secret: string, token: string): Promise<boolea
 
 // ─── Encryption at rest (AES-256-GCM) ────────────────────────────────────────
 function encKey(): Buffer {
-  // Derive a 32-byte key from MFA_ENC_KEY so any sufficiently-random value works.
-  return crypto.createHash('sha256').update(process.env.MFA_ENC_KEY || 'overseer-mfa-dev-key-change-me').digest()
+  // Derive a 32-byte key from MFA_ENC_KEY. Required env (see index.ts) — never a
+  // hardcoded default, or secrets would be encrypted under a key in the source.
+  const k = process.env.MFA_ENC_KEY
+  if (!k) throw new Error('MFA_ENC_KEY is not set')
+  return crypto.createHash('sha256').update(k).digest()
 }
 
 export function encryptSecret(plain: string): string {

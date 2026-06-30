@@ -79,12 +79,12 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
     }
 
     // ── Cancelled this month ─────────────────────────────────────────────
-    const cancelled = await stripe.subscriptions.list({
-      status: 'canceled',
-      created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
-      limit: 100,
-    })
-    const cancelledThisMonth = cancelled.data.filter(isFPSubscription).length
+    // Filter on canceled_at, not `created` (which is original creation time).
+    const startSec = Math.floor(startOfMonth.getTime() / 1000)
+    const cancelled = await stripe.subscriptions.list({ status: 'canceled', limit: 100 })
+    const cancelledThisMonth = cancelled.data.filter(
+      (s) => isFPSubscription(s) && (s.canceled_at ?? 0) >= startSec,
+    ).length
 
     // ── Payment failures ─────────────────────────────────────────────────
     const failedInvoices = await stripe.invoices.list({

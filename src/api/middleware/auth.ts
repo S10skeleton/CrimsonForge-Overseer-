@@ -27,6 +27,7 @@ interface PanelJwtPayload {
   sub?: string
   username?: string
   role?: string
+  scope?: string
 }
 
 export function normalizeRole(role: string | undefined): Role {
@@ -54,6 +55,14 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     payload = jwt.verify(token, secret) as PanelJwtPayload
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' })
+    return
+  }
+
+  // The pending-MFA token (issued by /login before a code is entered) is signed
+  // with the same secret but is NOT a session — never accept it as a Bearer
+  // token, or 2FA would be bypassable. Real sessions carry scope:'session'.
+  if (payload.scope === 'mfa-pending') {
+    res.status(401).json({ error: 'Unauthorized' })
     return
   }
 

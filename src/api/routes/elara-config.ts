@@ -1,6 +1,7 @@
 /**
- * Elara Controls config API. All endpoints requireAdmin; every mutation is
- * audited. Schedule/custom-job writes call reloadSchedules(); every write calls
+ * Elara Controls config API. Gated by the 'elara' area at the router mount
+ * (GET=view, writes=manage; owner bypasses); every mutation is audited.
+ * Schedule/custom-job writes call reloadSchedules(); every write calls
  * invalidateConfigCache() so the running process picks up changes immediately.
  *
  * Reads return raw DB rows (the management view); the scheduler/notifier read
