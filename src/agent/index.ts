@@ -109,6 +109,7 @@ export async function generateAIBriefing(data: {
   resendData?: { sent: number; delivered: number; bounced: number; bounceRate: number; thresholdBreached: boolean; domain: { name: string; status: string } | null }
   netlifyData?: { status: string; latestDeployState: string | null; latestDeployAt: string | null; branch: string | null; errorMessage: string | null }
   feedbackData?: Array<{ type: string; message: string; status: string; submitter_name?: string; shop_name?: string; created_at: string }>
+  emailSecurity?: string
   fpData?: import('../types/index.js').ForgePilotBriefing
 }): Promise<string | null> {
   const client = getClient()
@@ -253,6 +254,10 @@ Frontend deploy (Netlify): ${netlifyStatus}
 
 \u2500\u2500\u2500 CFP FEEDBACK \u2500\u2500\u2500
 ${feedbackSummary}
+
+\u2500\u2500\u2500 EMAIL SECURITY (DMARC) \u2500\u2500\u2500
+${data.emailSecurity ?? 'No DMARC data this period \u2014 omit this line.'}
+(If a status is present above, include it verbatim as a one-line "Email security" item near the end of the briefing.)
 
 Write the morning briefing for Slack in your voice as Elara. Structure:
 
