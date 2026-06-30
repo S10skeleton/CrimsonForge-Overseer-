@@ -14,7 +14,6 @@ import { runDriveCheck, driveTool, driveSearchTool, driveReadTool, driveCreateDr
 import { memoryTools } from './memory.js'
 import { listContactsTool, contactsSearchTool } from './contacts.js'
 import { sendEmailTool } from './send-email.js'
-import { listCheckinsTool, updateCheckinTool } from './checkins.js'
 import { runStripeCheck, stripeMetricsTool } from './stripe.js'
 import { runNetlifyCheck, netlifyTool } from './netlify.js'
 import { querySupabaseTool } from './supabase-query.js'
@@ -80,9 +79,6 @@ export const allAgentTools = [
   sendEmailTool,
   // Memory and learning
   ...memoryTools,
-  // Check-ins
-  listCheckinsTool,
-  updateCheckinTool,
   // Revenue
   stripeMetricsTool,
   twilioStatsTool,

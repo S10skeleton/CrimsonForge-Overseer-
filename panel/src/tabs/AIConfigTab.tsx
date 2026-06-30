@@ -107,7 +107,7 @@ export default function AIConfigTab({ role }: { role: string }) {
             onClick={handleSave}
             disabled={saving || loading || !dirty || readOnly}
             style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-            title={readOnly ? 'Owner access required' : undefined}
+            title={readOnly ? 'SuperAdmin access required' : undefined}
           >
             {saving ? 'Saving...' : 'Save Config'}
           </button>
@@ -269,7 +269,7 @@ export default function AIConfigTab({ role }: { role: string }) {
               onClick={handleSave}
               disabled={saving || loading || !dirty || readOnly}
               style={{ minWidth: 140, ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
-              title={readOnly ? 'Owner access required' : undefined}
+              title={readOnly ? 'SuperAdmin access required' : undefined}
             >
               {saving ? 'Saving...' : 'Save Config'}
             </button>

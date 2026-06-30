@@ -21,6 +21,8 @@ function validateEnvironment(): void {
     'RAILWAY_API_TOKEN',
     'CF_PROJECT_ID',
     'CF_SERVICE_ID',
+    'PANEL_JWT_SECRET',  // signs panel sessions
+    'MFA_ENC_KEY',       // encrypts TOTP secrets at rest (no insecure fallback)
   ]
 
   const optional = [
@@ -60,7 +62,7 @@ async function main(): Promise<void> {
   validateEnvironment()
 
   // Start the cron scheduler (health checks + morning briefing)
-  startScheduler()
+  await startScheduler()
 
   // Start the two-way Slack bot (optional — only if tokens are configured)
   await startSlackBot()

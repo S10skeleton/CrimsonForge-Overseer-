@@ -147,7 +147,7 @@ export default function MessagesTab({ role }: { role: string }) {
           onClick={openNew}
           disabled={readOnly}
           style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-          title={readOnly ? 'Owner access required' : undefined}
+          title={readOnly ? 'SuperAdmin access required' : undefined}
         >
           + New Message
         </button>
@@ -264,7 +264,7 @@ export default function MessagesTab({ role }: { role: string }) {
                     <button
                       onClick={() => handleToggleActive(msg)}
                       disabled={isToggling || readOnly}
-                      title={readOnly ? 'Owner access required' : undefined}
+                      title={readOnly ? 'SuperAdmin access required' : undefined}
                       style={{
                         padding: '6px 14px', borderRadius: 6, cursor: readOnly ? 'not-allowed' : 'pointer',
                         fontFamily: 'Rajdhani', fontWeight: 700, fontSize: 13, letterSpacing: .5,
@@ -283,7 +283,7 @@ export default function MessagesTab({ role }: { role: string }) {
                       onClick={() => openEdit(msg)}
                       disabled={readOnly}
                       style={readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-                      title={readOnly ? 'Owner access required' : undefined}
+                      title={readOnly ? 'SuperAdmin access required' : undefined}
                     >
                       Edit
                     </button>
@@ -291,7 +291,7 @@ export default function MessagesTab({ role }: { role: string }) {
                     <button
                       onClick={() => handleDelete(msg.id)}
                       disabled={isDeleting || readOnly}
-                      title={readOnly ? 'Owner access required' : undefined}
+                      title={readOnly ? 'SuperAdmin access required' : undefined}
                       style={{
                         padding: '5px 10px', borderRadius: 6, cursor: readOnly ? 'not-allowed' : 'pointer',
                         fontFamily: 'Rajdhani', fontWeight: 700, fontSize: 12,

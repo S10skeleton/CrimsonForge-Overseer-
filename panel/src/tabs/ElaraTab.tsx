@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '../api'
 import { formatDistanceToNow, format } from 'date-fns'
 
-type SubTab = 'chat' | 'memory' | 'knowledge' | 'parking' | 'checkins' | 'tools'
+type SubTab = 'chat' | 'memory' | 'knowledge' | 'parking' | 'tools'
 
 interface ElaraTabProps { role: string }
 
@@ -44,7 +44,6 @@ export default function ElaraTab({ role }: ElaraTabProps) {
           ['memory', 'Memory'],
           ['knowledge', 'Knowledge'],
           ['parking', 'Parking Lot'],
-          ['checkins', 'Check-ins'],
           ['tools', 'Tools'],
         ] as [SubTab, string][]).map(([id, label]) => (
           <button key={id} className={`subtab ${sub === id ? 'active' : ''}`} onClick={() => setSub(id)}>
@@ -57,7 +56,6 @@ export default function ElaraTab({ role }: ElaraTabProps) {
       {sub === 'memory'    && <ElaraMemory />}
       {sub === 'knowledge' && <ElaraKnowledge readOnly={readOnly} />}
       {sub === 'parking'   && <ElaraParkingLot readOnly={readOnly} />}
-      {sub === 'checkins'  && <ElaraCheckins />}
       {sub === 'tools'     && <ElaraTools />}
     </div>
   )
@@ -454,41 +452,6 @@ function ElaraParkingLot({ readOnly }: { readOnly: boolean }) {
   )
 }
 
-// ── Check-ins ─────────────────────────────────────────────────────────────────
-
-function ElaraCheckins() {
-  const [checkins, setCheckins] = useState<any[]>([])
-  const [loading, setLoading]   = useState(true)
-
-  useEffect(() => { api.elara.checkins().then(setCheckins).finally(() => setLoading(false)) }, [])
-
-  return (
-    <div>
-      {loading ? (
-        <div style={{ color: 'var(--dim)', padding: 40, textAlign: 'center', fontFamily: 'Share Tech Mono', letterSpacing: 2 }}>LOADING...</div>
-      ) : checkins.length === 0 ? (
-        <div style={{ color: 'var(--dim)', padding: 40, textAlign: 'center' }}>No check-ins configured.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {checkins.map((c: any) => (
-            <div key={c.label} className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>{c.label?.replace(/_/g, ' ')}</div>
-                  <div style={{ fontFamily: 'Share Tech Mono', fontSize: 12, color: 'var(--dim)' }}>{c.window_start_utc} – {c.window_end_utc} UTC</div>
-                </div>
-                <span className={`badge ${c.enabled ? 'badge-green' : 'badge-dim'}`}>{c.enabled ? 'Enabled' : 'Disabled'}</span>
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--dim)', fontStyle: 'italic' }}>"{c.message}"</div>
-              {c.last_fired_at && <div style={{ fontSize: 11, color: 'var(--dimmer)', marginTop: 8, fontFamily: 'Share Tech Mono' }}>Last fired {formatDistanceToNow(new Date(c.last_fired_at), { addSuffix: true })}</div>}
-            </div>
-          ))}
-          <div style={{ fontSize: 13, color: 'var(--dim)', marginTop: 4 }}>To update check-ins, tell Elara in the Chat tab or via Slack.</div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
 

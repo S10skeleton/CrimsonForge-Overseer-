@@ -483,10 +483,13 @@ function buildCFPSection(data: any): ProductSection {
     { name: 'Sentry',       status: parseBool(data.sentry),   detail: `${data.sentry?.data?.unresolvedCount ?? 0} unresolved` },
   ]
 
-  const kpis = data?.stripe?.data ? [
-    { label: 'MRR',              value: `$${(data.stripe.data.mrr ?? 0).toLocaleString()}`, color: 'var(--green)' },
-    { label: 'Active Subs',      value: data.stripe.data.activeSubscriptions ?? 0,          color: 'var(--cyan)' },
-    { label: 'Payment Failures', value: data.stripe.data.paymentFailures?.length ?? 0,      color: data.stripe.data.hasPaymentFailures ? 'var(--red)' : 'var(--dim)' },
+  // CFP-scoped revenue (non-FP subscriptions) — see OVERSEER-FIX3. The generic
+  // data.stripe monitor is account-wide and stays the source for Stripe *health*.
+  const cfp = data?.cfp_stripe?.data
+  const kpis = cfp ? [
+    { label: 'MRR',              value: `$${(cfp.mrr ?? 0).toLocaleString()}`,          color: 'var(--green)' },
+    { label: 'Active Subs',      value: cfp.activeSubscriptions ?? 0,                   color: 'var(--cyan)' },
+    { label: 'Payment Failures', value: cfp.paymentFailures?.length ?? 0,               color: cfp.hasPaymentFailures ? 'var(--red)' : 'var(--dim)' },
   ] : []
 
   return {

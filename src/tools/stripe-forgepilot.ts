@@ -47,8 +47,9 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
 
   try {
     // ── Active subscriptions — fetch all, filter to FP ───────────────────
-    const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100 })
-    const fpActive = allActive.data.filter(isFPSubscription)
+    // autoPagingToArray so totals don't silently truncate past 100 subs (#6).
+    const allActive = await stripe.subscriptions.list({ status: 'active' }).autoPagingToArray({ limit: 1000 })
+    const fpActive = allActive.filter(isFPSubscription)
 
     const activeSubscriptions = fpActive.length
 
@@ -79,22 +80,21 @@ export async function runForgePilotStripeCheck(): Promise<ToolResult<ForgePilotS
     }
 
     // ── Cancelled this month ─────────────────────────────────────────────
-    const cancelled = await stripe.subscriptions.list({
-      status: 'canceled',
-      created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
-      limit: 100,
-    })
-    const cancelledThisMonth = cancelled.data.filter(isFPSubscription).length
+    // Filter on canceled_at, not `created` (which is original creation time).
+    const startSec = Math.floor(startOfMonth.getTime() / 1000)
+    const cancelled = await stripe.subscriptions.list({ status: 'canceled' }).autoPagingToArray({ limit: 1000 })
+    const cancelledThisMonth = cancelled.filter(
+      (s) => isFPSubscription(s) && (s.canceled_at ?? 0) >= startSec,
+    ).length
 
     // ── Payment failures ─────────────────────────────────────────────────
     const failedInvoices = await stripe.invoices.list({
       status: 'open',
-      limit: 20,
       expand: ['data.customer'],
-    })
+    }).autoPagingToArray({ limit: 1000 })
 
     const paymentFailures: StripePaymentFailure[] = []
-    for (const inv of failedInvoices.data) {
+    for (const inv of failedInvoices) {
       const subId = (inv as any).subscription as string | null
       if (!subId) continue
       // Only include FP subscriptions

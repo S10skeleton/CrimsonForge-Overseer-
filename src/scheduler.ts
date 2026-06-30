@@ -7,22 +7,25 @@ import cron from 'node-cron'
 import { createClient } from '@supabase/supabase-js'
 import { monitors } from './tools/index.js'
 import { checkForNewSubscribers } from './tools/stripe.js'
-import { sendBriefing, sendAlert, sendAlertToChannel, sendRawMessage, sendSMSAlert } from './notifications/slack.js'
+import { sendBriefing, sendRawMessage, sendAgentMessage, notifyAlert } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
-import { runCheckinDispatcher } from './jobs/checkins.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
+import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
 import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
 import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
 import type { MorningBriefing, Alert, ForgePilotBriefing } from './types/index.js'
 import { evaluateEndpointAlert } from './lib/alert-state.js'
+import { getBriefingConfig, getSchedules, getCustomJobs, resolveDestination } from './lib/elaraConfig.js'
+import type { CustomJob, Destination } from './lib/elaraConfig.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
-const MORNING_BRIEFING_HOUR = Number(process.env.MORNING_BRIEFING_HOUR || '8')
-const FP_INSIGHTS_HOUR = Number(process.env.FP_INSIGHTS_HOUR || '5')
+// Registered cron tasks by key, so a config save can stop/replace them
+// in-process via reloadSchedules() (no redeploy, no cross-process pub/sub).
+const scheduledTasks = new Map<string, cron.ScheduledTask>()
 
 // ─── Briefing Storage ─────────────────────────────────────────────────────
 
@@ -42,7 +45,7 @@ async function storeBriefing(content: string): Promise<void> {
     }
 
     const lines = content.split('\n').filter(l => l.trim())
-    const summaryLine = lines[0]?.replace(/[🟢🟡🔴]/g, '').trim() ?? ''
+    const summaryLine = lines[0]?.replace(/[🟢🟡🔴]/gu, '').trim() ?? ''
 
     await sb.from('agent_briefings').insert({
       content,
@@ -97,13 +100,10 @@ async function runSilentHealthCheck(): Promise<void> {
     if (alerts.length === 0) {
       console.log('[SCHEDULER] Silent health check passed. No alerts needed.')
     } else {
+      // service_down rule gates enable/severity/SMS; quiet hours + routing applied.
+      // (SMS still fires for criticals by the rule's seed.)
       for (const alert of alerts) {
-        await sendAlert(alert)
-        // P0 = critical severity — also SMS Clutch directly
-        // 'info' (recovery) never SMSes; 'warning' never SMSes.
-        if (alert.severity === 'critical') {
-          await sendSMSAlert(`${alert.message}${alert.details ? ` — ${alert.details}` : ''}`)
-        }
+        await notifyAlert({ ruleKey: 'service_down', notificationType: 'health_alert', alert })
       }
     }
 
@@ -112,10 +112,9 @@ async function runSilentHealthCheck(): Promise<void> {
       if (process.env.STRIPE_SECRET_KEY) {
         const { newSubscribers } = await checkForNewSubscribers()
         for (const sub of newSubscribers) {
-          await sendAlert({
-            severity: 'info',
-            tool: 'stripe',
-            message: `🎉 New subscriber: ${sub.email} — ${sub.plan} ($${sub.amount}/mo)`,
+          await notifyAlert({
+            ruleKey: 'new_subscriber', notificationType: 'new_subscriber',
+            alert: { severity: 'info', tool: 'stripe', message: `🎉 New subscriber: ${sub.email} — ${sub.plan} ($${sub.amount}/mo)` },
           })
           console.log(`[SCHEDULER] New subscriber alert: ${sub.email}`)
         }
@@ -146,11 +145,13 @@ async function runSilentHealthCheck(): Promise<void> {
 
         for (const shop of (newShops || [])) {
           if (excludedShops.includes(shop.name.toLowerCase())) continue
-          await sendAlert({
-            severity: 'info',
-            tool: 'supabase',
-            message: `🏪 New shop onboarded: ${shop.name}`,
-            details: `Signed up just now — watch for first ticket in next 24h`,
+          await notifyAlert({
+            ruleKey: 'new_shop', notificationType: 'activity',
+            alert: {
+              severity: 'info', tool: 'supabase',
+              message: `🏪 New shop onboarded: ${shop.name}`,
+              details: `Signed up just now — watch for first ticket in next 24h`,
+            },
           })
         }
 
@@ -200,11 +201,13 @@ async function runSilentHealthCheck(): Promise<void> {
 
             if (existingFlag) continue // already alerted today
 
-            await sendAlert({
-              severity: 'warning',
-              tool: 'supabase',
-              message: `⚠️ New shop silent: ${shop.name}`,
-              details: `Day ${daysSinceSignup + 1} onboarding — 0 tickets ever. May need a check-in.`,
+            await notifyAlert({
+              ruleKey: 'new_shop', notificationType: 'activity',
+              alert: {
+                severity: 'warning', tool: 'supabase',
+                message: `⚠️ New shop silent: ${shop.name}`,
+                details: `Day ${daysSinceSignup + 1} onboarding — 0 tickets ever. May need a check-in.`,
+              },
             })
 
             await elaraSupabase
@@ -219,10 +222,8 @@ async function runSilentHealthCheck(): Promise<void> {
       console.error('[SCHEDULER] Error in new shop onboarding check:', err)
     }
 
-    // ForgePilot health
+    // ForgePilot health — routed via the fp_alert notification type
     try {
-      const fpChannelId = process.env.FP_SLACK_CHANNEL_ID
-
       const fpUptime = await runForgePilotUptimeCheck()
       if (fpUptime.success) {
         for (const [name, ep] of [
@@ -237,20 +238,21 @@ async function runSilentHealthCheck(): Promise<void> {
             toolName: 'fp_uptime',
           })
           if (decision) {
-            await sendAlertToChannel(fpChannelId, decision)
+            await notifyAlert({ ruleKey: 'service_down', notificationType: 'fp_alert', alert: decision })
           }
         }
       }
 
       const fpStripe = await runForgePilotStripeCheck()
       if (fpStripe.success && fpStripe.data.hasPaymentFailures) {
-        await sendAlertToChannel(fpChannelId, {
-          severity: 'warning',
-          tool: 'fp_stripe',
-          message: `ForgePilot: ${fpStripe.data.paymentFailures.length} payment failure(s) detected.`,
-          details: fpStripe.data.paymentFailures
-            .map(f => `${f.customerEmail} — $${f.amount}`)
-            .join('\n'),
+        await notifyAlert({
+          ruleKey: 'payment_failure', notificationType: 'fp_alert',
+          alert: {
+            severity: 'warning',
+            tool: 'fp_stripe',
+            message: `ForgePilot: ${fpStripe.data.paymentFailures.length} payment failure(s) detected.`,
+            details: fpStripe.data.paymentFailures.map(f => `${f.customerEmail} — $${f.amount}`).join('\n'),
+          },
         })
       }
     } catch (err) {
@@ -272,11 +274,13 @@ async function runSilentHealthCheck(): Promise<void> {
           .gte('created_at', since)
 
         for (const signup of newSignups ?? []) {
-          await sendAlert({
-            severity: 'info',
-            tool: 'forgepulse',
-            message: `\uD83D\uDE80 ForgePulse waitlist signup: ${signup.email}`,
-            details: signup.source ? `Source: ${signup.source}` : undefined,
+          await notifyAlert({
+            ruleKey: 'forgepulse_signup', notificationType: 'activity',
+            alert: {
+              severity: 'info', tool: 'forgepulse',
+              message: `\uD83D\uDE80 ForgePulse waitlist signup: ${signup.email}`,
+              details: signup.source ? `Source: ${signup.source}` : undefined,
+            },
           })
         }
       }
@@ -291,8 +295,12 @@ async function runSilentHealthCheck(): Promise<void> {
 
 // ─── Morning Briefing Job ─────────────────────────────────────────────────
 
-async function runMorningBriefing(): Promise<void> {
-  console.log('[SCHEDULER] Running morning briefing...')
+async function runMorningBriefing(opts: { preview?: boolean } = {}): Promise<string> {
+  const preview = opts.preview === true
+  console.log(`[SCHEDULER] ${preview ? 'Building briefing preview' : 'Running morning briefing'}...`)
+
+  // Effective briefing config (env defaults overlaid with any saved overrides).
+  const cfg = await getBriefingConfig()
 
   try {
     // Run all monitors in parallel (infrastructure + new integrations)
@@ -311,7 +319,7 @@ async function runMorningBriefing(): Promise<void> {
         monitors.netlify(),
       ])
 
-    function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
+    const getResult = <T,>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } => {
       if (result.status === 'rejected') {
         return {
           success: false,
@@ -473,18 +481,23 @@ async function runMorningBriefing(): Promise<void> {
       alerts,
     }
 
-    // Store for the Slack bot's context
-    setLastBriefing(briefing)
+    // Store for the Slack bot's context (skip on preview — don't mutate state)
+    if (!preview) setLastBriefing(briefing)
+
+    // Section gating — a section turned off in Elara Controls is omitted from
+    // the briefing. Default config has every section on, so behavior is
+    // unchanged until the founder toggles one.
+    const sec = cfg.sections
 
     // Try AI-enhanced briefing first
-    const gmailData = gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
-    const calendarData = calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
+    const gmailData = sec.gmail && gmailResult.success ? (gmailResult.data as { unreadCount: number; messages: Array<{ from: string; subject: string; snippet: string }> }) : undefined
+    const calendarData = sec.calendar && calendarResult.success ? (calendarResult.data as { todayEvents: Array<{ title: string; start: string; end: string; location?: string; attendees: string[] }> }) : undefined
 
     const twilioSummary = twilioResult.success
       ? (twilioResult.data as { sent: number; delivered: number; failed: number; failureRate: number; thresholdBreached: boolean })
       : undefined
 
-    const stripeForBriefing = stripeResult.success
+    const stripeForBriefing = sec.stripe_revenue && stripeResult.success
       ? (stripeResult.data as import('./types/index.js').StripeData)
       : undefined
 
@@ -524,72 +537,136 @@ async function runMorningBriefing(): Promise<void> {
     } catch (err) {
       console.error('[SCHEDULER] Error fetching feedback for briefing:', err)
     }
+    if (!sec.feedback) feedbackForBriefing = []
 
-    const aiBriefingText = await generateAIBriefing({
-      briefing,
-      gmailData,
-      calendarData,
-      twilioData: twilioSummary,
-      stripeData: stripeForBriefing,
-      resendData: resendForBriefing,
-      netlifyData: netlifyForBriefing,
-      feedbackData: feedbackForBriefing,
-      fpData: fpBriefing ?? undefined,
-    })
+    // AI summary honors the toggle; when off (or unavailable) we use the
+    // structured briefing instead.
+    const aiBriefingText = cfg.aiSummary
+      ? await generateAIBriefing({
+          briefing,
+          gmailData,
+          calendarData,
+          twilioData: twilioSummary,
+          stripeData: stripeForBriefing,
+          resendData: resendForBriefing,
+          netlifyData: netlifyForBriefing,
+          feedbackData: feedbackForBriefing,
+          fpData: sec.forgepilot ? (fpBriefing ?? undefined) : undefined,
+        })
+      : null
 
-    if (aiBriefingText) {
-      // Post the AI-generated briefing
-      await sendRawMessage(aiBriefingText)
-      await storeBriefing(aiBriefingText)
-      console.log('[SCHEDULER] AI morning briefing sent.')
+    const isAI = aiBriefingText != null
+    let outText: string
+    if (isAI) {
+      outText = aiBriefingText as string
     } else {
-      // Fall back to the structured briefing if AI is unavailable
-      console.log('[SCHEDULER] AI unavailable — sending structured briefing.')
-      await sendBriefing(briefing)
-      await storeBriefing(`[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
+      const statusEmoji = overallStatus === 'down' ? '🔴' : overallStatus === 'degraded' ? '🟡' : '🟢'
+      outText = `${statusEmoji} Status: ${overallStatus}\n` +
+        (alerts.length ? alerts.map((a) => `• ${a.message}`).join('\n') : 'No alerts.')
     }
 
-    console.log('[SCHEDULER] Morning briefing complete.')
+    if (!preview) {
+      // Route the briefing through its configured destination (like alerts),
+      // falling back to the legacy webhook if no Slack channel is routed (FIX4).
+      const dest = await resolveDestination('briefing')
+      if (dest && dest.kind === 'slack' && dest.target && dest.target !== 'webhook') {
+        await sendAgentMessage(outText, dest.target)
+      } else if (isAI) {
+        await sendRawMessage(outText)
+      } else {
+        await sendBriefing(briefing)
+      }
+      await storeBriefing(isAI ? outText : `[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
+      console.log('[SCHEDULER] Morning briefing sent.')
+    }
+
+    return outText
   } catch (err) {
     console.error('[SCHEDULER] Error in morning briefing:', err)
+    return preview ? `Preview failed: ${err instanceof Error ? err.message : 'unknown error'}` : ''
   }
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────
+// ─── Job registry + reload ───────────────────────────────────────────────────
 
-export function startScheduler(): void {
+// Built-in job_key → handler. Disabled rows simply aren't registered.
+const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
+  morning_briefing: () => runMorningBriefing(),
+  fp_insights: () => runInsightAnalysis(),
+  health_check: () => runSilentHealthCheck(),
+  summarize: async () => {
+    try { await runSummarizationDispatcher() } catch (err) { console.error('[SCHEDULER] summarization dispatcher:', err) }
+  },
+  mrr_snapshot: () => runMrrSnapshot(),
+}
+
+/** Post text to a resolved destination (slack channel or webhook). */
+async function postToDestination(dest: Destination | null, text: string): Promise<void> {
+  if (!dest || dest.kind === 'slack') {
+    if (dest && dest.target && dest.target !== 'webhook') await sendAgentMessage(text, dest.target)
+    else await sendRawMessage(text)
+    return
+  }
+  console.log(`[SCHEDULER] destination kind "${dest.kind}" not implemented — skipping`)
+}
+
+/** Run a user-defined custom job (slack_message | agent_prompt). */
+async function runCustomJob(job: CustomJob): Promise<void> {
+  try {
+    const payload = job.payload as { text?: string; prompt?: string; destination_id?: string }
+    const dest = await resolveDestination('custom', payload.destination_id ?? null)
+    if (job.action_type === 'slack_message') {
+      if (payload.text) await postToDestination(dest, payload.text)
+    } else if (job.action_type === 'agent_prompt' && payload.prompt) {
+      const mod = (await import('./agent/index.js')) as { runAgent?: (msg: string) => Promise<string> }
+      const out = mod.runAgent ? await mod.runAgent(payload.prompt) : `[custom job: ${job.name}] ${payload.prompt}`
+      await postToDestination(dest, out)
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] custom job failed:', job.name, err)
+  }
+}
+
+/**
+ * (Re)register all cron tasks from DB config. Called once at startup and again
+ * after any schedule/custom-job change. Falls back to built-in defaults when
+ * the schedules table is empty/unreadable (see elaraConfig.getSchedules), so a
+ * bad DB never leaves the process with no jobs.
+ */
+export async function reloadSchedules(): Promise<void> {
+  const fallbackTz = process.env.TIMEZONE || 'America/Denver'
+
+  for (const task of scheduledTasks.values()) task.stop()
+  scheduledTasks.clear()
+
+  const schedules = await getSchedules()
+  for (const s of schedules) {
+    if (!s.enabled) continue
+    const fn = BUILTIN_JOBS[s.job_key]
+    if (!fn) continue
+    const tz = s.timezone || fallbackTz
+    const task = cron.schedule(s.cron, () => {
+      fn().catch((err) => console.error(`[SCHEDULER] ${s.job_key} error:`, err))
+    }, { timezone: tz })
+    scheduledTasks.set(s.job_key, task)
+    console.log(`[SCHEDULER] Registered ${s.job_key}: "${s.cron}" (${tz})`)
+  }
+
+  const customJobs = await getCustomJobs()
+  for (const job of customJobs) {
+    if (!job.enabled) continue
+    const tz = job.timezone || fallbackTz
+    const task = cron.schedule(job.cron, () => {
+      runCustomJob(job).catch((err) => console.error('[SCHEDULER] custom job error:', err))
+    }, { timezone: tz })
+    scheduledTasks.set(`custom:${job.id}`, task)
+    console.log(`[SCHEDULER] Registered custom "${job.name}": "${job.cron}" (${tz})`)
+  }
+}
+
+export async function startScheduler(): Promise<void> {
   console.log('[SCHEDULER] Starting cron jobs...')
-
-  const timezone = process.env.TIMEZONE || 'America/Denver'
-
-  // Every minute: wellness check-in dispatcher (fires within randomized window)
-  cron.schedule('* * * * *', async () => {
-    try { await runCheckinDispatcher() } catch (err) {
-      console.error('[SCHEDULER] Error in check-in dispatcher:', err)
-    }
-    try { await runSummarizationDispatcher() } catch (err) {
-      console.error('[SCHEDULER] Error in summarization dispatcher:', err)
-    }
-  }, { timezone })
-  console.log('[SCHEDULER] Scheduled: Check-in dispatcher + summarization every minute')
-
-  // Every 15 minutes: silent health check
-  cron.schedule('*/15 * * * *', runSilentHealthCheck, { timezone })
-  console.log('[SCHEDULER] Scheduled: Silent health check every 15 minutes')
-
-  // Every morning at specified hour: full briefing
-  cron.schedule(`0 ${MORNING_BRIEFING_HOUR} * * *`, runMorningBriefing, { timezone })
-  console.log(`[SCHEDULER] Scheduled: Morning briefing daily at ${MORNING_BRIEFING_HOUR}:00 (${timezone})`)
-
-  cron.schedule(`0 ${FP_INSIGHTS_HOUR} * * *`, async () => {
-    console.log(`[SCHEDULER] Running ForgeAssist insight analysis at ${FP_INSIGHTS_HOUR}:00 (${timezone})`)
-    try {
-      await runInsightAnalysis()
-    } catch (err) {
-      console.error('[SCHEDULER] Insight analysis failed:', err)
-    }
-  }, { timezone })
-  console.log(`[SCHEDULER] Scheduled: ForgeAssist insight analysis daily at ${FP_INSIGHTS_HOUR}:00 (${timezone})`)
+  await reloadSchedules()
 }
 
 export { runSilentHealthCheck, runMorningBriefing }

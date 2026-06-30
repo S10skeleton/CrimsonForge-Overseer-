@@ -5,6 +5,7 @@
 
 import type { MorningBriefing, Alert } from '../types/index.js'
 import { getSlackApp } from '../slack-bot.js'
+import { getRecipients, getAlertRule, isWithinQuietHours, resolveDestination } from '../lib/elaraConfig.js'
 
 // ─── Configuration ────────────────────────────────────────────────────────
 
@@ -253,26 +254,33 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 }
 
 /**
- * Sends an immediate alert to Slack
+ * Format an alert for Slack, keyed on severity so good news doesn't read as an
+ * outage (FIX5). critical -> red ALERT + Detected; warning -> yellow Heads up;
+ * info -> green / the message's own emoji (new signup, recovery, etc.).
+ */
+function formatAlert(alert: Alert): string {
+  const tail =
+    (alert.details ? `\n\n${alert.details}` : '') +
+    (alert.actionUrl ? `\nView: ${alert.actionUrl}` : '')
+
+  if (alert.severity === 'critical') {
+    const detected = new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })
+    return `\uD83D\uDD34 ALERT \u2014 ${alert.tool.toUpperCase()}\nDetected: ${detected}\n\n${alert.message}${tail}`
+  }
+  if (alert.severity === 'warning') {
+    return `\uD83D\uDFE1 Heads up \u2014 ${alert.message}${tail}`
+  }
+  // info \u2014 positive/neutral. Keep the message's own leading emoji if it has one.
+  const hasOwnEmoji = /^\p{Extended_Pictographic}/u.test(alert.message.trim())
+  return `${hasOwnEmoji ? '' : '\uD83D\uDFE2 '}${alert.message}${tail}`
+}
+
+/**
+ * Sends an immediate alert to Slack (webhook).
  */
 export async function sendAlert(alert: Alert): Promise<void> {
   try {
-    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
-    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()} ISSUE\n`
-    message += `Detected: ${new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })}\n\n`
-    message += `${alert.message}\n`
-
-    if (alert.details) {
-      message += `\n${alert.details}\n`
-    }
-
-    if (alert.actionUrl) {
-      message += `\nView: ${alert.actionUrl}\n`
-    }
-
-    await postToSlack({
-      text: message,
-    })
+    await postToSlack({ text: formatAlert(alert) })
   } catch (err) {
     console.error('Error sending alert to Slack:', err)
   }
@@ -290,12 +298,7 @@ export async function sendAlertToChannel(channelId: string | undefined, alert: A
   }
 
   try {
-    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
-    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()}\n`
-    message += `${alert.message}\n`
-    if (alert.details) message += `\n${alert.details}\n`
-    if (alert.actionUrl) message += `\nView: ${alert.actionUrl}\n`
-
+    const message = formatAlert(alert)
     const slackApp = getSlackApp()
     if (slackApp) {
       await slackApp.client.chat.postMessage({
@@ -309,7 +312,7 @@ export async function sendAlertToChannel(channelId: string | undefined, alert: A
   } catch (err) {
     console.error('[slack] Error sending alert to channel:', err)
     // Best-effort fallback
-    try { await sendAlert(alert) } catch {}
+    try { await sendAlert(alert) } catch { /* best-effort — already logged */ }
   }
 }
 
@@ -348,11 +351,10 @@ export async function sendRawMessage(text: string): Promise<void> {
  * Only fires on P0 (critical) alerts.
  * Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, CLUTCH_PHONE_NUMBER.
  */
-export async function sendSMSAlert(message: string): Promise<void> {
+async function sendOneSMS(toNumber: string, message: string): Promise<void> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID
   const authToken = process.env.TWILIO_AUTH_TOKEN
   const fromNumber = process.env.TWILIO_FROM_NUMBER
-  const toNumber = process.env.CLUTCH_PHONE_NUMBER
 
   if (!accountSid || !authToken || !fromNumber || !toNumber) {
     console.log('[SMS ALERT] Twilio not fully configured — skipping SMS alert.')
@@ -360,12 +362,7 @@ export async function sendSMSAlert(message: string): Promise<void> {
   }
 
   try {
-    const body = new URLSearchParams({
-      From: fromNumber,
-      To: toNumber,
-      Body: `🚨 CFP P0: ${message}`,
-    })
-
+    const body = new URLSearchParams({ From: fromNumber, To: toNumber, Body: `🚨 CFP P0: ${message}` })
     const response = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
       {
@@ -378,15 +375,61 @@ export async function sendSMSAlert(message: string): Promise<void> {
         signal: AbortSignal.timeout(10_000),
       }
     )
-
     if (!response.ok) {
       const err = await response.text()
       console.error(`[SMS ALERT] Failed to send SMS: ${err}`)
     } else {
-      console.log(`[SMS ALERT] P0 SMS sent to Clutch.`)
+      console.log(`[SMS ALERT] P0 SMS sent to ${toNumber}.`)
     }
   } catch (err) {
     console.error('[SMS ALERT] Error sending SMS:', err)
+  }
+}
+
+/**
+ * Send a P0 SMS to every configured critical-SMS recipient.
+ * Recipients come from elara_recipients('sms') with a CLUTCH_PHONE_NUMBER fallback.
+ */
+export async function sendSMSAlert(message: string): Promise<void> {
+  const recipients = await getRecipients('sms')
+  if (recipients.length === 0) {
+    console.log('[SMS ALERT] No SMS recipients configured — skipping.')
+    return
+  }
+  for (const to of recipients) await sendOneSMS(to, message)
+}
+
+/**
+ * Config-aware alert dispatch. Applies the alert rule (enable/severity/sms),
+ * quiet-hours suppression, and DB-backed channel routing.
+ *   ruleKey — elara_alert_rules key (gates enabled/severity/sms)
+ *   notificationType — elara_notify_routes key for channel resolution
+ */
+export async function notifyAlert(opts: { ruleKey: string; notificationType: string; alert: Alert }): Promise<void> {
+  const { ruleKey, notificationType, alert } = opts
+  const rule = await getAlertRule(ruleKey)
+  if (!rule.enabled) {
+    console.log(`[ALERT] rule "${ruleKey}" disabled — skipping`)
+    return
+  }
+
+  // Rule severity applies to real problem alerts; recovery/info notices keep theirs.
+  const severity = alert.severity === 'info' ? 'info' : (rule.severity ?? alert.severity)
+  if (await isWithinQuietHours(severity)) {
+    console.log(`[ALERT] quiet hours — suppressing ${severity} alert "${ruleKey}"`)
+    return
+  }
+
+  const routed: Alert = { ...alert, severity }
+  const dest = await resolveDestination(notificationType, rule.destination_id)
+  if (dest && dest.kind === 'slack' && dest.target && dest.target !== 'webhook') {
+    await sendAlertToChannel(dest.target, routed)
+  } else {
+    await sendAlert(routed)
+  }
+
+  if (rule.sms_enabled) {
+    await sendSMSAlert(`${routed.message}${routed.details ? ` — ${routed.details}` : ''}`)
   }
 }
 

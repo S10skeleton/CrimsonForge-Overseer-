@@ -12,25 +12,338 @@ function headers(): Record<string, string> {
   }
 }
 
+// Centralized 401 handling: an expired/invalid token clears local auth and
+// bounces to /login from anywhere. Skipped on the auth endpoints themselves so
+// a bad passphrase surfaces its own error instead of a redirect loop.
+function handleUnauthorized(path: string) {
+  if (path.startsWith('/api/auth/')) return
+  // Reason survives the hard location.assign so Login can explain why.
+  sessionStorage.setItem('panel_logout_reason', 'expired')
+  localStorage.removeItem('panel_token')
+  localStorage.removeItem('panel_role')
+  localStorage.removeItem('panel_user')
+  if (window.location.pathname !== '/login') window.location.assign('/login')
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: { ...headers(), ...(options?.headers ?? {}) },
   })
   if (!res.ok) {
+    if (res.status === 401) handleUnauthorized(path)
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error ?? `HTTP ${res.status}`)
   }
   return res.json()
 }
 
+export interface PanelUser {
+  id: string
+  username: string
+  email: string
+  must_change_password: boolean
+}
+
+export interface LoginResult {
+  token: string
+  role: string
+  user: PanelUser
+}
+
+export interface MfaChallenge { mfaRequired: true; mfaToken: string }
+export type LoginResponse = LoginResult | MfaChallenge
+
+export interface Admin {
+  id: string
+  username: string
+  email: string
+  role: 'owner' | 'admin' | 'read_only'
+  status: 'active' | 'suspended'
+  permissions: Record<string, 'none' | 'view' | 'manage'>
+  must_change_password: boolean
+  last_login_at: string | null
+  created_at: string
+  created_by: string | null
+}
+
+export interface Invite {
+  id: string
+  email: string
+  display_name: string | null
+  username: string | null
+  role: string
+  status: 'invited' | 'accepted' | 'revoked'
+  expires_at: string
+  created_at: string
+  accepted_at: string | null
+}
+
+export interface Me { id: string; username: string; role: string; permissions: Record<string, 'none' | 'view' | 'manage'> }
+
+export interface ActivityEvent {
+  id: number
+  type: string
+  title: string
+  body: string | null
+  severity: 'info' | 'success' | 'warning' | 'critical'
+  channel: string | null
+  meta: Record<string, unknown>
+  created_at: string
+}
+
+export interface Page<T> {
+  data: T[]
+  meta: { next_cursor: number | null }
+}
+
+export interface ElaraSchedule { job_key: string; label: string; cron: string; timezone: string | null; enabled: boolean }
+export interface ElaraBriefing { sections: Record<string, boolean>; ai_summary: boolean; timezone: string | null }
+export interface ElaraAlertRule { rule_key: string; label: string; enabled: boolean; severity: string; sms_enabled: boolean; threshold: Record<string, number> | null; destination_id: string | null }
+export interface ElaraDestination { id: string; kind: string; label: string; target: string; enabled: boolean }
+export interface ElaraRoute { notification_type: string; destination_id: string | null }
+export interface ElaraRecipient { id: string; kind: string; value: string; label: string | null; enabled: boolean }
+export interface ElaraQuietHours { enabled: boolean; start_local: string; end_local: string; timezone: string | null; exempt_severities: string[] }
+export interface ElaraCustomJob { id: string; name: string; cron: string; timezone: string | null; action_type: string; payload: Record<string, unknown>; enabled: boolean }
+
+export interface ElaraConfig {
+  schedules: ElaraSchedule[]
+  briefing: ElaraBriefing | null
+  alertRules: ElaraAlertRule[]
+  destinations: ElaraDestination[]
+  routes: ElaraRoute[]
+  recipients: ElaraRecipient[]
+  quietHours: ElaraQuietHours | null
+  customJobs: ElaraCustomJob[]
+}
+
+export interface CrmCompany {
+  id: string; name: string; type: string; status: string; website: string | null
+  fp_shop_id: string | null; fp_customer_id: string | null; source_lead_id: string | null
+  owner: string | null; notes: string | null; tags: string[]; created_at: string; updated_at: string
+}
+export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; created_at: string }
+export interface CrmDeal {
+  id: string; company_id: string; company_name?: string | null; name: string; pipeline: string; stage: string
+  amount: number | null; currency: string; probability: number | null; status: string; expected_close: string | null
+  owner: string | null; notes: string | null; created_at: string; updated_at: string
+}
+export interface CrmActivity { id: string; company_id: string; contact_id: string | null; deal_id: string | null; type: string; subject: string | null; body: string | null; due_at: string | null; done: boolean; created_by: string | null; created_at: string }
+export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
+export interface CompanyDetail { company: CrmCompany; contacts: CrmContact[]; deals: CrmDeal[]; activities: CrmActivity[] }
+
+export interface Revenue { mrr: number; arr: number; activeSubs: number; newThisMonth: number; churnedThisMonth: number; failedPaymentsCount: number; failedPaymentsAmount: number; planBreakdown: { solo: number; shop: number } }
+export interface MrrPoint { snapshot_date: string; mrr: number; arr: number; active_subs: number; new_subs: number; churned_subs: number }
+export interface FinEntry { id: string; month: string; type: string; category: string | null; label: string | null; amount: number; notes: string | null; created_by: string | null; created_at: string }
+export interface Runway { cashOnHand: number | null; avgMonthlyBurn: number | null; runwayMonths: number | null }
+export interface RaiseProgress { target: number; committed: number; byStage: Array<{ stage: string; count: number; amount: number }>; deals: Array<{ id: string; name: string; company_id: string; stage: string; amount: number | null; status: string }> }
+
+export interface CapSecurity { id: string; holder_name: string; holder_type: string; security_class: string; crm_company_id: string | null; shares: number | null; pct: number | null; issued: boolean; notes: string | null; computedPct?: number | null }
+export interface CapSafe { id: string; investor_name: string; crm_company_id: string | null; instrument_type: string; amount: number; valuation_cap: number | null; discount_pct: number | null; mfn: boolean; pro_rata: boolean; date_signed: string | null; status: string; notes: string | null }
+export interface CapSummary { totalIssuedShares: number; holders: CapSecurity[]; optionPoolReserved: number; fullyDilutedShares: number; outstandingSafes: { count: number; total: number; list: CapSafe[] } }
+export interface CapInvestor { id: string; name: string; type: string; owner: string | null; safes: CapSafe[]; outstandingTotal: number }
+
+export interface HomeSummary {
+  signupsThisWeek: number | null
+  leads: { open: number | null; hot: number | null; total: number | null }
+  runway: { available: boolean }
+  pipeline: { available: boolean }
+}
+
 export const api = {
   auth: {
-    login: (passphrase: string) =>
-      request<{ token: string }>('/api/auth/login', {
+    login: (username: string, password: string) =>
+      request<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ passphrase }),
+        body: JSON.stringify({ username, password }),
       }),
+    loginMfa: (mfaToken: string, code: string) =>
+      request<LoginResult>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ mfaToken, code }) }),
+    twofa: {
+      status: () => request<{ enabled: boolean }>('/api/auth/2fa/status'),
+      setup: () => request<{ otpauthUrl: string; qrDataUrl: string }>('/api/auth/2fa/setup', { method: 'POST' }),
+      verify: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+      disable: (p: { code?: string; recoveryCode?: string }) => request<{ ok: boolean }>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify(p) }),
+      regenerate: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/recovery/regenerate', { method: 'POST', body: JSON.stringify({ code }) }),
+    },
+    forgot: (usernameOrEmail: string) =>
+      request<{ ok: boolean }>('/api/auth/forgot', {
+        method: 'POST',
+        body: JSON.stringify({ usernameOrEmail }),
+      }),
+    reset: (token: string, newPassword: string) =>
+      request<{ ok: boolean }>('/api/auth/reset', {
+        method: 'POST',
+        body: JSON.stringify({ token, newPassword }),
+      }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ ok: boolean }>('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }),
+    status: () => request<{ locked: boolean; secondsRemaining?: number }>('/api/auth/status'),
+    acceptInvite: (token: string, username: string, password: string) =>
+      request<LoginResult>('/api/auth/accept-invite', { method: 'POST', body: JSON.stringify({ token, username, password }) }),
+    me: () => request<Me>('/api/auth/me'),
+  },
+
+  admins: {
+    list: () => request<Admin[]>('/api/admins'),
+    create: (payload: { username: string; email: string; role: string }) =>
+      request<{ admin: Admin; emailed: boolean; tempPassword?: string }>('/api/admins', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    update: (id: string, payload: Partial<{ role: string; status: string; email: string; permissions: Record<string, string> }>) =>
+      request<{ admin: Admin }>(`/api/admins/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    resetPassword: (id: string) =>
+      request<{ ok: boolean; emailed: boolean; tempPassword?: string }>(`/api/admins/${id}/reset-password`, {
+        method: 'POST',
+      }),
+    invite: (payload: { email: string; displayName?: string; username?: string; role: string; permissions: Record<string, string> }) =>
+      request<{ invite: Invite; emailed: boolean; acceptUrl?: string }>('/api/admins/invite', { method: 'POST', body: JSON.stringify(payload) }),
+    invites: () => request<Invite[]>('/api/admins/invites'),
+    resendInvite: (id: string) => request<{ ok: boolean; emailed: boolean; acceptUrl?: string }>(`/api/admins/invites/${id}/resend`, { method: 'POST' }),
+    revokeInvite: (id: string) => request<{ ok: boolean }>(`/api/admins/invites/${id}/revoke`, { method: 'POST' }),
+    reset2fa: (id: string) => request<{ ok: boolean }>(`/api/admins/${id}/reset-2fa`, { method: 'POST' }),
+  },
+
+  home: {
+    summary: () => request<HomeSummary>('/api/home/summary'),
+  },
+
+  financials: {
+    revenue: () => request<{ data: Revenue }>('/api/financials/revenue').then(r => r.data),
+    mrrHistory: (months = 12) => request<{ data: MrrPoint[] }>(`/api/financials/mrr-history?months=${months}`).then(r => r.data),
+    entries: (params?: { type?: string; from?: string; to?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.type) p.set('type', params.type)
+      if (params?.from) p.set('from', params.from)
+      if (params?.to) p.set('to', params.to)
+      const qs = p.toString()
+      return request<{ data: FinEntry[] }>(`/api/financials/entries${qs ? `?${qs}` : ''}`).then(r => r.data)
+    },
+    createEntry: (e: { month: string; type: string; category?: string; label?: string; amount: number; notes?: string }) =>
+      request<{ data: FinEntry }>('/api/financials/entries', { method: 'POST', body: JSON.stringify(e) }),
+    updateEntry: (id: string, e: Partial<FinEntry>) => request(`/api/financials/entries/${id}`, { method: 'PATCH', body: JSON.stringify(e) }),
+    deleteEntry: (id: string) => request(`/api/financials/entries/${id}`, { method: 'DELETE' }),
+    runway: () => request<{ data: Runway }>('/api/financials/runway').then(r => r.data),
+    raise: () => request<{ data: RaiseProgress }>('/api/financials/raise').then(r => r.data),
+  },
+
+  captable: {
+    securities: () => request<{ data: CapSecurity[] }>('/api/captable/securities').then(r => r.data),
+    createSecurity: (s: Partial<CapSecurity> & { holder_name: string }) => request<{ data: CapSecurity }>('/api/captable/securities', { method: 'POST', body: JSON.stringify(s) }),
+    updateSecurity: (id: string, s: Partial<CapSecurity>) => request(`/api/captable/securities/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+    deleteSecurity: (id: string) => request(`/api/captable/securities/${id}`, { method: 'DELETE' }),
+    safes: (status?: string) => request<{ data: CapSafe[] }>(`/api/captable/safes${status ? `?status=${status}` : ''}`).then(r => r.data),
+    createSafe: (s: Partial<CapSafe> & { investor_name: string; amount: number }) => request<{ data: CapSafe }>('/api/captable/safes', { method: 'POST', body: JSON.stringify(s) }),
+    updateSafe: (id: string, s: Partial<CapSafe>) => request(`/api/captable/safes/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+    deleteSafe: (id: string) => request(`/api/captable/safes/${id}`, { method: 'DELETE' }),
+    summary: () => request<{ data: CapSummary }>('/api/captable/summary').then(r => r.data),
+    investors: () => request<{ data: CapInvestor[] }>('/api/captable/investors').then(r => r.data),
+  },
+
+  crm: {
+    companies: (params?: { type?: string; q?: string; tag?: string; limit?: number; cursor?: string | null }) => {
+      const p = new URLSearchParams()
+      if (params?.type) p.set('type', params.type)
+      if (params?.q) p.set('q', params.q)
+      if (params?.tag) p.set('tag', params.tag)
+      if (params?.limit) p.set('limit', String(params.limit))
+      if (params?.cursor) p.set('cursor', params.cursor)
+      const qs = p.toString()
+      return request<{ data: CrmCompany[]; meta: { next_cursor: string | null } }>(`/api/crm/companies${qs ? `?${qs}` : ''}`)
+    },
+    company: (id: string) => request<{ data: CompanyDetail }>(`/api/crm/companies/${id}`).then(r => r.data),
+    createCompany: (c: Partial<CrmCompany>) => request<{ data: CrmCompany }>('/api/crm/companies', { method: 'POST', body: JSON.stringify(c) }).then(r => r.data),
+    updateCompany: (id: string, c: Partial<CrmCompany>) => request(`/api/crm/companies/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
+    deleteCompany: (id: string) => request(`/api/crm/companies/${id}`, { method: 'DELETE' }),
+
+    createContact: (c: Partial<CrmContact> & { company_id: string; name: string }) => request<{ data: CrmContact }>('/api/crm/contacts', { method: 'POST', body: JSON.stringify(c) }),
+    updateContact: (id: string, c: Partial<CrmContact>) => request(`/api/crm/contacts/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
+    deleteContact: (id: string) => request(`/api/crm/contacts/${id}`, { method: 'DELETE' }),
+
+    deals: (params?: { pipeline?: string; status?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.pipeline) p.set('pipeline', params.pipeline)
+      if (params?.status) p.set('status', params.status)
+      const qs = p.toString()
+      return request<{ data: CrmDeal[] }>(`/api/crm/deals${qs ? `?${qs}` : ''}`).then(r => r.data)
+    },
+    pipeline: (pipeline: string) => request<{ data: CrmPipeline }>(`/api/crm/deals/pipeline/${pipeline}`).then(r => r.data),
+    createDeal: (d: Partial<CrmDeal> & { company_id: string; name: string }) => request<{ data: CrmDeal }>('/api/crm/deals', { method: 'POST', body: JSON.stringify(d) }),
+    updateDeal: (id: string, d: Partial<CrmDeal>) => request(`/api/crm/deals/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
+    deleteDeal: (id: string) => request(`/api/crm/deals/${id}`, { method: 'DELETE' }),
+
+    activities: (params: { company_id?: string; contact_id?: string; deal_id?: string }) => {
+      const p = new URLSearchParams()
+      if (params.company_id) p.set('company_id', params.company_id)
+      if (params.contact_id) p.set('contact_id', params.contact_id)
+      if (params.deal_id) p.set('deal_id', params.deal_id)
+      return request<{ data: CrmActivity[] }>(`/api/crm/activities?${p.toString()}`).then(r => r.data)
+    },
+    createActivity: (a: Partial<CrmActivity> & { company_id: string }) => request<{ data: CrmActivity }>('/api/crm/activities', { method: 'POST', body: JSON.stringify(a) }),
+    updateActivity: (id: string, a: Partial<CrmActivity>) => request(`/api/crm/activities/${id}`, { method: 'PATCH', body: JSON.stringify(a) }),
+    deleteActivity: (id: string) => request(`/api/crm/activities/${id}`, { method: 'DELETE' }),
+
+    convertLead: (id: string, body: { type?: string; pipeline?: string; dealName?: string; amount?: number }) =>
+      request<{ data: { company: CrmCompany; alreadyConverted?: boolean } }>(`/api/crm/leads/${id}/convert`, { method: 'POST', body: JSON.stringify(body) }).then(r => r.data),
+  },
+
+  elaraConfig: {
+    get: () => request<{ data: ElaraConfig }>('/api/elara/config').then(r => r.data),
+    saveBriefing: (patch: Partial<{ sections: Record<string, boolean>; ai_summary: boolean; timezone: string | null }>) =>
+      request('/api/elara/config/briefing', { method: 'PUT', body: JSON.stringify(patch) }),
+    saveSchedule: (jobKey: string, patch: Partial<{ cron: string; timezone: string | null; enabled: boolean }>) =>
+      request(`/api/elara/config/schedules/${jobKey}`, { method: 'PUT', body: JSON.stringify(patch) }),
+    saveAlert: (ruleKey: string, patch: Partial<{ enabled: boolean; severity: string; sms_enabled: boolean; threshold: Record<string, number> | null; destination_id: string | null }>) =>
+      request(`/api/elara/config/alerts/${ruleKey}`, { method: 'PUT', body: JSON.stringify(patch) }),
+    saveRoutes: (routes: ElaraRoute[]) =>
+      request('/api/elara/config/routes', { method: 'PUT', body: JSON.stringify({ routes }) }),
+    createDestination: (d: { kind: string; label: string; target: string; enabled?: boolean }) =>
+      request<{ data: ElaraDestination }>('/api/elara/config/destinations', { method: 'POST', body: JSON.stringify(d) }),
+    updateDestination: (id: string, d: Partial<{ kind: string; label: string; target: string; enabled: boolean }>) =>
+      request(`/api/elara/config/destinations/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+    deleteDestination: (id: string) =>
+      request(`/api/elara/config/destinations/${id}`, { method: 'DELETE' }),
+    createRecipient: (r: { kind: string; value: string; label?: string; enabled?: boolean }) =>
+      request<{ data: ElaraRecipient }>('/api/elara/config/recipients', { method: 'POST', body: JSON.stringify(r) }),
+    deleteRecipient: (id: string) =>
+      request(`/api/elara/config/recipients/${id}`, { method: 'DELETE' }),
+    saveQuietHours: (q: Partial<ElaraQuietHours>) =>
+      request('/api/elara/config/quiet-hours', { method: 'PUT', body: JSON.stringify(q) }),
+    createCustomJob: (j: { name: string; cron: string; timezone?: string | null; action_type: string; payload: Record<string, unknown>; enabled?: boolean }) =>
+      request<{ data: ElaraCustomJob }>('/api/elara/config/custom-jobs', { method: 'POST', body: JSON.stringify(j) }),
+    updateCustomJob: (id: string, j: Partial<{ enabled: boolean; cron: string; name: string; payload: Record<string, unknown> }>) =>
+      request(`/api/elara/config/custom-jobs/${id}`, { method: 'PUT', body: JSON.stringify(j) }),
+    deleteCustomJob: (id: string) =>
+      request(`/api/elara/config/custom-jobs/${id}`, { method: 'DELETE' }),
+    previewBriefing: () => request<{ data: { text: string } }>('/api/elara/config/briefing/preview', { method: 'POST' }).then(r => r.data),
+    sendBriefingNow: () => request<{ data: { ok: boolean } }>('/api/elara/config/briefing/send-now', { method: 'POST' }).then(r => r.data),
+  },
+
+  activity: {
+    events: (params?: { limit?: number; cursor?: number | null; type?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.cursor != null) q.set('cursor', String(params.cursor))
+      if (params?.type) q.set('type', params.type)
+      const qs = q.toString()
+      return request<Page<ActivityEvent>>(`/api/activity${qs ? `?${qs}` : ''}`)
+    },
+    audit: (params?: { limit?: number; cursor?: number | null; action?: string; actor?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.cursor != null) q.set('cursor', String(params.cursor))
+      if (params?.action) q.set('action', params.action)
+      if (params?.actor) q.set('actor', params.actor)
+      const qs = q.toString()
+      return request<Page<Record<string, unknown>>>(`/api/activity/audit${qs ? `?${qs}` : ''}`)
+    },
   },
 
   status: {
@@ -133,7 +446,6 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status: 'resolved' }),
       }),
-    checkins: () => request<any[]>('/api/elara/checkins'),
     briefings: () => request<any[]>('/api/elara/briefings'),
     tools: () => request<any[]>('/api/elara/tools'),
     docDebt: () => request<any[]>('/api/elara/doc-debt'),

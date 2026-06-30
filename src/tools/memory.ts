@@ -123,32 +123,6 @@ export async function resolveParkingLot(id: string): Promise<ToolResult> {
   }
 }
 
-// ─── update_routine() ────────────────────────────────────────────────────
-
-export async function updateRoutine(
-  routineType: 'morning_supplements' | 'night_supplements' | 'schedule' | 'nutrition' | 'workout' | 'reminder_level' | 'as_needed_supplements',
-  items: Record<string, unknown>,
-  notes?: string
-): Promise<ToolResult> {
-  const timestamp = new Date().toISOString()
-  try {
-    const supabase = getClient()
-    const { error } = await supabase
-      .from('agent_routines')
-      .upsert(
-        { routine_type: routineType, items, notes: notes || null, updated_at: timestamp },
-        { onConflict: 'routine_type' }
-      )
-    if (error) throw error
-    return { tool: 'update_routine', success: true, timestamp, data: { routineType, items } }
-  } catch (err) {
-    return {
-      tool: 'update_routine', success: false, timestamp,
-      data: {}, error: err instanceof Error ? err.message : 'Unknown error',
-    }
-  }
-}
-
 // ─── add_doc_debt() ──────────────────────────────────────────────────────
 
 export async function addDocDebt(
@@ -281,28 +255,6 @@ export const resolveParkingLotTool: AgentTool = {
   execute: async (input) => resolveParkingLot(input.id as string),
 }
 
-export const updateRoutineTool: AgentTool = {
-  name: 'update_routine',
-  description: 'Update Clutch\'s daily routine in persistent storage. Use when he mentions a change to supplements, schedule, workout, or nutrition.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      routine_type: {
-        type: 'string',
-        description: 'Which routine to update: morning_supplements, night_supplements, schedule, nutrition, workout, reminder_level, as_needed_supplements',
-      },
-      items: { type: 'object', description: 'The updated routine data as a JSON object' },
-      notes: { type: 'string', description: 'Optional notes (e.g. "skipping gym this week — shoulder injury")' },
-    },
-    required: ['routine_type', 'items'],
-  },
-  execute: async (input) => updateRoutine(
-    input.routine_type as Parameters<typeof updateRoutine>[0],
-    input.items as Record<string, unknown>,
-    input.notes as string | undefined
-  ),
-}
-
 export const addDocDebtTool: AgentTool = {
   name: 'add_doc_debt',
   description: 'Log that a feature shipped and certain documents are now stale. Use when a commit lands or Clutch confirms something shipped.',
@@ -354,7 +306,6 @@ export const memoryTools: AgentTool[] = [
   parkIdeaTool,
   listParkingLotTool,
   resolveParkingLotTool,
-  updateRoutineTool,
   addDocDebtTool,
   resolveDocDebtTool,
   setSessionFlagTool,

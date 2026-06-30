@@ -4,9 +4,8 @@
  */
 
 import { Router } from 'express'
-import Stripe from 'stripe'
+import { getForgePilotBilling } from '../../lib/billing.js'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth, requireOwner } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -146,7 +145,7 @@ async function sendFPInviteEmail(
 
 // ── Stats summary ───────────────────────────────────────────────────────────
 
-router.get('/stats', requireAuth, async (_req, res) => {
+router.get('/stats', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const ago24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -193,7 +192,7 @@ router.get('/stats', requireAuth, async (_req, res) => {
 
 // ── Users ────────────────────────────────────────────────────────────────────
 
-router.get('/users', requireAuth, async (_req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -243,7 +242,7 @@ router.get('/users', requireAuth, async (_req, res) => {
 
 // ── Shops ────────────────────────────────────────────────────────────────────
 
-router.get('/shops', requireAuth, async (_req, res) => {
+router.get('/shops', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -279,7 +278,7 @@ router.get('/shops', requireAuth, async (_req, res) => {
 
 // ── Recent sessions (for activity feed) ─────────────────────────────────────
 
-router.get('/sessions', requireAuth, async (_req, res) => {
+router.get('/sessions', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -298,103 +297,9 @@ router.get('/sessions', requireAuth, async (_req, res) => {
 
 // ── Billing (Stripe — FP products only) ───────────────────────────────────
 
-const FP_PRODUCT_IDS = new Set([
-  'prod_UKSIWeqYK7y4TK', // ForgePilot Solo
-  'prod_UKSIUMHG5eSsTs', // ForgePilot Shop
-  'prod_UKSI8NgY3miSMh', // ForgePilot Additional Seat
-])
-
-function isFPSub(sub: Stripe.Subscription): boolean {
-  return sub.items.data.some(
-    (item) => item.price.product && FP_PRODUCT_IDS.has(item.price.product as string)
-  )
-}
-
-router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
-  const stripeKey = process.env.STRIPE_SECRET_KEY
-  if (!stripeKey) {
-    res.json({
-      activeSubscriptions: 0, mrr: 0, newThisMonth: 0, cancelledThisMonth: 0,
-      paymentFailures: [], hasPaymentFailures: false,
-      planBreakdown: { solo: 0, shop: 0 },
-    })
-    return
-  }
-
+router.get('/billing', async (_req, res): Promise<void> => {
   try {
-    const stripe = new Stripe(stripeKey)
-
-    const allActive = await stripe.subscriptions.list({
-      status: 'active', limit: 100,
-    })
-    const fpActive = allActive.data.filter(isFPSub)
-
-    const mrr = fpActive.reduce((sum, sub) => {
-      const item = sub.items.data[0]
-      if (!item) return sum
-      const amount = item.price.unit_amount || 0
-      const interval = item.price.recurring?.interval
-      return sum + (interval === 'year' ? amount / 12 : amount) / 100
-    }, 0)
-
-    const startOfMonth = new Date()
-    startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
-
-    const newThisMonth = fpActive.filter(
-      (s) => new Date(s.created * 1000) >= startOfMonth
-    ).length
-
-    const cancelled = await stripe.subscriptions.list({
-      status: 'canceled',
-      created: { gte: Math.floor(startOfMonth.getTime() / 1000) },
-      limit: 100,
-    })
-    const cancelledThisMonth = cancelled.data.filter(isFPSub).length
-
-    const planBreakdown = { solo: 0, shop: 0 }
-    for (const sub of fpActive) {
-      for (const item of sub.items.data) {
-        const pid = item.price.product as string
-        if (pid === 'prod_UKSIWeqYK7y4TK') planBreakdown.solo++
-        if (pid === 'prod_UKSIUMHG5eSsTs') planBreakdown.shop++
-      }
-    }
-
-    // Payment failures — open invoices on FP subscriptions
-    const openInvoices = await stripe.invoices.list({
-      status: 'open', limit: 20, expand: ['data.customer'],
-    })
-
-    const paymentFailures = []
-    for (const inv of openInvoices.data) {
-      const subId = (inv as any).subscription as string | null
-      if (!subId) continue
-      try {
-        const sub = await stripe.subscriptions.retrieve(
-          subId
-        )
-        if (!isFPSub(sub)) continue
-      } catch { continue }
-      const customer = inv.customer as Stripe.Customer
-      paymentFailures.push({
-        customerId:     typeof inv.customer === 'string' ? inv.customer : customer?.id ?? '',
-        customerEmail:  customer?.email ?? 'unknown',
-        amount:         inv.amount_due / 100,
-        currency:       inv.currency,
-        failureMessage: inv.last_finalization_error?.message ?? 'Payment failed',
-        failedAt:       new Date(inv.created * 1000).toISOString(),
-      })
-    }
-
-    res.json({
-      activeSubscriptions: fpActive.length,
-      mrr:                 Math.round(mrr * 100) / 100,
-      newThisMonth,
-      cancelledThisMonth,
-      paymentFailures,
-      hasPaymentFailures:  paymentFailures.length > 0,
-      planBreakdown,
-    })
+    res.json(await getForgePilotBilling())
   } catch (err) {
     console.error('[fp/billing]', err)
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
@@ -403,7 +308,7 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
 
 // ── FP System Messages ────────────────────────────────────────────────────────
 
-router.get('/messages', requireAuth, async (_req, res) => {
+router.get('/messages', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -418,7 +323,7 @@ router.get('/messages', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/messages', requireOwner, async (req, res): Promise<void> => {
+router.post('/messages', async (req, res): Promise<void> => {
   const { title, body, type, active, expires_at } = req.body
   if (!title?.trim() || !body?.trim()) {
     res.status(400).json({ error: 'title and body are required' })
@@ -445,7 +350,7 @@ router.post('/messages', requireOwner, async (req, res): Promise<void> => {
   }
 })
 
-router.patch('/messages/:id', requireOwner, async (req, res) => {
+router.patch('/messages/:id', async (req, res) => {
   const { title, body, type, active, expires_at } = req.body
   try {
     const sb = getFPSupabase()
@@ -467,7 +372,7 @@ router.patch('/messages/:id', requireOwner, async (req, res) => {
   }
 })
 
-router.delete('/messages/:id', requireOwner, async (req, res) => {
+router.delete('/messages/:id', async (req, res) => {
   try {
     const sb = getFPSupabase()
     const { error } = await sb
@@ -484,7 +389,7 @@ router.delete('/messages/:id', requireOwner, async (req, res) => {
 
 // ── Feedback ────────────────────────────────────────────────────────────────
 
-router.get('/feedback', requireAuth, async (_req, res) => {
+router.get('/feedback', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -499,7 +404,7 @@ router.get('/feedback', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/feedback/:id', requireOwner, async (req, res) => {
+router.patch('/feedback/:id', async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status: string }
   try {
@@ -533,7 +438,7 @@ type InviteRow = {
   notes: string | null
 }
 
-router.post('/invite', requireOwner, async (req, res): Promise<void> => {
+router.post('/invite', async (req, res): Promise<void> => {
   const { email, full_name, role, notes } = req.body as {
     email?: string
     full_name?: string
@@ -615,7 +520,7 @@ router.post('/invite', requireOwner, async (req, res): Promise<void> => {
   }
 })
 
-router.get('/invites', requireAuth, async (_req, res) => {
+router.get('/invites', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -655,7 +560,7 @@ router.get('/invites', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/invites/:id/resend', requireOwner, async (req, res): Promise<void> => {
+router.post('/invites/:id/resend', async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -694,7 +599,7 @@ router.post('/invites/:id/resend', requireOwner, async (req, res): Promise<void>
   }
 })
 
-router.delete('/invites/:id', requireOwner, async (req, res): Promise<void> => {
+router.delete('/invites/:id', async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -735,7 +640,7 @@ router.delete('/invites/:id', requireOwner, async (req, res): Promise<void> => {
 
 // ── ForgeAssist insights (read) ─────────────────────────────────────────────
 
-router.get('/insights', requireAuth, async (req, res) => {
+router.get('/insights', async (req, res) => {
   try {
     const daysRaw = Number(req.query.days ?? '7')
     const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, Math.floor(daysRaw))) : 7
@@ -777,7 +682,7 @@ router.get('/insights', requireAuth, async (req, res) => {
 // have a row yet. Idempotent — re-running only analyzes sessions still
 // missing insights. Bounded by FP_INSIGHTS_BATCH_LIMIT per call.
 
-router.post('/backfill-insights', requireOwner, async (_req, res) => {
+router.post('/backfill-insights', async (_req, res) => {
   try {
     const { runInsightAnalysis } = await import('../../jobs/fp-insights.js')
     const summary = await runInsightAnalysis()
