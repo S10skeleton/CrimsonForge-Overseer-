@@ -48,6 +48,9 @@ function defaultSchedules(): Schedule[] {
     { job_key: 'crm_email_sync',     label: 'CRM email + calendar sync', cron: '*/20 * * * *',           timezone: null, enabled: true, is_custom: false },
     { job_key: 'dmarc_digest',       label: 'DMARC email-security digest', cron: '30 7 * * *',           timezone: null, enabled: true, is_custom: false },
     { job_key: 'quo_scheduled_send', label: 'Quo scheduled texts (gated)', cron: '*/5 * * * *',          timezone: null, enabled: true, is_custom: false },
+    { job_key: 'team_kickoff',       label: 'Team rhythm — kickoff',     cron: '0 8 * * *',              timezone: null, enabled: true,  is_custom: false },
+    { job_key: 'team_midday',        label: 'Team rhythm — midday',      cron: '30 12 * * *',            timezone: null, enabled: false, is_custom: false },
+    { job_key: 'team_eod',           label: 'Team rhythm — EOD wrap',    cron: '30 17 * * *',            timezone: null, enabled: true,  is_custom: false },
   ]
 }
 
@@ -225,6 +228,7 @@ const DEFAULT_ROUTES: Record<string, string> = {
   fp_alert: 'fp',
   activity: 'activity',
   new_subscriber: 'default',
+  team_rhythm: 'default', // team channel (#all-crimson-forge), like the briefing
 }
 
 async function getRoutes(): Promise<Record<string, string>> {
