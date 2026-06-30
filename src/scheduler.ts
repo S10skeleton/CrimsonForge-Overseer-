@@ -13,6 +13,7 @@ import { setLastBriefing } from './slack-bot.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
 import { runDmarcDigest, getDmarcBriefingLine } from './jobs/dmarc-digest.js'
 import { runCrmSync } from './jobs/crm-sync.js'
+import { runQuoScheduledSend } from './jobs/quo-scheduled-send.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
 import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
@@ -604,6 +605,7 @@ const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
   mrr_snapshot: () => runMrrSnapshot(),
   crm_email_sync: () => runCrmSync(),
   dmarc_digest: () => runDmarcDigest(),
+  quo_scheduled_send: () => runQuoScheduledSend(),
 }
 
 /** Post text to a resolved destination (slack channel or webhook). */

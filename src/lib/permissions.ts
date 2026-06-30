@@ -12,7 +12,7 @@ export type Permissions = Record<string, Access>
 export const PERMISSION_KEYS = [
   'home',
   'elara',
-  'crm.leads', 'crm.pipeline', 'crm.companies',
+  'crm.leads', 'crm.pipeline', 'crm.companies', 'crm.phone',
   'customers',
   'enterprise',
   'financials.revenue', 'financials.runway', 'financials.raise', 'financials.captable',

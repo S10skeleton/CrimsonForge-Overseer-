@@ -20,6 +20,8 @@ import elaraConfigRouter from './routes/elara-config.js'
 import voiceRouter from './routes/voice.js'
 import filesRouter from './routes/files.js'
 import fpRouter from './routes/fp.js'
+import quoRouter from './routes/quo.js'
+import quoWebhookRouter from './routes/quo-webhook.js'
 
 export function createApiServer(): express.Express {
   const app = express()
@@ -28,6 +30,10 @@ export function createApiServer(): express.Express {
 
   // API is JWT-protected so any origin is safe — reflect origin for credentials support
   app.use(cors({ origin: true, credentials: true }))
+
+  // Quo webhook needs the RAW body for Svix signature verification, so it mounts
+  // (public) BEFORE the JSON parser. Everything else is JSON.
+  app.use('/api/quo/webhook', express.raw({ type: '*/*', limit: '2mb' }), quoWebhookRouter)
 
   app.use(express.json({ limit: '2mb' }))
 
@@ -76,6 +82,7 @@ export function createApiServer(): express.Express {
   app.use('/api/activity', requireArea('settings', 'view'), activityRouter)
   app.use('/api/home', area('home'), homeRouter)
   app.use('/api/crm', crmGuard, crmRouter)
+  app.use('/api/quo', area('crm.phone'), quoRouter)
   app.use('/api/financials', finGuard, financialsRouter)
   app.use('/api/captable', capGuard, captableRouter)
   app.use('/api/status', area('system'), statusRouter)

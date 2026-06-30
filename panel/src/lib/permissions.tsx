@@ -7,7 +7,7 @@ export type Permissions = Record<string, Access>
 export const PERMISSION_GROUPS: Array<{ area: string; label: string; keys: Array<{ key: string; label: string }> }> = [
   { area: 'home',       label: 'Home',       keys: [{ key: 'home', label: 'Home' }] },
   { area: 'elara',      label: 'Elara',      keys: [{ key: 'elara', label: 'Elara (assistant, controls, Forge AI)' }] },
-  { area: 'crm',        label: 'CRM',        keys: [{ key: 'crm.leads', label: 'Leads' }, { key: 'crm.pipeline', label: 'Pipeline' }, { key: 'crm.companies', label: 'Companies' }] },
+  { area: 'crm',        label: 'CRM',        keys: [{ key: 'crm.leads', label: 'Leads' }, { key: 'crm.pipeline', label: 'Pipeline' }, { key: 'crm.companies', label: 'Companies' }, { key: 'crm.phone', label: 'Phone (calls & texts)' }] },
   { area: 'customers',  label: 'Customers',  keys: [{ key: 'customers', label: 'Customers' }] },
   { area: 'financials', label: 'Financials', keys: [{ key: 'financials.revenue', label: 'Revenue' }, { key: 'financials.runway', label: 'Burn & runway' }, { key: 'financials.raise', label: 'Raise' }, { key: 'financials.captable', label: 'Cap table' }] },
   { area: 'system',     label: 'System',     keys: [{ key: 'system', label: 'System' }] },
