@@ -103,9 +103,9 @@ export default function Login({ onLogin }: Props) {
   }
 
   return (
-    <div style={{
+    <div className="hero-bg login-bg" style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      position: 'relative', overflow: 'hidden', background: 'var(--bg-base)',
+      position: 'relative', overflow: 'hidden',
     }}>
       <div style={{
         position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%, -50%)',

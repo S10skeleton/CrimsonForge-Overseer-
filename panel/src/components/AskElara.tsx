@@ -73,14 +73,17 @@ export default function AskElara() {
 
   return (
     <>
-      <button onClick={() => setOpen(o => !o)} title="Ask Elara" style={{
-        position: 'fixed', bottom: 18, right: 18, zIndex: 200, width: 88, height: 88,
-        border: 'none', cursor: 'pointer', background: 'transparent', padding: 0, overflow: 'hidden',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      {/* FAB + "Ask Elara" caption. The hex badge IS the button (transparent PNG,
+          no circle behind it). The pill shows only while the chat is closed. */}
+      <div style={{
+        position: 'fixed', bottom: 18, right: 18, zIndex: 200,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
       }}>
-        {/* Icon has built-in transparent padding — scale it up and clip to enlarge the mark itself (no circle). */}
-        <img src="/elara-mark.png" alt="Elara" width={176} height={176} style={{ filter: 'drop-shadow(0 4px 12px rgba(89,73,172,.45))' }} />
-      </button>
+        {!open && <div className="ask-elara-pill">Ask Elara</div>}
+        <button className="ask-elara-fab" onClick={() => setOpen(o => !o)} title="Ask Elara">
+          <img src="/ask-elara.png" alt="Elara" width={60} height={60} />
+        </button>
+      </div>
 
       {open && (
         <div style={{
@@ -89,7 +92,7 @@ export default function AskElara() {
           display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fade-up .2s ease both',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-            <img src="/elara-mark.png" alt="" width={32} height={32} />
+            <img src="/ask-elara.png" alt="" width={30} height={30} />
             <div style={{ fontWeight: 700, fontSize: 14 }}>Ask Elara</div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => { setMsgs([]); setCards([]) }} disabled={!msgs.length}>Clear</button>
@@ -106,16 +109,25 @@ export default function AskElara() {
                 </div>
               </div>
             )}
-            {msgs.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+            {msgs.map((m, i) => {
+              const bubble = (
                 <div style={{
                   padding: '9px 12px', borderRadius: 10, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap',
                   background: m.role === 'user' ? 'var(--bg-elevated)' : 'rgba(89,73,172,.08)',
                   border: m.role === 'assistant' ? `1px solid rgba(89,73,172,.2)` : '1px solid var(--border)',
                   color: 'var(--text-primary)',
                 }}>{m.content}</div>
-              </div>
-            ))}
+              )
+              // Elara's replies carry her avatar so the bubble + thread share one identity.
+              return m.role === 'assistant' ? (
+                <div key={i} style={{ alignSelf: 'flex-start', display: 'flex', gap: 7, alignItems: 'flex-start', maxWidth: '90%' }}>
+                  <img src="/ask-elara.png" alt="" width={22} height={22} style={{ flexShrink: 0, marginTop: 2 }} />
+                  {bubble}
+                </div>
+              ) : (
+                <div key={i} style={{ alignSelf: 'flex-end', maxWidth: '85%' }}>{bubble}</div>
+              )
+            })}
             {cards.map((card, idx) => (
               <div key={idx} className="card" style={{ padding: 12, borderColor: ACCENT }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 8 }}>{card.summary}</div>

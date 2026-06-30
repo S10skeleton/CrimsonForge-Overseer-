@@ -112,7 +112,7 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
   }, [])
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="hero-bg app-bg" style={{ display: 'flex', minHeight: '100vh' }}>
 
       {/* -- Desktop Sidebar ------------------------------------------------ */}
       <div className="desktop-sidebar" style={{
