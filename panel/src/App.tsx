@@ -27,6 +27,7 @@ import CompaniesView  from './tabs/crm/CompaniesView'
 import CompanyDetail  from './tabs/crm/CompanyDetail'
 import CrmTable       from './tabs/crm/CrmTable'
 import InboxesView    from './tabs/crm/InboxesView'
+import SuperAdminView from './tabs/superadmin/SuperAdminView'
 import PhoneHub       from './tabs/phone/PhoneHub'
 import FinancialsLayout from './tabs/financials/FinancialsLayout'
 import RevenueView      from './tabs/financials/RevenueView'
@@ -191,6 +192,9 @@ export default function App() {
           <Route path="captable" element={<CapTableView role={role} />} />
         </Route>
         <Route path="system"     element={<SystemTab />} />
+
+        {/* SuperAdmin — owner-only (view self-guards; backend stays owner-only) */}
+        <Route path="superadmin" element={<SuperAdminView />} />
 
         {/* Settings */}
         <Route path="settings/security"     element={<SecuritySettings />} />

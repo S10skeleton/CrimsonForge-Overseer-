@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIdleLogout } from '../lib/useIdleLogout'
 import { usePermissions, canViewArea } from '../lib/permissions'
 
-interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean; permKey?: string }
+interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean; ownerOnly?: boolean; permKey?: string }
 interface Section { id: string; label: string; accent?: string; online?: boolean; items: Leaf[] }
 
 // ─── Function-based information architecture (Overseer 2.0) ──────────────────
@@ -46,6 +46,13 @@ const SECTIONS: Section[] = [
       { to: '/activity',              label: 'Activity',       glyph: '◎', adminOnly: true, permKey: 'settings' },
     ],
   },
+  // Owner-only home for sensitive controls (email blocklist, future danger-zone).
+  // The single ownerOnly leaf hides the whole group for non-owners.
+  {
+    id: 'superadmin', label: 'SuperAdmin', items: [
+      { to: '/superadmin', label: 'SuperAdmin', glyph: '◆', ownerOnly: true },
+    ],
+  },
 ]
 
 // Mobile nav — priority items + sign out
@@ -84,7 +91,7 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
 
   // A nav leaf shows if the role/permission allows it (owner sees everything).
   const visible = (it: Leaf) =>
-    (!it.adminOnly || role !== 'read_only') && (!it.permKey || canViewArea(permissions, role, it.permKey))
+    (!it.adminOnly || role !== 'read_only') && (!it.ownerOnly || role === 'owner') && (!it.permKey || canViewArea(permissions, role, it.permKey))
 
   const allLeaves: Leaf[] = [HOME_LEAF, ...ELARA.items, ...SECTIONS.flatMap(s => s.items)]
   const firstVisible = allLeaves.find(visible)?.to ?? '/home'
