@@ -28,6 +28,9 @@ function handleUnauthorized(path: string) {
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
+    // Send/receive the httpOnly trusted-device cookie (cf_trusted) cross-origin.
+    // Harmless elsewhere — the API only reads it at the login step.
+    credentials: 'include',
     headers: { ...headers(), ...(options?.headers ?? {}) },
   })
   if (!res.ok) {
@@ -188,6 +191,7 @@ export const api = {
       disable: (p: { code?: string; recoveryCode?: string }) => request<{ ok: boolean }>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify(p) }),
       regenerate: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/recovery/regenerate', { method: 'POST', body: JSON.stringify({ code }) }),
     },
+    forgetDevices: () => request<{ ok: boolean }>('/api/auth/forget-devices', { method: 'POST' }),
     forgot: (usernameOrEmail: string) =>
       request<{ ok: boolean }>('/api/auth/forgot', {
         method: 'POST',

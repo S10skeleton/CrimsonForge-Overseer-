@@ -41,6 +41,7 @@ export default function SecuritySettings() {
   const verifyM = useMutation({ mutationFn: () => api.auth.twofa.verify(code.trim()), onSuccess: (d) => { setEnroll(null); setRecovery(d.recoveryCodes); refresh(); toast.success('Two-factor enabled') }, onError: (e) => toast.error(errMsg(e)) })
   const disableM = useMutation({ mutationFn: () => api.auth.twofa.disable(/^\d{6}$/.test(disableInput.trim()) ? { code: disableInput.trim() } : { recoveryCode: disableInput.trim() }), onSuccess: () => { setDisableInput(''); refresh(); toast.success('Two-factor disabled') }, onError: (e) => toast.error(errMsg(e)) })
   const regenM = useMutation({ mutationFn: () => api.auth.twofa.regenerate(regenInput.trim()), onSuccess: (d) => { setRegenInput(''); setRecovery(d.recoveryCodes); toast.success('Recovery codes regenerated') }, onError: (e) => toast.error(errMsg(e)) })
+  const forgetM = useMutation({ mutationFn: () => api.auth.forgetDevices(), onSuccess: () => toast.success('Trusted devices forgotten — 2FA required next sign-in'), onError: (e) => toast.error(errMsg(e)) })
 
   const enabled = status?.enabled
 
@@ -67,6 +68,11 @@ export default function SecuritySettings() {
                   <input value={regenInput} onChange={e => setRegenInput(e.target.value)} placeholder="123456" style={{ maxWidth: 160 }} />
                   <button className="btn btn-ghost" disabled={!regenInput.trim() || regenM.isPending} onClick={() => regenM.mutate()}>Regenerate</button>
                 </div>
+              </div>
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 6 }}>TRUSTED DEVICES</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>After you pass 2FA, this browser stays trusted for a few days and signs in with password only. Forget all trusted devices to require a code on the next sign-in everywhere.</div>
+                <button className="btn btn-ghost btn-sm" disabled={forgetM.isPending} onClick={async () => { if (await confirm({ title: 'Forget trusted devices?', body: 'Every device — including this one — will need a 2FA code on its next sign-in.', confirmLabel: 'Forget devices' })) forgetM.mutate() }}>Forget trusted devices</button>
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
                 <div className="mono" style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 6 }}>DISABLE (authenticator or recovery code)</div>

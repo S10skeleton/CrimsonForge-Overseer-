@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const DEFAULT_IDLE_MIN = Number(import.meta.env.VITE_IDLE_LOGOUT_MIN) || 45
+// Default idle ≈ the 24h session token so idle no longer undercuts it (was 45min,
+// which forced re-login — and re-2FA — every ~45min). Set VITE_IDLE_LOGOUT_MIN to
+// override (e.g. a shorter idle), or 0 to disable the idle timer entirely.
+const DEFAULT_IDLE_MIN = Number(import.meta.env.VITE_IDLE_LOGOUT_MIN) || 1440
 const WARN_SECONDS = 60 // show the "still there?" modal this long before logout
 
 /**
