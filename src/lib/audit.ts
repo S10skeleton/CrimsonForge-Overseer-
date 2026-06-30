@@ -46,6 +46,15 @@ export const AUDIT_ACTIONS = [
   'crm.activity_update',
   'crm.activity_delete',
   'crm.lead_convert',
+  'financial.entry_create',
+  'financial.entry_update',
+  'financial.entry_delete',
+  'captable.security_create',
+  'captable.security_update',
+  'captable.security_delete',
+  'captable.safe_create',
+  'captable.safe_update',
+  'captable.safe_delete',
 ] as const
 
 // `string & Record<never, never>` keeps literal autocomplete while still

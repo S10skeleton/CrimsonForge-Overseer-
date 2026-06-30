@@ -13,6 +13,7 @@ import { setLastBriefing } from './slack-bot.js'
 import { runCheckinDispatcher } from './jobs/checkins.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
+import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
 import { runForgePilotStripeCheck }   from './tools/stripe-forgepilot.js'
 import { runForgePilotUptimeCheck }   from './tools/uptime-forgepilot.js'
@@ -595,6 +596,7 @@ const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
     try { await runCheckinDispatcher() } catch (err) { console.error('[SCHEDULER] check-in dispatcher:', err) }
     try { await runSummarizationDispatcher() } catch (err) { console.error('[SCHEDULER] summarization dispatcher:', err) }
   },
+  mrr_snapshot: () => runMrrSnapshot(),
 }
 
 /** Post text to a resolved destination (slack channel or webhook). */

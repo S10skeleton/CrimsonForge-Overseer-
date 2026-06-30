@@ -19,6 +19,11 @@ import LeadsView      from './tabs/crm/LeadsView'
 import PipelineView   from './tabs/crm/PipelineView'
 import CompaniesView  from './tabs/crm/CompaniesView'
 import CompanyDetail  from './tabs/crm/CompanyDetail'
+import FinancialsLayout from './tabs/financials/FinancialsLayout'
+import RevenueView      from './tabs/financials/RevenueView'
+import RunwayView       from './tabs/financials/RunwayView'
+import RaiseView        from './tabs/financials/RaiseView'
+import CapTableView     from './tabs/financials/CapTableView'
 
 function getRoleFromToken(token: string): string {
   try {
@@ -124,8 +129,14 @@ export default function App() {
         <Route path="forgepulse"  element={<Navigate to="/customers/forgepulse/waitlist" replace />} />
 
         {/* Platform */}
-        <Route path="enterprise" element={<Placeholder title="Enterprise" phase="Phase 6" note="Org accounts, seats, API keys, usage." />} />
-        <Route path="financials" element={<Placeholder title="Financials" phase="Phase 6" note="MRR/ARR, burn, runway, cap table." />} />
+        <Route path="enterprise" element={<Placeholder title="Enterprise" phase="Phase 6b" note="Org accounts, seats, API keys, usage — gated on the ForgePilot EA-track backend." />} />
+        <Route path="financials" element={<FinancialsLayout />}>
+          <Route index element={<Navigate to="/financials/revenue" replace />} />
+          <Route path="revenue"  element={<RevenueView />} />
+          <Route path="runway"   element={<RunwayView role={role} />} />
+          <Route path="raise"    element={<RaiseView />} />
+          <Route path="captable" element={<CapTableView role={role} />} />
+        </Route>
         <Route path="system"     element={<SystemTab />} />
 
         {/* Settings */}

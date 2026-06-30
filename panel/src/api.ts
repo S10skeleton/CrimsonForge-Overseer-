@@ -112,6 +112,17 @@ export interface CrmActivity { id: string; company_id: string; contact_id: strin
 export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
 export interface CompanyDetail { company: CrmCompany; contacts: CrmContact[]; deals: CrmDeal[]; activities: CrmActivity[] }
 
+export interface Revenue { mrr: number; arr: number; activeSubs: number; newThisMonth: number; churnedThisMonth: number; failedPaymentsCount: number; failedPaymentsAmount: number; planBreakdown: { solo: number; shop: number } }
+export interface MrrPoint { snapshot_date: string; mrr: number; arr: number; active_subs: number; new_subs: number; churned_subs: number }
+export interface FinEntry { id: string; month: string; type: string; category: string | null; label: string | null; amount: number; notes: string | null; created_by: string | null; created_at: string }
+export interface Runway { cashOnHand: number | null; avgMonthlyBurn: number | null; runwayMonths: number | null }
+export interface RaiseProgress { target: number; committed: number; byStage: Array<{ stage: string; count: number; amount: number }>; deals: Array<{ id: string; name: string; company_id: string; stage: string; amount: number | null; status: string }> }
+
+export interface CapSecurity { id: string; holder_name: string; holder_type: string; security_class: string; crm_company_id: string | null; shares: number | null; pct: number | null; issued: boolean; notes: string | null; computedPct?: number | null }
+export interface CapSafe { id: string; investor_name: string; crm_company_id: string | null; instrument_type: string; amount: number; valuation_cap: number | null; discount_pct: number | null; mfn: boolean; pro_rata: boolean; date_signed: string | null; status: string; notes: string | null }
+export interface CapSummary { totalIssuedShares: number; holders: CapSecurity[]; optionPoolReserved: number; fullyDilutedShares: number; outstandingSafes: { count: number; total: number; list: CapSafe[] } }
+export interface CapInvestor { id: string; name: string; type: string; owner: string | null; safes: CapSafe[]; outstandingTotal: number }
+
 export interface HomeSummary {
   signupsThisWeek: number | null
   leads: { open: number | null; hot: number | null; total: number | null }
@@ -164,6 +175,38 @@ export const api = {
 
   home: {
     summary: () => request<HomeSummary>('/api/home/summary'),
+  },
+
+  financials: {
+    revenue: () => request<{ data: Revenue }>('/api/financials/revenue').then(r => r.data),
+    mrrHistory: (months = 12) => request<{ data: MrrPoint[] }>(`/api/financials/mrr-history?months=${months}`).then(r => r.data),
+    entries: (params?: { type?: string; from?: string; to?: string }) => {
+      const p = new URLSearchParams()
+      if (params?.type) p.set('type', params.type)
+      if (params?.from) p.set('from', params.from)
+      if (params?.to) p.set('to', params.to)
+      const qs = p.toString()
+      return request<{ data: FinEntry[] }>(`/api/financials/entries${qs ? `?${qs}` : ''}`).then(r => r.data)
+    },
+    createEntry: (e: { month: string; type: string; category?: string; label?: string; amount: number; notes?: string }) =>
+      request<{ data: FinEntry }>('/api/financials/entries', { method: 'POST', body: JSON.stringify(e) }),
+    updateEntry: (id: string, e: Partial<FinEntry>) => request(`/api/financials/entries/${id}`, { method: 'PATCH', body: JSON.stringify(e) }),
+    deleteEntry: (id: string) => request(`/api/financials/entries/${id}`, { method: 'DELETE' }),
+    runway: () => request<{ data: Runway }>('/api/financials/runway').then(r => r.data),
+    raise: () => request<{ data: RaiseProgress }>('/api/financials/raise').then(r => r.data),
+  },
+
+  captable: {
+    securities: () => request<{ data: CapSecurity[] }>('/api/captable/securities').then(r => r.data),
+    createSecurity: (s: Partial<CapSecurity> & { holder_name: string }) => request<{ data: CapSecurity }>('/api/captable/securities', { method: 'POST', body: JSON.stringify(s) }),
+    updateSecurity: (id: string, s: Partial<CapSecurity>) => request(`/api/captable/securities/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+    deleteSecurity: (id: string) => request(`/api/captable/securities/${id}`, { method: 'DELETE' }),
+    safes: (status?: string) => request<{ data: CapSafe[] }>(`/api/captable/safes${status ? `?status=${status}` : ''}`).then(r => r.data),
+    createSafe: (s: Partial<CapSafe> & { investor_name: string; amount: number }) => request<{ data: CapSafe }>('/api/captable/safes', { method: 'POST', body: JSON.stringify(s) }),
+    updateSafe: (id: string, s: Partial<CapSafe>) => request(`/api/captable/safes/${id}`, { method: 'PATCH', body: JSON.stringify(s) }),
+    deleteSafe: (id: string) => request(`/api/captable/safes/${id}`, { method: 'DELETE' }),
+    summary: () => request<{ data: CapSummary }>('/api/captable/summary').then(r => r.data),
+    investors: () => request<{ data: CapInvestor[] }>('/api/captable/investors').then(r => r.data),
   },
 
   crm: {
