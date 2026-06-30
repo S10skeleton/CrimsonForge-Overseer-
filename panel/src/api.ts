@@ -123,6 +123,10 @@ export interface CrmFieldDef {
   type: CrmFieldType; options: string[] | null; position: number; archived: boolean; created_at: string
 }
 export type CrmCustom = Record<string, unknown>
+export interface CrmFilter { field: string; op: string; value: unknown }
+export interface ViewConfig { columns?: string[]; filters?: CrmFilter[]; sort?: { field: string; dir: 'asc' | 'desc' }; group?: string | null; pageSize?: number }
+export interface CrmSavedView { id: string; object: string; name: string; owner: string | null; shared: boolean; is_default: boolean; config: ViewConfig; position: number }
+export interface CrmQueryResult { rows: Record<string, unknown>[]; total: number; page: number; pageSize: number }
 export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; created_at: string }
 export interface CrmBlocklistEntry { id: string; pattern: string; reason: string | null; created_at: string }
 export interface CrmThreadMessage { id: string; from: string; to: string; date: string; subject: string; body: string }
@@ -332,6 +336,16 @@ export const api = {
     addBlock: (b: { pattern: string; reason?: string }) => request<{ data: CrmBlocklistEntry }>('/api/crm/sync/blocklist', { method: 'POST', body: JSON.stringify(b) }).then(r => r.data),
     removeBlock: (id: string) => request(`/api/crm/sync/blocklist/${id}`, { method: 'DELETE' }),
     thread: (activityId: string) => request<{ data: { subject: string; messages: CrmThreadMessage[] } }>(`/api/crm/sync/thread?activity_id=${encodeURIComponent(activityId)}`).then(r => r.data),
+
+    // Table grid + saved views (P3)
+    query: (object: string, body: { filters?: CrmFilter[]; sort?: { field: string; dir: 'asc' | 'desc' }; page?: number; pageSize?: number }) =>
+      request<CrmQueryResult>(`/api/crm/${object}/query`, { method: 'POST', body: JSON.stringify(body) }),
+    views: (object: string) => request<{ data: CrmSavedView[] }>(`/api/crm/views?object=${object}`).then(r => r.data),
+    createView: (v: { object: string; name: string; shared?: boolean; is_default?: boolean; config: ViewConfig }) =>
+      request<{ data: CrmSavedView }>('/api/crm/views', { method: 'POST', body: JSON.stringify(v) }).then(r => r.data),
+    updateView: (id: string, v: Partial<{ name: string; shared: boolean; is_default: boolean; config: ViewConfig; position: number }>) =>
+      request<{ data: CrmSavedView }>(`/api/crm/views/${id}`, { method: 'PATCH', body: JSON.stringify(v) }).then(r => r.data),
+    deleteView: (id: string) => request(`/api/crm/views/${id}`, { method: 'DELETE' }),
   },
 
   quo: {
