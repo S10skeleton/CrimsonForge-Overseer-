@@ -32,6 +32,7 @@ function getRoleFromToken(token: string): string {
 export default function App() {
   const [token, setToken] = useState<string | null>(null)
   const [role, setRole] = useState<string>('viewer')
+  const [mustChange, setMustChange] = useState(false)
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function App() {
     if (stored) {
       setToken(stored)
       setRole(localStorage.getItem('panel_role') ?? getRoleFromToken(stored))
+      try { setMustChange(!!JSON.parse(localStorage.getItem('panel_user') ?? '{}').must_change_password) } catch { /* ignore */ }
     }
     setChecking(false)
   }, [])
@@ -49,6 +51,7 @@ export default function App() {
     localStorage.setItem('panel_user', JSON.stringify(result.user))
     setToken(result.token)
     setRole(result.role)
+    setMustChange(result.user?.must_change_password ?? false)
   }
 
   const handleLogout = () => {
@@ -57,6 +60,7 @@ export default function App() {
     localStorage.removeItem('panel_user')
     setToken(null)
     setRole('viewer')
+    setMustChange(false)
   }
 
   if (checking) return null
@@ -69,11 +73,15 @@ export default function App() {
       />
 
       {/* Public: email reset (?token=) and the logged-in must-change flow */}
-      <Route path="/reset" element={<ResetPassword />} />
+      <Route path="/reset" element={<ResetPassword onPasswordChanged={() => setMustChange(false)} />} />
 
       <Route
         path="/"
-        element={token ? <Panel role={role} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+        element={
+          !token ? <Navigate to="/login" replace />
+            : mustChange ? <Navigate to="/reset" replace />
+            : <Panel role={role} onLogout={handleLogout} />
+        }
       >
         <Route index element={<Navigate to="/home" replace />} />
 

@@ -44,8 +44,8 @@ export default function Login({ onLogin }: Props) {
     try {
       const result = await api.auth.login(username.trim(), pass.trim())
       onLogin(result)
-      if (result.user?.must_change_password) navigate('/reset', { replace: true })
-      else navigate('/home', { replace: true })
+      // Shell guard (App) sends must_change_password users to /reset; otherwise Home.
+      navigate('/home', { replace: true })
     } catch (e: any) {
       let msg = 'Incorrect username or password'
       try {

@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast'
 
 const MIN = 12
 
-export default function ResetPassword() {
+export default function ResetPassword({ onPasswordChanged }: { onPasswordChanged?: () => void }) {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const toast = useToast()
@@ -39,6 +39,13 @@ export default function ResetPassword() {
         navigate('/login', { replace: true })
       } else {
         await api.auth.changePassword(current, next)
+        // Release the shell's must-change guard (state + stored flag) without a re-login.
+        try {
+          const u = JSON.parse(localStorage.getItem('panel_user') ?? '{}')
+          u.must_change_password = false
+          localStorage.setItem('panel_user', JSON.stringify(u))
+        } catch { /* ignore */ }
+        onPasswordChanged?.()
         toast.success('Password changed.')
         navigate('/home', { replace: true })
       }
