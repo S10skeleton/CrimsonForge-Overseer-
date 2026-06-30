@@ -81,13 +81,13 @@ export default function AskElara() {
       }}>
         {!open && <div className="ask-elara-pill">Ask Elara</div>}
         <button className="ask-elara-fab" onClick={() => setOpen(o => !o)} title="Ask Elara">
-          <img src="/ask-elara.png" alt="Elara" width={60} height={60} />
+          <img src="/ask-elara.png" alt="Elara" width={90} height={90} />
         </button>
       </div>
 
       {open && (
         <div style={{
-          position: 'fixed', bottom: 116, right: 22, zIndex: 200, width: 'min(420px, calc(100vw - 32px))', height: 'min(620px, calc(100vh - 160px))',
+          position: 'fixed', bottom: 122, right: 22, zIndex: 200, width: 'min(420px, calc(100vw - 32px))', height: 'min(620px, calc(100vh - 170px))',
           background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 12px 40px rgba(26,29,35,.22)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fade-up .2s ease both',
         }}>

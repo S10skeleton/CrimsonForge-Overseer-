@@ -125,16 +125,8 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
 
         {/* Logo */}
         <div style={{ padding: '20px 18px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ position: 'relative', width: 34, height: 34, flexShrink: 0 }}>
-            <div className="orb-ring ring-1" style={{ inset: 0,  borderWidth: 1.5 }} />
-            <div className="orb-ring ring-3" style={{ inset: 9,  borderWidth: 1 }} />
-            <div style={{
-              position: 'absolute', inset: 16,
-              borderRadius: '50%', overflow: 'hidden',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <img src="/elara-logo.png" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            </div>
+          <div style={{ width: 34, height: 34, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img src="/overseer-icon.png" alt="Overseer" width={34} height={34} style={{ filter: 'drop-shadow(0 2px 6px rgba(192,48,42,.3))' }} />
           </div>
           <div>
             <div style={{ fontWeight: 800, fontSize: 14, letterSpacing: .5, lineHeight: 1.1, color: 'var(--text-primary)' }}>
