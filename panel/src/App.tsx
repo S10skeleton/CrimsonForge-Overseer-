@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import ResetPassword from './pages/ResetPassword'
@@ -34,21 +34,51 @@ function getRoleFromToken(token: string): string {
   }
 }
 
+// A token is expired if its `exp` (seconds) is at/past now, or it can't be read.
+function isExpired(token: string): boolean {
+  try {
+    const { exp } = JSON.parse(atob(token.split('.')[1])) as { exp?: number }
+    return exp ? exp * 1000 <= Date.now() : false
+  } catch {
+    return true
+  }
+}
+
 export default function App() {
   const [token, setToken] = useState<string | null>(null)
   const [role, setRole] = useState<string>('viewer')
   const [mustChange, setMustChange] = useState(false)
   const [checking, setChecking] = useState(true)
 
+  const clearSession = useCallback((reason?: 'expired' | 'idle') => {
+    if (reason) sessionStorage.setItem('panel_logout_reason', reason)
+    localStorage.removeItem('panel_token')
+    localStorage.removeItem('panel_role')
+    localStorage.removeItem('panel_user')
+    setToken(null)
+    setRole('viewer')
+    setMustChange(false)
+  }, [])
+
   useEffect(() => {
     const stored = localStorage.getItem('panel_token')
-    if (stored) {
+    if (stored && !isExpired(stored)) {
       setToken(stored)
       setRole(localStorage.getItem('panel_role') ?? getRoleFromToken(stored))
       try { setMustChange(!!JSON.parse(localStorage.getItem('panel_user') ?? '{}').must_change_password) } catch { /* ignore */ }
+    } else if (stored) {
+      // Token present but lapsed — clean up + flag so we land on /login with a reason.
+      clearSession('expired')
     }
     setChecking(false)
-  }, [])
+  }, [clearSession])
+
+  // Re-check while the app is open so a session that lapses mid-use logs out.
+  useEffect(() => {
+    if (!token) return
+    const t = setInterval(() => { if (isExpired(token)) clearSession('expired') }, 60_000)
+    return () => clearInterval(t)
+  }, [token, clearSession])
 
   const handleLogin = (result: LoginResult) => {
     localStorage.setItem('panel_token', result.token)
@@ -59,14 +89,8 @@ export default function App() {
     setMustChange(result.user?.must_change_password ?? false)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('panel_token')
-    localStorage.removeItem('panel_role')
-    localStorage.removeItem('panel_user')
-    setToken(null)
-    setRole('viewer')
-    setMustChange(false)
-  }
+  // Manual logout — no reason flag (so Login shows no expiry message).
+  const handleLogout = () => clearSession()
 
   if (checking) return null
 
@@ -85,7 +109,7 @@ export default function App() {
         element={
           !token ? <Navigate to="/login" replace />
             : mustChange ? <Navigate to="/reset" replace />
-            : <Panel role={role} onLogout={handleLogout} />
+            : <Panel role={role} onLogout={handleLogout} onIdleLogout={() => clearSession('idle')} />
         }
       >
         <Route index element={<Navigate to="/home" replace />} />

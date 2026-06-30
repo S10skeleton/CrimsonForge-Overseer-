@@ -124,7 +124,9 @@ router.post('/login', async (req: AuthRequest, res) => {
   }
 
   clearFailures(ip)
-  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role }, secret, { expiresIn: '7d' })
+  // 24h session for a god-mode panel (was 7d) — paired with the panel's
+  // proactive expiry + "session expired" message. Adjust with Clutch if needed.
+  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role }, secret, { expiresIn: '24h' })
 
   // Fail-safe: last_login update + audit must not block the response.
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id)

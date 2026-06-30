@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import { useIdleLogout } from '../lib/useIdleLogout'
 
 interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean }
 interface Section { id: string; label: string; accent?: string; online?: boolean; items: Leaf[] }
@@ -54,7 +55,7 @@ const MOBILE_NAV: Leaf[] = [
   { to: '/system',    label: 'SYSTEM', glyph: '◈' },
 ]
 
-interface Props { role: string; onLogout: () => void }
+interface Props { role: string; onLogout: () => void; onIdleLogout: () => void }
 
 function navLinkStyle(accent = 'var(--accent)') {
   return ({ isActive }: { isActive: boolean }) => ({
@@ -70,8 +71,9 @@ function navLinkStyle(accent = 'var(--accent)') {
   })
 }
 
-export default function Panel({ role, onLogout }: Props) {
+export default function Panel({ role, onLogout, onIdleLogout }: Props) {
   const [clock, setClock] = useState('')
+  const idle = useIdleLogout(onIdleLogout)
 
   useEffect(() => {
     const tick = () => setClock(new Date().toLocaleTimeString('en-US', { hour12: false }))
@@ -196,6 +198,25 @@ export default function Panel({ role, onLogout }: Props) {
           <Outlet />
         </div>
       </div>
+
+      {/* -- Idle warning modal -------------------------------------------- */}
+      {idle.warning && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(26,29,35,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ width: 'min(380px, 100%)', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', boxShadow: '0 16px 48px rgba(26,29,35,.22)' }}>
+            <div style={{ height: 3, background: 'var(--accent)' }} />
+            <div style={{ padding: '20px 22px 22px' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>Still there?</div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 20 }}>
+                You'll be signed out for inactivity in about {idle.warnSeconds} seconds.
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sign out</button>
+                <button className="btn btn-primary btn-sm" onClick={idle.stay} autoFocus>Stay signed in</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* -- Mobile Bottom Tab Bar ------------------------------------------ */}
       <nav className="mobile-tabs">

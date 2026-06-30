@@ -22,10 +22,17 @@ export default function Login({ onLogin }: Props) {
 
   useEffect(() => {
     setTimeout(() => setMounted(true), 80)
+    // Explain a non-manual logout (expiry / inactivity), then clear the flag.
+    const reason = sessionStorage.getItem('panel_logout_reason')
+    if (reason) {
+      sessionStorage.removeItem('panel_logout_reason')
+      if (reason === 'expired') toast.info('Your session expired — please sign in again.')
+      else if (reason === 'idle') toast.info('Signed out for inactivity.')
+    }
     api.auth.status()
       .then(d => { if (d.locked) { setLocked(true); setLockCountdown(d.secondsRemaining ?? 900) } })
       .catch(() => {})
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     if (!locked || lockCountdown <= 0) return

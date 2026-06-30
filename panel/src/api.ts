@@ -17,6 +17,8 @@ function headers(): Record<string, string> {
 // a bad passphrase surfaces its own error instead of a redirect loop.
 function handleUnauthorized(path: string) {
   if (path.startsWith('/api/auth/')) return
+  // Reason survives the hard location.assign so Login can explain why.
+  sessionStorage.setItem('panel_logout_reason', 'expired')
   localStorage.removeItem('panel_token')
   localStorage.removeItem('panel_role')
   localStorage.removeItem('panel_user')
