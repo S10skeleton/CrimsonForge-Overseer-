@@ -163,7 +163,7 @@ export const api = {
       status: () => request<{ enabled: boolean }>('/api/auth/2fa/status'),
       setup: () => request<{ otpauthUrl: string; qrDataUrl: string }>('/api/auth/2fa/setup', { method: 'POST' }),
       verify: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
-      disable: (p: { code?: string; recoveryCode?: string; password?: string }) => request<{ ok: boolean }>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify(p) }),
+      disable: (p: { code?: string; recoveryCode?: string }) => request<{ ok: boolean }>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify(p) }),
       regenerate: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/recovery/regenerate', { method: 'POST', body: JSON.stringify({ code }) }),
     },
     forgot: (usernameOrEmail: string) =>

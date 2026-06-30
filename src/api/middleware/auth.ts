@@ -20,7 +20,7 @@ import type { Permissions } from '../../lib/permissions.js'
 export type Role = 'owner' | 'admin' | 'read_only'
 
 export interface AuthRequest extends Request {
-  panelUser?: { id: string; username: string; role: Role; permissions: Permissions }
+  panelUser?: { id: string; username: string; role: Role; permissions: Permissions; mustChange?: boolean }
 }
 
 interface PanelJwtPayload {
@@ -70,7 +70,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
   try {
     let { data, error } = await overseerDb
       .from('overseer_admins')
-      .select('status, role, permissions')
+      .select('status, role, permissions, must_change_password')
       .eq('id', payload.sub ?? '')
       .maybeSingle()
 
@@ -79,7 +79,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
     if (error) {
       const res2 = await overseerDb
         .from('overseer_admins')
-        .select('status, role')
+        .select('status, role, must_change_password')
         .eq('id', payload.sub ?? '')
         .maybeSingle()
       data = res2.data as typeof data
@@ -92,12 +92,26 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       return
     }
 
+    const mustChange = Boolean((data as { must_change_password?: boolean }).must_change_password)
     req.panelUser = {
       id: payload.sub ?? '',
       username: payload.username ?? '',
       role: normalizeRole(data.role),
       permissions: ((data as { permissions?: Permissions }).permissions) ?? {},
+      mustChange,
     }
+
+    // Defense-in-depth (#9): a must-change account can read (so the panel renders)
+    // but cannot mutate anything except changing its own password — even if the
+    // client redirect is bypassed.
+    if (mustChange && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
+      const path = req.originalUrl.split('?')[0]
+      if (!path.endsWith('/api/auth/change-password')) {
+        res.status(403).json({ error: 'password_change_required' })
+        return
+      }
+    }
+
     next()
   } catch (err) {
     console.error('[auth] per-request load failed:', err)

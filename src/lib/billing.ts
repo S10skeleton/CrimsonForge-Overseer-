@@ -42,8 +42,8 @@ async function computeBilling(include: (sub: Stripe.Subscription) => boolean): P
 
   const stripe = new Stripe(stripeKey)
 
-  const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100 })
-  const active = allActive.data.filter(include)
+  // autoPagingToArray so totals don't silently truncate past 100 subs (#6).
+  const active = (await stripe.subscriptions.list({ status: 'active' }).autoPagingToArray({ limit: 1000 })).filter(include)
 
   // Sum every recurring line item (e.g. Additional Seat is a separate item),
   // not just items.data[0].
@@ -62,8 +62,8 @@ async function computeBilling(include: (sub: Stripe.Subscription) => boolean): P
 
   // Churn = subscriptions CANCELED this month (Stripe `created` is creation time;
   // there's no canceled_at list filter, so fetch recent canceled and filter).
-  const cancelled = await stripe.subscriptions.list({ status: 'canceled', limit: 100 })
-  const cancelledThisMonth = cancelled.data.filter((s) => include(s) && (s.canceled_at ?? 0) >= startSec).length
+  const cancelledList = await stripe.subscriptions.list({ status: 'canceled' }).autoPagingToArray({ limit: 1000 })
+  const cancelledThisMonth = cancelledList.filter((s) => include(s) && (s.canceled_at ?? 0) >= startSec).length
 
   const planBreakdown = { solo: 0, shop: 0 }
   for (const sub of active) {
@@ -74,9 +74,9 @@ async function computeBilling(include: (sub: Stripe.Subscription) => boolean): P
     }
   }
 
-  const openInvoices = await stripe.invoices.list({ status: 'open', limit: 20, expand: ['data.customer'] })
+  const openInvoices = await stripe.invoices.list({ status: 'open', expand: ['data.customer'] }).autoPagingToArray({ limit: 1000 })
   const paymentFailures: FPBilling['paymentFailures'] = []
-  for (const inv of openInvoices.data) {
+  for (const inv of openInvoices) {
     const subId = (inv as unknown as { subscription?: string | null }).subscription
     if (!subId) continue
     try {

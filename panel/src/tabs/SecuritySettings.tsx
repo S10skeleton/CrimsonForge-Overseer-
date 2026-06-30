@@ -39,7 +39,7 @@ export default function SecuritySettings() {
 
   const setupM = useMutation({ mutationFn: () => api.auth.twofa.setup(), onSuccess: (d) => { setEnroll(d); setCode('') }, onError: (e) => toast.error(errMsg(e)) })
   const verifyM = useMutation({ mutationFn: () => api.auth.twofa.verify(code.trim()), onSuccess: (d) => { setEnroll(null); setRecovery(d.recoveryCodes); refresh(); toast.success('Two-factor enabled') }, onError: (e) => toast.error(errMsg(e)) })
-  const disableM = useMutation({ mutationFn: () => api.auth.twofa.disable(/^\d{6}$/.test(disableInput.trim()) ? { code: disableInput.trim() } : disableInput.includes('-') ? { recoveryCode: disableInput.trim() } : { password: disableInput }), onSuccess: () => { setDisableInput(''); refresh(); toast.success('Two-factor disabled') }, onError: (e) => toast.error(errMsg(e)) })
+  const disableM = useMutation({ mutationFn: () => api.auth.twofa.disable(/^\d{6}$/.test(disableInput.trim()) ? { code: disableInput.trim() } : { recoveryCode: disableInput.trim() }), onSuccess: () => { setDisableInput(''); refresh(); toast.success('Two-factor disabled') }, onError: (e) => toast.error(errMsg(e)) })
   const regenM = useMutation({ mutationFn: () => api.auth.twofa.regenerate(regenInput.trim()), onSuccess: (d) => { setRegenInput(''); setRecovery(d.recoveryCodes); toast.success('Recovery codes regenerated') }, onError: (e) => toast.error(errMsg(e)) })
 
   const enabled = status?.enabled
@@ -69,9 +69,9 @@ export default function SecuritySettings() {
                 </div>
               </div>
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-                <div className="mono" style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 6 }}>DISABLE (code, recovery code, or password)</div>
+                <div className="mono" style={{ fontSize: 10, color: 'var(--text-hint)', marginBottom: 6 }}>DISABLE (authenticator or recovery code)</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input value={disableInput} onChange={e => setDisableInput(e.target.value)} type={/-|\d{6}/.test(disableInput) ? 'text' : 'password'} placeholder="verify to disable" style={{ maxWidth: 200 }} />
+                  <input value={disableInput} onChange={e => setDisableInput(e.target.value)} placeholder="123456 or recovery code" style={{ maxWidth: 200 }} />
                   <button className="btn btn-danger" disabled={!disableInput.trim() || disableM.isPending} onClick={async () => { if (await confirm({ title: 'Disable two-factor?', body: 'Your account will be protected by password only.', confirmLabel: 'Disable', danger: true })) disableM.mutate() }}>Disable</button>
                 </div>
               </div>

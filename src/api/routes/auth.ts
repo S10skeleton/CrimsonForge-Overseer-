@@ -469,16 +469,17 @@ router.post('/2fa/verify', requireAuth, async (req: AuthRequest, res) => {
 router.post('/2fa/disable', requireAuth, async (req: AuthRequest, res) => {
   const me = req.panelUser
   if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
-  const { code, recoveryCode, password } = req.body as { code?: string; recoveryCode?: string; password?: string }
-  const { data } = await overseerDb.from('overseer_admins').select('totp_secret, recovery_codes, password_hash, totp_enabled').eq('id', me.id).maybeSingle()
-  const acct = data as { totp_secret: string | null; recovery_codes: string[]; password_hash: string; totp_enabled: boolean } | null
+  // Disable requires possession of the second factor (a TOTP code or a recovery
+  // code) — NOT a password, so a stolen session alone can't turn 2FA off.
+  const { code, recoveryCode } = req.body as { code?: string; recoveryCode?: string }
+  const { data } = await overseerDb.from('overseer_admins').select('totp_secret, recovery_codes, totp_enabled').eq('id', me.id).maybeSingle()
+  const acct = data as { totp_secret: string | null; recovery_codes: string[]; totp_enabled: boolean } | null
   if (!acct?.totp_enabled) { res.status(400).json({ error: '2FA is not enabled' }); return }
 
   let ok = false
   if (code && acct.totp_secret) ok = await verifyToken(decryptSecret(acct.totp_secret), String(code))
   if (!ok && recoveryCode && Array.isArray(acct.recovery_codes)) ok = acct.recovery_codes.includes(hashRecoveryCode(String(recoveryCode)))
-  if (!ok && password) ok = await verifyPassword(String(password), acct.password_hash)
-  if (!ok) { res.status(400).json({ error: 'Verification failed' }); return }
+  if (!ok) { res.status(400).json({ error: 'Enter a valid authenticator or recovery code' }); return }
 
   await overseerDb.from('overseer_admins').update({ totp_secret: null, totp_enabled: false, recovery_codes: [] }).eq('id', me.id)
   audit(req, { action: 'auth.2fa_disabled', targetType: 'admin', targetId: me.id })
