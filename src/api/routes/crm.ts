@@ -127,7 +127,7 @@ router.post('/contacts', async (req: AuthRequest, res) => {
 router.patch('/contacts/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
-  const allowed = ['name', 'title', 'email', 'phone', 'is_primary', 'notes']
+  const allowed = ['name', 'title', 'email', 'phone', 'is_primary', 'notes', 'sms_opt_in', 'sms_opt_in_source', 'sms_opt_in_at']
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of allowed) if (b[k] !== undefined) row[k] = b[k]
   if (b.custom && typeof b.custom === 'object') {

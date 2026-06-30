@@ -33,6 +33,7 @@ export default function CompanyDetail({ role }: { role: string }) {
 
   const addContact = useMutation({ mutationFn: () => api.crm.createContact({ company_id: id, ...contactForm }), onSuccess: () => { invalidate(); setContactForm({ name: '', title: '', email: '', phone: '' }); toast.success('Contact added') }, onError: (e) => toast.error(errMsg(e)) })
   const delContact = useMutation({ mutationFn: (cid: string) => api.crm.deleteContact(cid), onSuccess: () => { invalidate(); toast.success('Contact removed') }, onError: (e) => toast.error(errMsg(e)) })
+  const optIn = useMutation({ mutationFn: (c: CrmContact) => api.crm.updateContact(c.id, { sms_opt_in: !c.sms_opt_in, sms_opt_in_source: 'manual', sms_opt_in_at: new Date().toISOString() } as Partial<CrmContact>), onSuccess: invalidate, onError: (e) => toast.error(errMsg(e)) })
   const addDeal = useMutation({ mutationFn: () => api.crm.createDeal({ company_id: id, name: dealForm.name, pipeline: dealForm.pipeline, amount: dealForm.amount ? Number(dealForm.amount) : null }), onSuccess: () => { invalidate(); setDealForm({ name: '', pipeline: 'fundraising', amount: '' }); toast.success('Deal added') }, onError: (e) => toast.error(errMsg(e)) })
   const addActivity = useMutation({ mutationFn: () => api.crm.createActivity({ company_id: id, type: act.type, subject: act.subject || null, body: act.body || null }), onSuccess: () => { invalidate(); setAct({ type: 'note', subject: '', body: '' }); toast.success('Logged') }, onError: (e) => toast.error(errMsg(e)) })
   const toggleDone = useMutation({ mutationFn: (a: CrmActivity) => api.crm.updateActivity(a.id, { done: !a.done }), onSuccess: invalidate, onError: (e) => toast.error(errMsg(e)) })
@@ -96,6 +97,12 @@ export default function CompanyDetail({ role }: { role: string }) {
                     <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.name}{c.is_primary && <span className="badge badge-dim" style={{ marginLeft: 6, fontSize: 9 }}>primary</span>}</div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-hint)' }}>{[c.title, c.email, c.phone].filter(Boolean).join(' · ') || '—'}</div>
                   </div>
+                  {c.phone && (
+                    <button className="btn btn-ghost btn-sm" disabled={!canEdit || optIn.isPending} onClick={() => optIn.mutate(c)}
+                      title="SMS marketing consent" style={{ color: c.sms_opt_in ? 'var(--green)' : 'var(--text-hint)' }}>
+                      {c.sms_opt_in ? 'SMS ✓' : 'SMS ✗'}
+                    </button>
+                  )}
                   {isOwner && <button className="btn btn-ghost btn-sm" onClick={async () => { if (await confirm({ title: 'Remove contact?', body: c.name, confirmLabel: 'Remove', danger: true })) delContact.mutate(c.id) }}>✕</button>}
                 </div>
                 <CustomFields object="contact" recordId={c.id} custom={c.custom} canEdit={canEdit} />

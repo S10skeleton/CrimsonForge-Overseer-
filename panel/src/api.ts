@@ -132,7 +132,7 @@ export interface CrmCompany {
   fp_shop_id: string | null; fp_customer_id: string | null; source_lead_id: string | null
   owner: string | null; notes: string | null; tags: string[]; custom?: CrmCustom; created_at: string; updated_at: string
 }
-export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; custom?: CrmCustom; created_at: string }
+export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; sms_opt_in?: boolean; custom?: CrmCustom; created_at: string }
 export interface CrmDeal {
   id: string; company_id: string; company_name?: string | null; name: string; pipeline: string; stage: string
   amount: number | null; currency: string; probability: number | null; status: string; expected_close: string | null
@@ -141,6 +141,12 @@ export interface CrmDeal {
 export interface CrmActivity { id: string; company_id: string; contact_id: string | null; deal_id: string | null; type: string; subject: string | null; body: string | null; due_at: string | null; done: boolean; created_by: string | null; created_at: string }
 export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
 export interface CompanyDetail { company: CrmCompany; contacts: CrmContact[]; deals: CrmDeal[]; activities: CrmActivity[] }
+
+export interface QuoInbox { id: string; number: string; name?: string; label?: string; enabled?: boolean }
+export interface QuoThread { participant: string; lastText: string; lastAt: string; direction: string; count: number }
+export interface QuoMessage { id: string; from: string; to: string[]; direction: 'incoming' | 'outgoing'; text?: string; body?: string; createdAt: string }
+export interface QuoCall { id: string; from: string; to: string; direction: 'incoming' | 'outgoing'; status?: string; duration?: number; createdAt: string }
+export interface QuoScheduled { id: string; to_number: string; body: string; send_at: string; status: string; created_by: string | null; created_at: string }
 
 export interface Revenue { mrr: number; arr: number; activeSubs: number; newThisMonth: number; churnedThisMonth: number; failedPaymentsCount: number; failedPaymentsAmount: number; planBreakdown: { solo: number; shop: number } }
 export interface MrrPoint { snapshot_date: string; mrr: number; arr: number; active_subs: number; new_subs: number; churned_subs: number }
@@ -326,6 +332,21 @@ export const api = {
     addBlock: (b: { pattern: string; reason?: string }) => request<{ data: CrmBlocklistEntry }>('/api/crm/sync/blocklist', { method: 'POST', body: JSON.stringify(b) }).then(r => r.data),
     removeBlock: (id: string) => request(`/api/crm/sync/blocklist/${id}`, { method: 'DELETE' }),
     thread: (activityId: string) => request<{ data: { subject: string; messages: CrmThreadMessage[] } }>(`/api/crm/sync/thread?activity_id=${encodeURIComponent(activityId)}`).then(r => r.data),
+  },
+
+  quo: {
+    config: () => request<{ configured: boolean; scheduledEnabled: boolean }>('/api/quo/config'),
+    inboxes: () => request<{ data: QuoInbox[]; configured: boolean }>('/api/quo/inboxes'),
+    conversations: (phoneNumberId: string) => request<{ data: QuoThread[] }>(`/api/quo/conversations?phoneNumberId=${encodeURIComponent(phoneNumberId)}`).then(r => r.data),
+    thread: (phoneNumberId: string, participant: string) => request<{ data: QuoMessage[] }>(`/api/quo/thread?phoneNumberId=${encodeURIComponent(phoneNumberId)}&participant=${encodeURIComponent(participant)}`).then(r => r.data),
+    calls: (phoneNumberId: string) => request<{ data: QuoCall[] }>(`/api/quo/calls?phoneNumberId=${encodeURIComponent(phoneNumberId)}`).then(r => r.data),
+    callTranscript: (id: string) => request<{ data: unknown }>(`/api/quo/calls/${id}/transcript`).then(r => r.data),
+    callSummary: (id: string) => request<{ data: unknown }>(`/api/quo/calls/${id}/summary`).then(r => r.data),
+    send: (p: { from: string; to: string; content: string }) => request<{ data: QuoMessage }>('/api/quo/send', { method: 'POST', body: JSON.stringify(p) }).then(r => r.data),
+    backfill: () => request<{ data: { messages: number; calls: number } }>('/api/quo/backfill', { method: 'POST' }).then(r => r.data),
+    scheduled: () => request<{ data: QuoScheduled[]; enabled: boolean }>('/api/quo/scheduled'),
+    schedule: (p: { to_number: string; body: string; send_at: string }) => request<{ data: QuoScheduled }>('/api/quo/scheduled', { method: 'POST', body: JSON.stringify(p) }).then(r => r.data),
+    cancelScheduled: (id: string) => request(`/api/quo/scheduled/${id}`, { method: 'DELETE' }),
   },
 
   elaraConfig: {

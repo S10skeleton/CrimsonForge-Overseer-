@@ -25,6 +25,7 @@ import PipelineView   from './tabs/crm/PipelineView'
 import CompaniesView  from './tabs/crm/CompaniesView'
 import CompanyDetail  from './tabs/crm/CompanyDetail'
 import InboxesView    from './tabs/crm/InboxesView'
+import PhoneHub       from './tabs/phone/PhoneHub'
 import FinancialsLayout from './tabs/financials/FinancialsLayout'
 import RevenueView      from './tabs/financials/RevenueView'
 import RunwayView       from './tabs/financials/RunwayView'
@@ -152,6 +153,7 @@ export default function App() {
           <Route path="companies"       element={<CompaniesView role={role} />} />
           <Route path="companies/:id"   element={<CompanyDetail role={role} />} />
           <Route path="inboxes"         element={<InboxesView role={role} />} />
+          <Route path="phone"           element={<PhoneHub />} />
         </Route>
         {/* Old standalone Leads → folded into CRM */}
         <Route path="leads"    element={<Navigate to="/crm/leads" replace />} />

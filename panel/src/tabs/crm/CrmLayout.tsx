@@ -6,6 +6,7 @@ const TABS = [
   { to: '/crm/leads', label: 'Leads', key: 'crm.leads' },
   { to: '/crm/pipeline', label: 'Pipeline', key: 'crm.pipeline' },
   { to: '/crm/companies', label: 'Companies', key: 'crm.companies' },
+  { to: '/crm/phone', label: 'Phone', key: 'crm.phone' },
 ]
 
 export default function CrmLayout() {
