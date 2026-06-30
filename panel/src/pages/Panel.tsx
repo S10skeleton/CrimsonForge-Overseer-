@@ -41,7 +41,7 @@ const SECTIONS: Section[] = [
   {
     id: 'settings', label: 'Settings', items: [
       { to: '/settings/security',      label: 'Security',       glyph: '⚿' },
-      { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉', adminOnly: true, permKey: 'settings' },
+      // Admins & Roles moved into the owner-only SuperAdmin area (SUPERADMIN-2).
       { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤', adminOnly: true, permKey: 'settings' },
       { to: '/settings/integrations', label: 'Integrations',   glyph: '◈', permKey: 'settings' },
       { to: '/activity',              label: 'Activity',       glyph: '◎', adminOnly: true, permKey: 'settings' },

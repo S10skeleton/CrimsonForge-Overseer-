@@ -1,18 +1,15 @@
 /**
- * SuperAdmin — owner-only home for sensitive controls (SUPERADMIN).
- * First card: the CRM email/calendar BLOCKLIST (moved out of the now-open
- * Inboxes tab). Domains/addresses here never become CRM contacts or activities.
- * Calls the owner-only /api/crm/sync/blocklist endpoints (already audited).
- * Designed to grow — add future owner-only cards below (danger-zone, etc.).
+ * SuperAdmin → Blocklist (owner-only). Domains/addresses here never become CRM
+ * contacts or activities. Calls the owner-only /api/crm/sync/blocklist endpoints
+ * (already audited). Moved out of the now-open Inboxes tab in #14.
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
-import { usePermissions } from '../../lib/permissions'
 import { useToast } from '../../components/Toast'
 import { errMsg } from '../crm/crmShared'
 
-function Blocklist() {
+export default function BlocklistView() {
   const qc = useQueryClient(); const toast = useToast()
   const blockQ = useQuery({ queryKey: ['crm', 'blocklist'], queryFn: api.crm.blocklist })
   const refresh = () => qc.invalidateQueries({ queryKey: ['crm', 'blocklist'] })
@@ -64,19 +61,6 @@ function Blocklist() {
           <button className="btn btn-primary btn-sm" disabled={!pattern.trim() || addBlock.isPending} onClick={() => addBlock.mutate()}>Add</button>
         </div>
       </div>
-    </div>
-  )
-}
-
-export default function SuperAdminView() {
-  const { role } = usePermissions()
-  if (role !== 'owner') return <div style={{ color: 'var(--text-muted)', padding: 24 }}>Not available.</div>
-
-  return (
-    <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>SuperAdmin</h1>
-      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 22 }}>Owner-only controls. Sensitive settings live here.</div>
-      <Blocklist />
     </div>
   )
 }

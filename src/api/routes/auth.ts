@@ -88,6 +88,23 @@ export async function bumpTrustedVersion(adminId: string): Promise<void> {
   } catch (err) { console.error('[auth] bump trusted_device_version failed:', err) }
 }
 
+// session_version — stamped into the session JWT as `sv`; requireAuth rejects a
+// token whose sv != the admin's current value, so bumping = instant org-side
+// logout. Rollout-safe: 0 until the column is migrated (old tokens have sv
+// undefined → treated as 0 → still valid until the first real bump).
+export async function sessionVersion(adminId: string): Promise<number> {
+  const { data, error } = await overseerDb
+    .from('overseer_admins').select('session_version').eq('id', adminId).maybeSingle()
+  if (error || !data) return 0
+  return Number((data as { session_version?: number }).session_version ?? 0)
+}
+export async function bumpSessionVersion(adminId: string): Promise<void> {
+  try {
+    const v = await sessionVersion(adminId)
+    await overseerDb.from('overseer_admins').update({ session_version: v + 1 }).eq('id', adminId)
+  } catch (err) { console.error('[auth] bump session_version failed:', err) }
+}
+
 // ─── Brute-force lockout (per IP — single Railway instance; in-memory) ───────
 // NOTE: per-IP, not per IP+username. Adequate for the founder panel and exactly
 // matches the GET /api/auth/status contract the panel already polls.
@@ -213,8 +230,10 @@ router.post('/login', async (req: AuthRequest, res) => {
   }
 
   // Full session (default 24h, env-tunable via SESSION_TTL_HOURS) — paired with
-  // the panel's proactive expiry + "session expired" message.
-  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
+  // the panel's proactive expiry + "session expired" message. `sv` enables
+  // org-side revocation (SuperAdmin "sign out everywhere").
+  const sv = await sessionVersion(admin.id)
+  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role, sv, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
 
   // Fail-safe: last_login update + audit must not block the response.
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id)
@@ -435,7 +454,8 @@ router.post('/accept-invite', async (req: AuthRequest, res) => {
   req.panelUser = { id: admin.id, username: admin.username, role: adminRole as 'owner' | 'admin' | 'read_only', permissions: {} }
   audit(req, { action: 'admin.invite_accepted', targetType: 'admin', targetId: admin.id, meta: { username: uname } })
 
-  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
+  const sv = await sessionVersion(admin.id)
+  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole, sv, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
   res.status(201).json({
     token: sessionToken,
     role: adminRole,
@@ -504,7 +524,8 @@ router.post('/login/2fa', async (req: AuthRequest, res) => {
     setTrustedCookie(res, acct.id, tdv, secret)
   }
 
-  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
+  const sv = await sessionVersion(acct.id)
+  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true, sv, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', acct.id).then(() => {}, () => {})
   req.panelUser = { id: acct.id, username: acct.username, role: acct.role, permissions: {} }
   audit(req, { action: 'auth.login', meta: { mfa: true } })

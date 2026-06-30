@@ -28,6 +28,7 @@ interface PanelJwtPayload {
   username?: string
   role?: string
   scope?: string
+  sv?: number
 }
 
 export function normalizeRole(role: string | undefined): Role {
@@ -68,26 +69,47 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
   // Per-request status + permission load (fail-safe: reject on error, don't open).
   try {
+    // Primary load includes session_version (org-side revocation). Rollout-safe
+    // tiers below so a not-yet-migrated session_version OR permissions column
+    // never drops the other field or locks everyone out.
     let { data, error } = await overseerDb
       .from('overseer_admins')
-      .select('status, role, permissions, must_change_password')
+      .select('status, role, permissions, must_change_password, session_version')
       .eq('id', payload.sub ?? '')
       .maybeSingle()
 
-    // Rollout safety: if the `permissions` column isn't migrated yet, fall back
-    // to status+role (permissions empty) instead of locking everyone out.
     if (error) {
+      // session_version not migrated yet → retry without it, keeping permissions.
       const res2 = await overseerDb
         .from('overseer_admins')
-        .select('status, role, must_change_password')
+        .select('status, role, permissions, must_change_password')
         .eq('id', payload.sub ?? '')
         .maybeSingle()
       data = res2.data as typeof data
       error = res2.error
-      if (error) throw error
+      if (error) {
+        // permissions column also missing → minimal status+role load.
+        const res3 = await overseerDb
+          .from('overseer_admins')
+          .select('status, role, must_change_password')
+          .eq('id', payload.sub ?? '')
+          .maybeSingle()
+        data = res3.data as typeof data
+        error = res3.error
+        if (error) throw error
+      }
     }
 
     if (!data || data.status !== 'active') {
+      res.status(401).json({ error: 'Session is no longer valid' })
+      return
+    }
+
+    // Org-side revocation: a token minted before a "sign out everywhere" bump
+    // carries a stale sv → treat as expired (normal re-login). undefined == 0
+    // both sides keeps pre-migration tokens valid until the first real bump.
+    const currentSv = Number((data as { session_version?: number }).session_version ?? 0)
+    if (Number(payload.sv ?? 0) !== currentSv) {
       res.status(401).json({ error: 'Session is no longer valid' })
       return
     }
