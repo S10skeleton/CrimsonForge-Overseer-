@@ -78,7 +78,7 @@ export default function AskElara() {
         border: 'none', cursor: 'pointer', background: ACCENT, boxShadow: '0 6px 20px rgba(89,73,172,.4)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
       }}>
-        <img src="/elara-mark.png" alt="Elara" width={34} height={34} style={{ borderRadius: '50%' }} />
+        <img src="/elara-mark.png" alt="Elara" width={48} height={48} />
       </button>
 
       {open && (
@@ -88,7 +88,7 @@ export default function AskElara() {
           display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fade-up .2s ease both',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-            <img src="/elara-mark.png" alt="" width={26} height={26} style={{ borderRadius: '50%' }} />
+            <img src="/elara-mark.png" alt="" width={32} height={32} />
             <div style={{ fontWeight: 700, fontSize: 14 }}>Ask Elara</div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => { setMsgs([]); setCards([]) }} disabled={!msgs.length}>Clear</button>
