@@ -15,6 +15,7 @@ import { sendEmail, isEmailConfigured } from '../../notifications/email.js'
 import { inviteEmail } from '../../notifications/emailTemplates.js'
 import { presetPermissions } from '../../lib/permissions.js'
 import type { Permissions } from '../../lib/permissions.js'
+import { bumpTrustedVersion } from './auth.js'
 
 const router = Router()
 
@@ -195,6 +196,7 @@ router.post('/:id/reset-2fa', requireOwner, async (req: AuthRequest, res) => {
   const { error } = await overseerDb.from('overseer_admins')
     .update({ totp_secret: null, totp_enabled: false, recovery_codes: [] }).eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not reset 2FA' }); return }
+  await bumpTrustedVersion(id) // void the target's trusted devices → TOTP again
   audit(req, { action: 'admin.reset_2fa', targetType: 'admin', targetId: id, meta: { username: target.username } })
   res.json({ ok: true })
 })
@@ -308,6 +310,7 @@ router.post('/:id/reset-password', requireOwner, async (req: AuthRequest, res) =
     return
   }
 
+  await bumpTrustedVersion(id) // password reset voids the target's trusted devices
   audit(req, { action: 'admin.password_reset', targetType: 'admin', targetId: id, meta: { username: target.username } })
 
   let emailed = false

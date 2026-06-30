@@ -27,6 +27,67 @@ import { generateTotpSecret, otpauthUrl, qrDataUrl, verifyToken, encryptSecret, 
 
 const router = Router()
 
+// ─── Session + trusted-device tuning (env-overridable, safe code defaults) ───
+// SESSION_TTL: how long one login lasts. TRUSTED_DEVICE_DAYS: how long a device
+// that has passed TOTP may skip it on subsequent logins (password-only).
+const SESSION_TTL = `${Number(process.env.SESSION_TTL_HOURS) || 24}h` as jwt.SignOptions['expiresIn']
+const TRUSTED_DEVICE_DAYS = Number(process.env.TRUSTED_DEVICE_DAYS) || 3
+const TRUSTED_TTL = `${TRUSTED_DEVICE_DAYS}d` as jwt.SignOptions['expiresIn']
+const TRUSTED_COOKIE = 'cf_trusted'
+
+// Trusted-device cookie is cross-site: the panel (Netlify) calls the API
+// (Railway) from a different origin, so it MUST be SameSite=None;Secure to be
+// sent on the login XHR at all (Lax would silently never be transmitted). It's
+// httpOnly so XSS can't read it, and signed with PANEL_JWT_SECRET. This is a
+// deliberate convenience tradeoff for an internal founder/admin panel: within
+// the window a stolen, already-logged-out device could sign in with password
+// only — mitigated by the still-required password, httpOnly+Secure flags, and
+// the trusted_device_version kill-switch bumped on any 2FA/password change.
+function trustedCookieOpts(): { httpOnly: true; secure: true; sameSite: 'none'; path: string } {
+  return { httpOnly: true, secure: true, sameSite: 'none', path: '/' }
+}
+function setTrustedCookie(res: import('express').Response, adminId: string, tdv: number, secret: string): void {
+  const token = jwt.sign({ sub: adminId, scope: 'trusted-device', tdv }, secret, { expiresIn: TRUSTED_TTL })
+  res.cookie(TRUSTED_COOKIE, token, { ...trustedCookieOpts(), maxAge: TRUSTED_DEVICE_DAYS * 86400 * 1000 })
+}
+function clearTrustedCookie(res: import('express').Response): void {
+  res.clearCookie(TRUSTED_COOKIE, trustedCookieOpts())
+}
+function readCookie(req: AuthRequest, name: string): string | null {
+  const raw = req.headers.cookie
+  if (!raw) return null
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=')
+    if (i < 0) continue
+    if (part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim())
+  }
+  return null
+}
+// A valid trusted-device cookie matches this admin AND their current version.
+function hasTrustedDevice(req: AuthRequest, adminId: string, tdv: number, secret: string): boolean {
+  const raw = readCookie(req, TRUSTED_COOKIE)
+  if (!raw) return false
+  try {
+    const p = jwt.verify(raw, secret) as { sub?: string; scope?: string; tdv?: number }
+    return p.scope === 'trusted-device' && p.sub === adminId && Number(p.tdv ?? 0) === tdv
+  } catch { return false }
+}
+// trusted_device_version — rollout-safe: 0 if the column isn't migrated yet.
+async function trustedVersion(adminId: string): Promise<number> {
+  const { data, error } = await overseerDb
+    .from('overseer_admins').select('trusted_device_version').eq('id', adminId).maybeSingle()
+  if (error || !data) return 0
+  return Number((data as { trusted_device_version?: number }).trusted_device_version ?? 0)
+}
+// Kill-switch: bump to invalidate every trusted device for this admin at once.
+// Fail-safe (swallows errors — e.g. column not migrated yet; no cookies exist then).
+export async function bumpTrustedVersion(adminId: string): Promise<void> {
+  try {
+    const v = await trustedVersion(adminId)
+    await overseerDb.from('overseer_admins').update({ trusted_device_version: v + 1 }).eq('id', adminId)
+  } catch (err) { console.error('[auth] bump trusted_device_version failed:', err) }
+}
+
 // ─── Brute-force lockout (per IP — single Railway instance; in-memory) ───────
 // NOTE: per-IP, not per IP+username. Adequate for the founder panel and exactly
 // matches the GET /api/auth/status contract the panel already polls.
@@ -137,17 +198,23 @@ router.post('/login', async (req: AuthRequest, res) => {
 
   clearFailures(ip)
 
-  // 2FA: if enabled, don't issue a session — return a short-lived pending token
-  // that the code step exchanges for the real session.
+  // 2FA: if enabled, normally don't issue a session — return a short-lived
+  // pending token the code step exchanges for the real session. EXCEPTION:
+  // a device that passed TOTP within TRUSTED_DEVICE_DAYS carries a valid
+  // cf_trusted cookie → skip TOTP and issue the session on password alone.
   if (admin.totp_enabled) {
-    const mfaToken = jwt.sign({ sub: admin.id, scope: 'mfa-pending' }, secret, { expiresIn: '5m' })
-    res.json({ mfaRequired: true, mfaToken })
-    return
+    const tdv = await trustedVersion(admin.id)
+    if (!hasTrustedDevice(req, admin.id, tdv, secret)) {
+      const mfaToken = jwt.sign({ sub: admin.id, scope: 'mfa-pending' }, secret, { expiresIn: '5m' })
+      res.json({ mfaRequired: true, mfaToken })
+      return
+    }
+    // trusted device → fall through to issue a full session (password-only).
   }
 
-  // 24h session for a god-mode panel (was 7d) — paired with the panel's
-  // proactive expiry + "session expired" message. Adjust with Clutch if needed.
-  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role, scope: 'session' }, secret, { expiresIn: '24h' })
+  // Full session (default 24h, env-tunable via SESSION_TTL_HOURS) — paired with
+  // the panel's proactive expiry + "session expired" message.
+  const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
 
   // Fail-safe: last_login update + audit must not block the response.
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id)
@@ -248,6 +315,10 @@ router.post('/reset', async (req: AuthRequest, res) => {
     return
   }
 
+  // A password reset invalidates every trusted device → next login needs TOTP.
+  await bumpTrustedVersion(account.id)
+  clearTrustedCookie(res)
+
   req.panelUser = { id: account.id, username: account.username, role: 'read_only', permissions: {} }
   audit(req, { action: 'auth.password_reset', targetType: 'admin', targetId: account.id, meta: { username: account.username } })
   res.json({ ok: true })
@@ -294,6 +365,10 @@ router.post('/change-password', requireAuth, async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Could not change password' })
     return
   }
+
+  // Changing the password invalidates trusted devices → TOTP again next login.
+  await bumpTrustedVersion(account.id)
+  clearTrustedCookie(res)
 
   audit(req, { action: 'auth.change_password', targetType: 'admin', targetId: account.id })
   res.json({ ok: true })
@@ -360,7 +435,7 @@ router.post('/accept-invite', async (req: AuthRequest, res) => {
   req.panelUser = { id: admin.id, username: admin.username, role: adminRole as 'owner' | 'admin' | 'read_only', permissions: {} }
   audit(req, { action: 'admin.invite_accepted', targetType: 'admin', targetId: admin.id, meta: { username: uname } })
 
-  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole, scope: 'session' }, secret, { expiresIn: '24h' })
+  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
   res.status(201).json({
     token: sessionToken,
     role: adminRole,
@@ -422,9 +497,14 @@ router.post('/login/2fa', async (req: AuthRequest, res) => {
   if (usedRecoveryIdx >= 0) {
     const remaining = acct.recovery_codes.filter((_, i) => i !== usedRecoveryIdx)
     overseerDb.from('overseer_admins').update({ recovery_codes: remaining }).eq('id', acct.id).then(() => {}, () => {})
+  } else {
+    // A real TOTP success (NOT a recovery code) trusts this device for N days —
+    // it may skip TOTP on future logins until the version is bumped or it lapses.
+    const tdv = await trustedVersion(acct.id)
+    setTrustedCookie(res, acct.id, tdv, secret)
   }
 
-  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true, scope: 'session' }, secret, { expiresIn: '24h' })
+  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true, scope: 'session' }, secret, { expiresIn: SESSION_TTL })
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', acct.id).then(() => {}, () => {})
   req.panelUser = { id: acct.id, username: acct.username, role: acct.role, permissions: {} }
   audit(req, { action: 'auth.login', meta: { mfa: true } })
@@ -462,6 +542,8 @@ router.post('/2fa/verify', requireAuth, async (req: AuthRequest, res) => {
   const { plain, hashes } = genRecoveryCodes()
   const { error } = await overseerDb.from('overseer_admins').update({ totp_enabled: true, recovery_codes: hashes }).eq('id', me.id)
   if (error) { res.status(500).json({ error: 'Could not enable 2FA' }); return }
+  // (Re-)enrolling 2FA clears any prior trusted devices.
+  await bumpTrustedVersion(me.id)
   audit(req, { action: 'auth.2fa_enabled', targetType: 'admin', targetId: me.id })
   res.json({ ok: true, recoveryCodes: plain })
 })
@@ -482,7 +564,22 @@ router.post('/2fa/disable', requireAuth, async (req: AuthRequest, res) => {
   if (!ok) { res.status(400).json({ error: 'Enter a valid authenticator or recovery code' }); return }
 
   await overseerDb.from('overseer_admins').update({ totp_secret: null, totp_enabled: false, recovery_codes: [] }).eq('id', me.id)
+  // Disabling 2FA voids trusted-device tokens (they only mean "passed TOTP").
+  await bumpTrustedVersion(me.id)
+  clearTrustedCookie(res)
   audit(req, { action: 'auth.2fa_disabled', targetType: 'admin', targetId: me.id })
+  res.json({ ok: true })
+})
+
+// ─── POST /api/auth/forget-devices (auth) ────────────────────────────────────
+// "Sign out trusted devices" — bumps the version so every device must pass TOTP
+// again on its next login, and clears this device's cookie immediately.
+router.post('/forget-devices', requireAuth, async (req: AuthRequest, res) => {
+  const me = req.panelUser
+  if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+  await bumpTrustedVersion(me.id)
+  clearTrustedCookie(res)
+  audit(req, { action: 'auth.forget_trusted_devices', targetType: 'admin', targetId: me.id })
   res.json({ ok: true })
 })
 
