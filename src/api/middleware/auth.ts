@@ -59,13 +59,25 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
 
   // Per-request status + permission load (fail-safe: reject on error, don't open).
   try {
-    const { data, error } = await overseerDb
+    let { data, error } = await overseerDb
       .from('overseer_admins')
       .select('status, role, permissions')
       .eq('id', payload.sub ?? '')
       .maybeSingle()
 
-    if (error) throw error
+    // Rollout safety: if the `permissions` column isn't migrated yet, fall back
+    // to status+role (permissions empty) instead of locking everyone out.
+    if (error) {
+      const res2 = await overseerDb
+        .from('overseer_admins')
+        .select('status, role')
+        .eq('id', payload.sub ?? '')
+        .maybeSingle()
+      data = res2.data as typeof data
+      error = res2.error
+      if (error) throw error
+    }
+
     if (!data || data.status !== 'active') {
       res.status(401).json({ error: 'Session is no longer valid' })
       return
@@ -75,7 +87,7 @@ export async function requireAuth(req: AuthRequest, res: Response, next: NextFun
       id: payload.sub ?? '',
       username: payload.username ?? '',
       role: normalizeRole(data.role),
-      permissions: (data.permissions as Permissions) ?? {},
+      permissions: ((data as { permissions?: Permissions }).permissions) ?? {},
     }
     next()
   } catch (err) {
