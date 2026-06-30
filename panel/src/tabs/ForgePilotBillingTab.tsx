@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
 import { formatDistanceToNow } from 'date-fns'
+import { CustomerView, MetricCards, DataCard, StateLine, fmtMoney, fmtNum } from './customers/shared'
 
 export default function ForgePilotBillingTab() {
   const [data,    setData]    = useState<any>(null)
@@ -18,94 +19,66 @@ export default function ForgePilotBillingTab() {
   const arr  = mrr * 12
   const subs = data?.activeSubscriptions ?? 0
   const failures = data?.paymentFailures ?? []
+  const dash = loading ? '…' : undefined
 
   return (
-    <div>
-      <h1 style={{ fontFamily: 'Orbitron', fontWeight: 900, fontSize: 22, letterSpacing: 4, marginBottom: 6 }} className="grad">
-        FORGEPILOT BILLING
-      </h1>
-      <div style={{ color: 'var(--dim)', fontSize: 12, marginBottom: 28 }}>
-        Solo &amp; Shop subscriptions &middot; Stripe
+    <CustomerView title="Billing" product="forgepilot">
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: -8, marginBottom: 18 }}>
+        Solo &amp; Shop subscriptions · Stripe
       </div>
 
       {error && (
-        <div style={{ padding: '12px 16px', marginBottom: 20, borderRadius: 8, border: '1px solid rgba(239,68,68,.4)', background: 'rgba(239,68,68,.05)', color: 'var(--red)', fontSize: 13 }}>
+        <div style={{ padding: '12px 16px', marginBottom: 18, borderRadius: 8, border: '1px solid rgba(220,38,38,.35)', background: 'rgba(220,38,38,.06)', color: 'var(--red-text)', fontSize: 13 }}>
           {error}
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="kpi-grid">
-        {[
-          { label: 'MRR',            value: loading ? '...' : `$${mrr.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,  color: 'var(--green)' },
-          { label: 'ARR',            value: loading ? '...' : `$${arr.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,  color: 'var(--green)' },
-          { label: 'Active Subs',    value: loading ? '...' : subs,                                                                                           color: 'var(--cyan)'  },
-          { label: 'Past Due',       value: loading ? '...' : failures.length,                                                                               color: failures.length > 0 ? 'var(--red)' : 'var(--dim)' },
-          { label: 'New (mo)',       value: loading ? '...' : data?.newThisMonth ?? 0,                                                                       color: 'var(--cyan)'  },
-          { label: 'Cancelled (mo)', value: loading ? '...' : data?.cancelledThisMonth ?? 0,                                                                 color: data?.cancelledThisMonth > 0 ? 'var(--yellow)' : 'var(--dim)' },
-          { label: 'Solo Plans',     value: loading ? '...' : data?.planBreakdown?.solo ?? 0,                                                                color: 'var(--violet)'},
-          { label: 'Shop Plans',     value: loading ? '...' : data?.planBreakdown?.shop ?? 0,                                                                color: 'var(--violet)'},
-        ].map(k => (
-          <div key={k.label} className="kpi">
-            <div className="kpi-label">{k.label}</div>
-            <div className="kpi-value" style={{ color: k.color, fontSize: '1.5rem' }}>{k.value}</div>
-          </div>
-        ))}
-      </div>
+      <MetricCards items={[
+        { label: 'MRR',            value: dash ?? fmtMoney(mrr) },
+        { label: 'ARR',            value: dash ?? fmtMoney(arr) },
+        { label: 'Active subs',    value: dash ?? fmtNum(subs) },
+        { label: 'Past due',       value: dash ?? fmtNum(failures.length), accent: failures.length > 0 ? 'var(--red-text)' : undefined },
+        { label: 'New (mo)',       value: dash ?? fmtNum(data?.newThisMonth ?? 0) },
+        { label: 'Cancelled (mo)', value: dash ?? fmtNum(data?.cancelledThisMonth ?? 0), accent: data?.cancelledThisMonth > 0 ? 'var(--yellow)' : undefined },
+        { label: 'Solo plans',     value: dash ?? fmtNum(data?.planBreakdown?.solo ?? 0) },
+        { label: 'Shop plans',     value: dash ?? fmtNum(data?.planBreakdown?.shop ?? 0) },
+      ]} />
 
-      {/* Payment failures */}
       {failures.length > 0 && (
-        <div style={{ marginBottom: 24, padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(239,68,68,.4)', background: 'rgba(239,68,68,.05)' }}>
-          <div className="section-label" style={{ color: 'var(--red)', marginBottom: 10 }}>
-            PAYMENT FAILURES &mdash; ACTION REQUIRED
-          </div>
+        <DataCard title={<span style={{ color: 'var(--red-text)' }}>Payment failures — action required</span>}>
           {failures.map((f: any, i: number) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border)', fontSize: 13 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{f.customerEmail}</div>
-                <div style={{ color: 'var(--dim)', fontSize: 12 }}>{f.failureMessage}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{f.failureMessage}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ color: 'var(--red)', fontWeight: 700 }}>${f.amount.toFixed(2)}</div>
-                <div style={{ color: 'var(--dim)', fontSize: 11 }}>
-                  {formatDistanceToNow(new Date(f.failedAt), { addSuffix: true })}
-                </div>
+                <div style={{ color: 'var(--red-text)', fontWeight: 700 }}>${f.amount.toFixed(2)}</div>
+                <div style={{ color: 'var(--text-hint)', fontSize: 11 }}>{formatDistanceToNow(new Date(f.failedAt), { addSuffix: true })}</div>
               </div>
             </div>
           ))}
-        </div>
+        </DataCard>
       )}
 
-      {/* Pre-launch state */}
       {!loading && subs === 0 && failures.length === 0 && (
-        <div style={{
-          border: '1px solid var(--border)', borderRadius: 14,
-          padding: '48px 32px', textAlign: 'center', background: 'rgba(255,255,255,.02)',
-        }}>
-          <div style={{ fontSize: 32, marginBottom: 16, opacity: 0.25 }}>&#11176;</div>
-          <div style={{ fontFamily: 'Orbitron', fontWeight: 700, fontSize: 13, letterSpacing: 3, color: 'var(--dim)', marginBottom: 10 }}>
-            PRE-LAUNCH
-          </div>
-          <div style={{ color: 'var(--dim)', fontSize: 13, maxWidth: 320, margin: '0 auto', lineHeight: 1.7 }}>
-            No active ForgePilot subscriptions yet. Stripe products are configured
-            and ready &mdash; subscriptions will appear here once billing goes live.
+        <div className="card" style={{ padding: '48px 32px', textAlign: 'center' }}>
+          <div className="section-label" style={{ margin: '0 0 10px' }}>Pre-launch</div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 13, maxWidth: 340, margin: '0 auto', lineHeight: 1.7 }}>
+            No active ForgePilot subscriptions yet. Stripe products are configured and ready —
+            subscriptions will appear here once billing goes live.
           </div>
         </div>
       )}
 
-      {/* Active subscriptions table — appears once subs exist */}
       {!loading && subs > 0 && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-            <div className="section-label" style={{ marginBottom: 0 }}>Active Subscriptions</div>
-          </div>
-          <div style={{ padding: '20px', color: 'var(--dim)', fontSize: 13 }}>
-            {subs} active subscription{subs !== 1 ? 's' : ''} &mdash;
-            ${mrr.toFixed(0)}/mo MRR
+        <DataCard title="Active subscriptions">
+          <StateLine>
+            {fmtNum(subs)} active subscription{subs !== 1 ? 's' : ''} — {fmtMoney(mrr)}/mo MRR
             ({data?.planBreakdown?.solo ?? 0} solo, {data?.planBreakdown?.shop ?? 0} shop)
-          </div>
-        </div>
+          </StateLine>
+        </DataCard>
       )}
-    </div>
+    </CustomerView>
   )
 }

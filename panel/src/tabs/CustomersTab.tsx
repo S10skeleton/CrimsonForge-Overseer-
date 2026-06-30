@@ -1,12 +1,11 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-import ShopsTab from './ShopsTab'
-import UsersTab from './UsersTab'
+import { CfpOverview, CfpAccounts } from './customers/CrimsonForgeViews'
+import { FpOverview, FpAccounts, FpSessions, FpInsights, FpInvites, FpWaitlist } from './customers/ForgePilotViews'
 import BillingTab from './BillingTab'
 import MessagesTab from './MessagesTab'
 import FeedbackTab from './FeedbackTab'
-import ForgePilotTab from './ForgePilotTab'
 import ForgePilotBillingTab from './ForgePilotBillingTab'
 import ForgePilotMessagesTab from './ForgePilotMessagesTab'
 import ForgePilotFeedbackTab from './ForgePilotFeedbackTab'
@@ -15,15 +14,15 @@ import ForgePulseTab from './ForgePulseTab'
 interface View { key: string; label: string }
 interface Product { slug: string; label: string; views: View[] }
 
-// Product = a filter, not a separate tree. Sub-navs aren't symmetric, so each
-// product declares its own views; the components themselves are reused as-is.
+// Product = a filter, not a separate tree. Both products use the same flat
+// view bar; views that only exist for one product simply aren't in the other's.
 const PRODUCTS: Product[] = [
   {
     slug: 'crimsonforge-pro', label: 'CrimsonForge Pro',
     views: [
-      { key: 'shops', label: 'Shops' },
-      { key: 'users', label: 'Users' },
-      { key: 'billing', label: 'Billing' },
+      { key: 'overview', label: 'Overview' },
+      { key: 'accounts', label: 'Accounts' },
+      { key: 'billing',  label: 'Billing' },
       { key: 'messages', label: 'Messages' },
       { key: 'feedback', label: 'Feedback' },
     ],
@@ -32,7 +31,12 @@ const PRODUCTS: Product[] = [
     slug: 'forgepilot', label: 'ForgePilot',
     views: [
       { key: 'overview', label: 'Overview' },
-      { key: 'billing', label: 'Billing' },
+      { key: 'accounts', label: 'Accounts' },
+      { key: 'sessions', label: 'Sessions' },
+      { key: 'insights', label: 'Insights' },
+      { key: 'invites',  label: 'Invites' },
+      { key: 'waitlist', label: 'Waitlist' },
+      { key: 'billing',  label: 'Billing' },
       { key: 'messages', label: 'Messages' },
       { key: 'feedback', label: 'Feedback' },
     ],
@@ -49,17 +53,22 @@ const DEFAULT_PRODUCT = 'forgepilot' // launch priority, matches today's landing
 function renderView(slug: string, view: string, role: string) {
   if (slug === 'crimsonforge-pro') {
     switch (view) {
-      case 'shops': return <ShopsTab role={role} />
-      case 'users': return <UsersTab />
-      case 'billing': return <BillingTab />
+      case 'overview': return <CfpOverview />
+      case 'accounts': return <CfpAccounts role={role} />
+      case 'billing':  return <BillingTab />
       case 'messages': return <MessagesTab role={role} />
       case 'feedback': return <FeedbackTab role={role} />
     }
   }
   if (slug === 'forgepilot') {
     switch (view) {
-      case 'overview': return <ForgePilotTab role={role} />
-      case 'billing': return <ForgePilotBillingTab />
+      case 'overview': return <FpOverview />
+      case 'accounts': return <FpAccounts />
+      case 'sessions': return <FpSessions />
+      case 'insights': return <FpInsights />
+      case 'invites':  return <FpInvites role={role} />
+      case 'waitlist': return <FpWaitlist />
+      case 'billing':  return <ForgePilotBillingTab />
       case 'messages': return <ForgePilotMessagesTab role={role} />
       case 'feedback': return <ForgePilotFeedbackTab role={role} />
     }
@@ -112,7 +121,7 @@ export default function CustomersTab({ role }: { role: string }) {
         })}
       </div>
 
-      {/* Sub-nav (adapts per product) */}
+      {/* Sub-nav (same flat bar for every product) */}
       <div className="subtabs subtab-row">
         {prod.views.map(x => (
           <button key={x.key} className={`subtab ${x.key === v.key ? 'active' : ''}`} onClick={() => go(prod.slug, x.key)}>
