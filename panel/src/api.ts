@@ -123,6 +123,7 @@ export interface CrmFieldDef {
   type: CrmFieldType; options: string[] | null; position: number; archived: boolean; created_at: string
 }
 export type CrmCustom = Record<string, unknown>
+export interface CrmSyncMailbox { email: string; label: string | null; enabled: boolean; last_sync: string | null; created_at: string }
 
 export interface CrmCompany {
   id: string; name: string; type: string; status: string; website: string | null
@@ -313,6 +314,12 @@ export const api = {
     updateField: (id: string, f: Partial<Pick<CrmFieldDef, 'label' | 'options' | 'position' | 'archived'>>) =>
       request<{ data: CrmFieldDef }>(`/api/crm/fields/${id}`, { method: 'PATCH', body: JSON.stringify(f) }).then(r => r.data),
     deleteField: (id: string) => request(`/api/crm/fields/${id}`, { method: 'DELETE' }),
+
+    // Connected inboxes (Gmail/Calendar sync, P1b)
+    mailboxes: () => request<{ data: CrmSyncMailbox[]; configured: boolean; domain: string | null }>('/api/crm/sync/mailboxes'),
+    addMailbox: (m: { email: string; label?: string }) => request<{ data: CrmSyncMailbox }>('/api/crm/sync/mailboxes', { method: 'POST', body: JSON.stringify(m) }).then(r => r.data),
+    updateMailbox: (email: string, m: { enabled?: boolean; label?: string }) => request(`/api/crm/sync/mailboxes/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify(m) }),
+    removeMailbox: (email: string) => request(`/api/crm/sync/mailboxes/${encodeURIComponent(email)}`, { method: 'DELETE' }),
   },
 
   elaraConfig: {

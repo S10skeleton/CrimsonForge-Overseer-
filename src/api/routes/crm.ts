@@ -13,6 +13,7 @@ import type { AuthRequest } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { audit } from '../../lib/audit.js'
 import { stagesFor, defaultStage, isPipeline } from '../../lib/crmPipelines.js'
+import { isWorkspaceSyncConfigured, workspaceDomain } from '../../lib/googleSync.js'
 
 const router = Router()
 
@@ -352,6 +353,51 @@ async function buildCustom(
   }
   return { value: { ...base, ...incoming } }
 }
+
+// ─── Email/calendar sync mailboxes (P1b) ─────────────────────────────────────
+// Which @workspace mailboxes the sync engine ingests. Reads = crm.companies@view,
+// writes = @manage (owner/admin), via the mount guard. Rollout-safe + audited.
+router.get('/sync/mailboxes', async (_req, res) => {
+  const { data, error } = await overseerDb.from('crm_sync_mailboxes').select('*').order('created_at', { ascending: true })
+  res.json({ data: error ? [] : (data ?? []), configured: isWorkspaceSyncConfigured(), domain: workspaceDomain() || null })
+})
+
+router.post('/sync/mailboxes', async (req: AuthRequest, res) => {
+  const b = req.body as Record<string, unknown>
+  const email = String(b.email ?? '').trim().toLowerCase()
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { res.status(400).json({ error: 'valid email required' }); return }
+  const dom = workspaceDomain()
+  if (dom && email.split('@')[1] !== dom) { res.status(400).json({ error: `mailbox must be a @${dom} address` }); return }
+  const { data, error } = await overseerDb.from('crm_sync_mailboxes')
+    .insert({ email, label: b.label ?? null, enabled: b.enabled ?? true }).select('*').single()
+  if (error) {
+    if (error.code === '23505') { res.status(409).json({ error: 'Mailbox already added' }); return }
+    res.status(500).json({ error: 'Could not add mailbox' }); return
+  }
+  audit(req, { action: 'crm.mailbox_add', targetType: 'crm_sync_mailbox', targetId: email, meta: { label: b.label ?? null } })
+  res.status(201).json({ data })
+})
+
+router.patch('/sync/mailboxes/:email', async (req: AuthRequest, res) => {
+  const email = decodeURIComponent(String(req.params.email)).toLowerCase()
+  const b = req.body as Record<string, unknown>
+  const row: Record<string, unknown> = {}
+  if (b.enabled !== undefined) row.enabled = b.enabled
+  if (b.label !== undefined) row.label = b.label
+  if (Object.keys(row).length === 0) { res.status(400).json({ error: 'nothing to update' }); return }
+  const { data, error } = await overseerDb.from('crm_sync_mailboxes').update(row).eq('email', email).select('*').single()
+  if (error) { res.status(500).json({ error: 'Could not update mailbox' }); return }
+  audit(req, { action: 'crm.mailbox_update', targetType: 'crm_sync_mailbox', targetId: email, meta: row })
+  res.json({ data })
+})
+
+router.delete('/sync/mailboxes/:email', async (req: AuthRequest, res) => {
+  const email = decodeURIComponent(String(req.params.email)).toLowerCase()
+  const { error } = await overseerDb.from('crm_sync_mailboxes').delete().eq('email', email)
+  if (error) { res.status(500).json({ error: 'Could not remove mailbox' }); return }
+  audit(req, { action: 'crm.mailbox_delete', targetType: 'crm_sync_mailbox', targetId: email })
+  res.json({ data: { ok: true } })
+})
 
 // ─── Lead conversion ─────────────────────────────────────────────────────────
 router.post('/leads/:id/convert', async (req: AuthRequest, res) => {
