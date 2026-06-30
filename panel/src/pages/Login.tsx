@@ -103,9 +103,9 @@ export default function Login({ onLogin }: Props) {
   }
 
   return (
-    <div style={{
+    <div className="hero-bg login-bg" style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      position: 'relative', overflow: 'hidden', background: 'var(--bg-base)',
+      position: 'relative', overflow: 'hidden',
     }}>
       <div style={{
         position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%, -50%)',
@@ -127,24 +127,12 @@ export default function Login({ onLogin }: Props) {
         opacity: mounted ? 1 : 0, transform: mounted ? 'translateY(0)' : 'translateY(14px)',
         transition: 'opacity .55s ease, transform .55s ease', padding: '0 20px',
       }}>
-        {/* Orb — Elara identity */}
-        <div style={{ position: 'relative', width: 104, height: 104, margin: '0 auto 30px' }}>
-          <div className="orbit-cw"  style={{ inset: -16 }} />
-          <div className="orbit-ccw" style={{ inset: -28 }} />
-          <div className="orb-ring ring-1" style={{ inset: 0,  borderWidth: 2 }} />
-          <div className="orb-ring ring-2" style={{ inset: 13, borderWidth: 1.5 }} />
-          <div className="orb-ring ring-3" style={{ inset: 25, borderWidth: 1 }} />
-          <div style={{ position: 'absolute', inset: 36, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src="/elara-logo.png" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </div>
-          <div style={{
-            position: 'absolute', top: '50%', left: '50%', width: 5, height: 5, borderRadius: '50%',
-            background: 'var(--elara)', transformOrigin: '-70px 0',
-            animation: 'orbit-cw 8s linear infinite', marginTop: -2.5, marginLeft: -2.5,
-          }} />
+        {/* Overseer mark */}
+        <div style={{ width: 116, height: 116, margin: '0 auto 26px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img src="/overseer-icon.png" alt="Overseer" width={116} height={116} style={{ filter: 'drop-shadow(0 6px 22px rgba(192,48,42,.38))' }} />
         </div>
 
-        <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: 10, marginBottom: 6, color: 'var(--text-primary)' }}>ELARA</div>
+        <div style={{ fontWeight: 800, fontSize: 18, letterSpacing: 10, marginBottom: 6, color: 'var(--text-primary)' }}>OVERSEER</div>
         <div className="mono" style={{ fontSize: 9, letterSpacing: 3, color: 'var(--text-hint)', marginBottom: 36 }}>
           AI OPERATIONS INTELLIGENCE
         </div>
