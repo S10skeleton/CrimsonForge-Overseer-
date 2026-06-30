@@ -14,7 +14,7 @@
  */
 import { overseerDb } from '../lib/overseerDb.js'
 import {
-  isSyncConfigured, workspaceDomain, clientFor,
+  isSyncConfigured, isDelegationConfigured, workspaceDomain, clientFor,
   fetchThreads, fetchEvents, isExternal, domainOf, isFreeMail,
   type Party,
 } from '../lib/googleSync.js'
@@ -133,8 +133,16 @@ export async function runCrmSync(): Promise<void> {
 
   const { data, error } = await overseerDb.from('crm_sync_accounts').select('email, method, enabled, last_sync').eq('enabled', true)
   if (error) { console.log('[crm-sync] accounts table unavailable — skipping:', error.message); return }
-  const accounts = (data ?? []) as Account[]
+  let accounts = (data ?? []) as Account[]
   if (accounts.length === 0) { console.log('[crm-sync] no enabled accounts'); return }
+
+  // Delegation accounts (matt@/shane@) need the service-account creds; without
+  // them, skip those mailboxes with one clear warning — admin@ (oauth) still runs.
+  if (accounts.some((a) => a.method === 'delegation') && !isDelegationConfigured()) {
+    const skipped = accounts.filter((a) => a.method === 'delegation').map((a) => a.email).join(', ')
+    console.warn(`[crm-sync] delegation accounts configured but GOOGLE_SA_* not set — skipping ${skipped}`)
+    accounts = accounts.filter((a) => a.method !== 'delegation')
+  }
 
   const blocklist = await loadBlocklist()
 
