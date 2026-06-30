@@ -50,6 +50,7 @@ export default function AdminsTab({ role }: { role: string }) {
     onSuccess: async (res) => { if (res.emailed) toast.success('Reset link emailed'); else await confirm({ title: 'Temporary password (shown once)', body: `Password: ${res.tempPassword}`, confirmLabel: 'Copied', cancelLabel: 'Close' }) },
     onError: (e) => toast.error(errMsg(e)),
   })
+  const reset2faM = useMutation({ mutationFn: (id: string) => api.admins.reset2fa(id), onSuccess: () => { invalidate(); toast.success('2FA reset — they can re-enroll') }, onError: (e) => toast.error(errMsg(e)) })
   const resendM = useMutation({ mutationFn: (id: string) => api.admins.resendInvite(id), onSuccess: (res) => { invalidate(); toast.success(res.emailed ? 'Invite re-sent' : 'New link generated') }, onError: (e) => toast.error(errMsg(e)) })
   const revokeM = useMutation({ mutationFn: (id: string) => api.admins.revokeInvite(id), onSuccess: () => { invalidate(); toast.success('Invite revoked') }, onError: (e) => toast.error(errMsg(e)) })
 
@@ -146,7 +147,8 @@ export default function AdminsTab({ role }: { role: string }) {
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button className="btn btn-ghost btn-sm" onClick={() => openPerms(a)} style={{ marginRight: 6 }}>{editId === a.id ? 'Close' : 'Permissions'}</button>
                           <button className="btn btn-ghost btn-sm" onClick={() => toggleStatus(a)} style={{ marginRight: 6 }}>{a.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
-                          <button className="btn btn-ghost btn-sm" onClick={() => resetPassword(a)}>Reset pw</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => resetPassword(a)} style={{ marginRight: 6 }}>Reset pw</button>
+                          <button className="btn btn-ghost btn-sm" onClick={async () => { if (await confirm({ title: 'Reset 2FA?', body: `Clears ${a.username}'s two-factor so they can re-enroll. Use for a lost device.`, confirmLabel: 'Reset 2FA', danger: true })) reset2faM.mutate(a.id) }}>Reset 2FA</button>
                         </td>
                       )}
                     </tr>

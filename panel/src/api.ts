@@ -51,6 +51,9 @@ export interface LoginResult {
   user: PanelUser
 }
 
+export interface MfaChallenge { mfaRequired: true; mfaToken: string }
+export type LoginResponse = LoginResult | MfaChallenge
+
 export interface Admin {
   id: string
   username: string
@@ -150,10 +153,19 @@ export interface HomeSummary {
 export const api = {
   auth: {
     login: (username: string, password: string) =>
-      request<LoginResult>('/api/auth/login', {
+      request<LoginResponse>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       }),
+    loginMfa: (mfaToken: string, code: string) =>
+      request<LoginResult>('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ mfaToken, code }) }),
+    twofa: {
+      status: () => request<{ enabled: boolean }>('/api/auth/2fa/status'),
+      setup: () => request<{ otpauthUrl: string; qrDataUrl: string }>('/api/auth/2fa/setup', { method: 'POST' }),
+      verify: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ code }) }),
+      disable: (p: { code?: string; recoveryCode?: string; password?: string }) => request<{ ok: boolean }>('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify(p) }),
+      regenerate: (code: string) => request<{ ok: boolean; recoveryCodes: string[] }>('/api/auth/2fa/recovery/regenerate', { method: 'POST', body: JSON.stringify({ code }) }),
+    },
     forgot: (usernameOrEmail: string) =>
       request<{ ok: boolean }>('/api/auth/forgot', {
         method: 'POST',
@@ -196,6 +208,7 @@ export const api = {
     invites: () => request<Invite[]>('/api/admins/invites'),
     resendInvite: (id: string) => request<{ ok: boolean; emailed: boolean; acceptUrl?: string }>(`/api/admins/invites/${id}/resend`, { method: 'POST' }),
     revokeInvite: (id: string) => request<{ ok: boolean }>(`/api/admins/invites/${id}/revoke`, { method: 'POST' }),
+    reset2fa: (id: string) => request<{ ok: boolean }>(`/api/admins/${id}/reset-2fa`, { method: 'POST' }),
   },
 
   home: {

@@ -9,10 +9,13 @@ interface Props { onLogin: (result: LoginResult) => void }
 export default function Login({ onLogin }: Props) {
   const navigate = useNavigate()
   const toast = useToast()
-  const [mode, setMode] = useState<'login' | 'forgot'>('login')
+  const [mode, setMode] = useState<'login' | 'forgot' | 'mfa'>('login')
   const [username, setUsername] = useState('')
   const [pass, setPass]               = useState('')
   const [forgotId, setForgotId]       = useState('')
+  const [mfaToken, setMfaToken]       = useState('')
+  const [code, setCode]               = useState('')
+  const [useRecovery, setUseRecovery] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState('')
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null)
@@ -50,6 +53,10 @@ export default function Login({ onLogin }: Props) {
     setLoading(true); setError('')
     try {
       const result = await api.auth.login(username.trim(), pass.trim())
+      if ('mfaRequired' in result) {
+        setMfaToken(result.mfaToken); setMode('mfa'); setCode(''); setUseRecovery(false); setPass('')
+        return
+      }
       onLogin(result)
       // Shell guard (App) sends must_change_password users to /reset; otherwise Home.
       navigate('/home', { replace: true })
@@ -62,6 +69,25 @@ export default function Login({ onLogin }: Props) {
         else if (b.attemptsLeft != null) setAttemptsLeft(b.attemptsLeft)
       } catch { msg = e.message ?? 'Connection error' }
       setError(msg); setPass('')
+    } finally { setLoading(false) }
+  }
+
+  const handleMfa = async () => {
+    if (!code.trim() || loading || locked) return
+    setLoading(true); setError('')
+    try {
+      const result = await api.auth.loginMfa(mfaToken, code.trim())
+      onLogin(result)
+      navigate('/home', { replace: true })
+    } catch (e: any) {
+      let msg = 'Incorrect code'
+      try {
+        const b = JSON.parse(e.message)
+        msg = b.error ?? msg
+        if (b.locked) { setLocked(true); setLockCountdown(b.secondsRemaining ?? 900) }
+        else if (b.attemptsLeft != null) setAttemptsLeft(b.attemptsLeft)
+      } catch { msg = e.message ?? 'Connection error' }
+      setError(msg); setCode('')
     } finally { setLoading(false) }
   }
 
@@ -157,6 +183,36 @@ export default function Login({ onLogin }: Props) {
                 <button onClick={() => { setMode('login'); setError('') }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, marginTop: 14, cursor: 'pointer', width: '100%' }}>
                   ← Back to sign in
+                </button>
+              </>
+            ) : mode === 'mfa' ? (
+              <>
+                <div className="mono" style={{ fontSize: 10, letterSpacing: 1.5, color: 'var(--text-muted)', marginBottom: 10, textAlign: 'left' }}>
+                  {useRecovery ? 'RECOVERY CODE' : 'AUTHENTICATION CODE'}
+                </div>
+                <input
+                  type="text" value={code} autoFocus disabled={loading}
+                  inputMode={useRecovery ? 'text' : 'numeric'}
+                  onChange={e => setCode(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleMfa()}
+                  placeholder={useRecovery ? 'xxxxx-xxxxx' : '123456'}
+                  style={{ marginBottom: 12, letterSpacing: useRecovery ? 1 : 4, fontSize: 16, textAlign: 'center', borderColor: error ? 'var(--red-text)' : undefined }}
+                />
+                {error && <div style={{ fontSize: 12, color: 'var(--red-text)', marginBottom: 10, textAlign: 'left' }}>{error}</div>}
+                {attemptsLeft !== null && attemptsLeft <= 2 && !locked && (
+                  <div style={{ fontSize: 12, color: 'var(--yellow)', marginBottom: 10, textAlign: 'left' }}>⚠ {attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''} remaining</div>
+                )}
+                <button className="btn btn-primary" onClick={handleMfa} disabled={loading || !code.trim()}
+                  style={{ width: '100%', justifyContent: 'center', padding: '11px 0', letterSpacing: 1 }}>
+                  {loading ? 'VERIFYING…' : 'VERIFY'}
+                </button>
+                <button onClick={() => { setUseRecovery(v => !v); setCode(''); setError('') }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 12, marginTop: 14, cursor: 'pointer', width: '100%' }}>
+                  {useRecovery ? 'Use an authenticator code' : 'Use a recovery code'}
+                </button>
+                <button onClick={() => { setMode('login'); setError(''); setCode('') }}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-hint)', fontSize: 11.5, marginTop: 8, cursor: 'pointer', width: '100%' }}>
+                  ← Back
                 </button>
               </>
             ) : (

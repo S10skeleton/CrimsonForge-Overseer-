@@ -23,6 +23,7 @@ import { audit } from '../../lib/audit.js'
 import { sendEmail } from '../../notifications/email.js'
 import { resetEmail } from '../../notifications/emailTemplates.js'
 import type { Permissions } from '../../lib/permissions.js'
+import { generateTotpSecret, otpauthUrl, qrDataUrl, verifyToken, encryptSecret, decryptSecret, genRecoveryCodes, hashRecoveryCode } from '../../lib/totp.js'
 
 const router = Router()
 
@@ -76,6 +77,7 @@ interface AdminRow {
   role: 'owner' | 'admin' | 'read_only'
   status: string
   must_change_password: boolean
+  totp_enabled?: boolean
 }
 
 // ─── GET /api/auth/status ────────────────────────────────────────────────────
@@ -101,16 +103,24 @@ router.post('/login', async (req: AuthRequest, res) => {
     return
   }
 
-  // Look up active account (case-insensitive username)
+  // Look up active account (case-insensitive username). Rollout-safe: if the
+  // totp_enabled column isn't migrated yet, fall back without it (2FA off).
   let admin: AdminRow | null = null
   if (username) {
-    const { data } = await overseerDb
+    const uname = String(username).toLowerCase()
+    const first = await overseerDb
       .from('overseer_admins')
-      .select('id, username, email, password_hash, role, status, must_change_password')
-      .eq('username', String(username).toLowerCase())
-      .eq('status', 'active')
-      .maybeSingle()
-    admin = (data as AdminRow | null) ?? null
+      .select('id, username, email, password_hash, role, status, must_change_password, totp_enabled')
+      .eq('username', uname).eq('status', 'active').maybeSingle()
+    let row = first.data
+    if (first.error) {
+      const r2 = await overseerDb
+        .from('overseer_admins')
+        .select('id, username, email, password_hash, role, status, must_change_password')
+        .eq('username', uname).eq('status', 'active').maybeSingle()
+      row = r2.data as typeof row
+    }
+    admin = (row as AdminRow | null) ?? null
   }
 
   // Always run a compare (against a dummy hash if no user) to equalize timing.
@@ -126,6 +136,15 @@ router.post('/login', async (req: AuthRequest, res) => {
   }
 
   clearFailures(ip)
+
+  // 2FA: if enabled, don't issue a session — return a short-lived pending token
+  // that the code step exchanges for the real session.
+  if (admin.totp_enabled) {
+    const mfaToken = jwt.sign({ sub: admin.id, scope: 'mfa-pending' }, secret, { expiresIn: '5m' })
+    res.json({ mfaRequired: true, mfaToken })
+    return
+  }
+
   // 24h session for a god-mode panel (was 7d) — paired with the panel's
   // proactive expiry + "session expired" message. Adjust with Clutch if needed.
   const token = jwt.sign({ sub: admin.id, username: admin.username, role: admin.role }, secret, { expiresIn: '24h' })
@@ -351,6 +370,130 @@ router.post('/accept-invite', async (req: AuthRequest, res) => {
 router.get('/me', requireAuth, (req: AuthRequest, res) => {
   const u = req.panelUser
   res.json({ id: u?.id, username: u?.username, role: u?.role, permissions: u?.permissions ?? {} })
+})
+
+// ─── POST /api/auth/login/2fa  { mfaToken, code } ────────────────────────────
+// Exchanges the pending-MFA token + a TOTP code (or recovery code) for a session.
+router.post('/login/2fa', async (req: AuthRequest, res) => {
+  const { mfaToken, code } = req.body as { mfaToken?: string; code?: string }
+  const secret = process.env.PANEL_JWT_SECRET
+  if (!secret || !mfaToken || !code) { res.status(400).json({ error: 'Invalid request' }); return }
+
+  const ip = clientIp(req)
+  const lock = lockState(ip)
+  if (lock.locked) { res.status(401).json({ error: 'Too many failed attempts', locked: true, secondsRemaining: lock.secondsRemaining }); return }
+
+  let sub = ''
+  try {
+    const p = jwt.verify(mfaToken, secret) as { sub?: string; scope?: string }
+    if (p.scope !== 'mfa-pending' || !p.sub) throw new Error('bad scope')
+    sub = p.sub
+  } catch {
+    res.status(401).json({ error: 'Your sign-in expired — start again' })
+    return
+  }
+
+  const { data } = await overseerDb
+    .from('overseer_admins')
+    .select('id, username, email, role, status, must_change_password, totp_secret, recovery_codes')
+    .eq('id', sub).eq('status', 'active').maybeSingle()
+  const acct = data as (AdminRow & { totp_secret: string | null; recovery_codes: string[] }) | null
+  if (!acct || !acct.totp_secret) { res.status(401).json({ error: 'Two-factor is not set up' }); return }
+
+  let valid = await verifyToken(decryptSecret(acct.totp_secret), String(code))
+  let usedRecoveryIdx = -1
+  if (!valid && Array.isArray(acct.recovery_codes)) {
+    usedRecoveryIdx = acct.recovery_codes.indexOf(hashRecoveryCode(String(code)))
+    valid = usedRecoveryIdx >= 0
+  }
+
+  if (!valid) {
+    const f = recordFailure(ip)
+    req.panelUser = { id: acct.id, username: acct.username, role: acct.role, permissions: {} }
+    audit(req, { action: 'auth.2fa_failed', targetType: 'admin', targetId: acct.id })
+    res.status(401).json({ error: 'Incorrect code', ...(f.locked ? { locked: true, secondsRemaining: f.secondsRemaining } : { attemptsLeft: f.attemptsLeft }) })
+    return
+  }
+
+  clearFailures(ip)
+  if (usedRecoveryIdx >= 0) {
+    const remaining = acct.recovery_codes.filter((_, i) => i !== usedRecoveryIdx)
+    overseerDb.from('overseer_admins').update({ recovery_codes: remaining }).eq('id', acct.id).then(() => {}, () => {})
+  }
+
+  const token = jwt.sign({ sub: acct.id, username: acct.username, role: acct.role, mfa: true }, secret, { expiresIn: '24h' })
+  overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', acct.id).then(() => {}, () => {})
+  req.panelUser = { id: acct.id, username: acct.username, role: acct.role, permissions: {} }
+  audit(req, { action: 'auth.login', meta: { mfa: true } })
+  res.json({ token, role: acct.role, user: { id: acct.id, username: acct.username, email: acct.email, must_change_password: acct.must_change_password } })
+})
+
+// ─── 2FA enrollment (self-service; requireAuth) ──────────────────────────────
+router.get('/2fa/status', requireAuth, async (req: AuthRequest, res) => {
+  const { data } = await overseerDb.from('overseer_admins').select('totp_enabled').eq('id', req.panelUser?.id ?? '').maybeSingle()
+  res.json({ enabled: Boolean((data as { totp_enabled?: boolean } | null)?.totp_enabled) })
+})
+
+router.post('/2fa/setup', requireAuth, async (req: AuthRequest, res) => {
+  const me = req.panelUser
+  if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+  const { data } = await overseerDb.from('overseer_admins').select('totp_enabled').eq('id', me.id).maybeSingle()
+  if ((data as { totp_enabled?: boolean } | null)?.totp_enabled) { res.status(400).json({ error: '2FA already enabled — disable it first to re-enroll' }); return }
+
+  const secret = generateTotpSecret()
+  const url = otpauthUrl(secret, me.username || 'overseer')
+  const { error } = await overseerDb.from('overseer_admins').update({ totp_secret: encryptSecret(secret), totp_enabled: false }).eq('id', me.id)
+  if (error) { res.status(500).json({ error: 'Could not start 2FA setup' }); return }
+  res.json({ otpauthUrl: url, qrDataUrl: await qrDataUrl(url) })
+})
+
+router.post('/2fa/verify', requireAuth, async (req: AuthRequest, res) => {
+  const me = req.panelUser
+  if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+  const { code } = req.body as { code?: string }
+  const { data } = await overseerDb.from('overseer_admins').select('totp_secret').eq('id', me.id).maybeSingle()
+  const secretEnc = (data as { totp_secret?: string | null } | null)?.totp_secret
+  if (!secretEnc) { res.status(400).json({ error: 'Start setup first' }); return }
+  if (!(await verifyToken(decryptSecret(secretEnc), String(code ?? '')))) { res.status(400).json({ error: 'Incorrect code' }); return }
+
+  const { plain, hashes } = genRecoveryCodes()
+  const { error } = await overseerDb.from('overseer_admins').update({ totp_enabled: true, recovery_codes: hashes }).eq('id', me.id)
+  if (error) { res.status(500).json({ error: 'Could not enable 2FA' }); return }
+  audit(req, { action: 'auth.2fa_enabled', targetType: 'admin', targetId: me.id })
+  res.json({ ok: true, recoveryCodes: plain })
+})
+
+router.post('/2fa/disable', requireAuth, async (req: AuthRequest, res) => {
+  const me = req.panelUser
+  if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+  const { code, recoveryCode, password } = req.body as { code?: string; recoveryCode?: string; password?: string }
+  const { data } = await overseerDb.from('overseer_admins').select('totp_secret, recovery_codes, password_hash, totp_enabled').eq('id', me.id).maybeSingle()
+  const acct = data as { totp_secret: string | null; recovery_codes: string[]; password_hash: string; totp_enabled: boolean } | null
+  if (!acct?.totp_enabled) { res.status(400).json({ error: '2FA is not enabled' }); return }
+
+  let ok = false
+  if (code && acct.totp_secret) ok = await verifyToken(decryptSecret(acct.totp_secret), String(code))
+  if (!ok && recoveryCode && Array.isArray(acct.recovery_codes)) ok = acct.recovery_codes.includes(hashRecoveryCode(String(recoveryCode)))
+  if (!ok && password) ok = await verifyPassword(String(password), acct.password_hash)
+  if (!ok) { res.status(400).json({ error: 'Verification failed' }); return }
+
+  await overseerDb.from('overseer_admins').update({ totp_secret: null, totp_enabled: false, recovery_codes: [] }).eq('id', me.id)
+  audit(req, { action: 'auth.2fa_disabled', targetType: 'admin', targetId: me.id })
+  res.json({ ok: true })
+})
+
+router.post('/2fa/recovery/regenerate', requireAuth, async (req: AuthRequest, res) => {
+  const me = req.panelUser
+  if (!me?.id) { res.status(401).json({ error: 'Unauthorized' }); return }
+  const { code } = req.body as { code?: string }
+  const { data } = await overseerDb.from('overseer_admins').select('totp_secret, totp_enabled').eq('id', me.id).maybeSingle()
+  const acct = data as { totp_secret: string | null; totp_enabled: boolean } | null
+  if (!acct?.totp_enabled || !acct.totp_secret) { res.status(400).json({ error: '2FA is not enabled' }); return }
+  if (!(await verifyToken(decryptSecret(acct.totp_secret), String(code ?? '')))) { res.status(400).json({ error: 'Incorrect code' }); return }
+
+  const { plain, hashes } = genRecoveryCodes()
+  await overseerDb.from('overseer_admins').update({ recovery_codes: hashes }).eq('id', me.id)
+  res.json({ ok: true, recoveryCodes: plain })
 })
 
 export default router

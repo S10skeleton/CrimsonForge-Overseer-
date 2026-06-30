@@ -185,6 +185,20 @@ router.patch('/:id', requireOwner, async (req: AuthRequest, res) => {
   res.json({ admin: data })
 })
 
+// ─── POST /api/admins/:id/reset-2fa ── owner clears a locked-out admin's 2FA ──
+router.post('/:id/reset-2fa', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { data: current } = await overseerDb.from('overseer_admins').select('id, username').eq('id', id).maybeSingle()
+  const target = current as { id: string; username: string } | null
+  if (!target) { res.status(404).json({ error: 'Admin not found' }); return }
+
+  const { error } = await overseerDb.from('overseer_admins')
+    .update({ totp_secret: null, totp_enabled: false, recovery_codes: [] }).eq('id', id)
+  if (error) { res.status(500).json({ error: 'Could not reset 2FA' }); return }
+  audit(req, { action: 'admin.reset_2fa', targetType: 'admin', targetId: id, meta: { username: target.username } })
+  res.json({ ok: true })
+})
+
 // ─── Invites ─────────────────────────────────────────────────────────────────
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000
 

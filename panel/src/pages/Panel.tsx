@@ -39,6 +39,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'settings', label: 'Settings', items: [
+      { to: '/settings/security',      label: 'Security',       glyph: '⚿' },
       { to: '/settings/admins',       label: 'Admins & Roles', glyph: '◉', adminOnly: true, permKey: 'settings' },
       { to: '/settings/audit',        label: 'Audit Log',      glyph: '▤', adminOnly: true, permKey: 'settings' },
       { to: '/settings/integrations', label: 'Integrations',   glyph: '◈', permKey: 'settings' },

@@ -24,6 +24,10 @@ export const AUDIT_ACTIONS = [
   'admin.invite_accepted',
   'admin.invite_resend',
   'admin.invite_revoke',
+  'admin.reset_2fa',
+  'auth.2fa_enabled',
+  'auth.2fa_disabled',
+  'auth.2fa_failed',
   'elara.schedule_update',
   'elara.briefing_update',
   'elara.briefing_preview',
@@ -80,6 +84,9 @@ export const AUDITED_EVENTS: string[] = [
   'admin.permissions_change',
   'admin.invite',
   'admin.invite_accepted',
+  'admin.reset_2fa',
+  'auth.2fa_enabled',
+  'auth.2fa_disabled',
   // future: 'api_key.minted', 'fp_user.suspended'
 ]
 
@@ -107,6 +114,9 @@ function eventTitle(input: AuditInput, actor: string): string {
     case 'admin.invite':           return `Teammate invited: ${mv(input.meta, 'email') || name}`
     case 'admin.invite_accepted':  return `Invite accepted: ${name}`
     case 'admin.permissions_change': return `Permissions updated: ${name}`
+    case 'admin.reset_2fa':        return `2FA reset for ${name}`
+    case 'auth.2fa_enabled':       return `Two-factor enabled: ${actor}`
+    case 'auth.2fa_disabled':      return `Two-factor disabled: ${actor}`
     default:                     return `${input.action} by ${actor}`
   }
 }

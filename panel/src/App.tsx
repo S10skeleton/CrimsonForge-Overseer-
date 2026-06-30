@@ -12,6 +12,7 @@ import HomeTab from './tabs/HomeTab'
 import ElaraControlsTab from './tabs/ElaraControlsTab'
 import AdminsTab from './tabs/AdminsTab'
 import ActivityTab from './tabs/ActivityTab'
+import SecuritySettings from './tabs/SecuritySettings'
 import type { LoginResult } from './api'
 
 import SystemTab    from './tabs/SystemTab'
@@ -184,6 +185,7 @@ export default function App() {
         <Route path="system"     element={<SystemTab />} />
 
         {/* Settings */}
+        <Route path="settings/security"     element={<SecuritySettings />} />
         <Route path="settings/admins"       element={<AdminsTab role={role} />} />
         <Route path="settings/audit"        element={<Placeholder title="Audit Log" phase="Phase 2" note="overseer_audit viewer (events available now under Activity)." />} />
         <Route path="settings/integrations" element={<Placeholder title="Integrations" phase="Phase 2" note="Slack, Gmail, Calendar, Twilio, Resend, Stripe, Railway, Sentry, Netlify." />} />
