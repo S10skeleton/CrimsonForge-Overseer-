@@ -6,7 +6,6 @@
 import { Router } from 'express'
 import { getForgePilotBilling } from '../../lib/billing.js'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth, requireOwner } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -146,7 +145,7 @@ async function sendFPInviteEmail(
 
 // ── Stats summary ───────────────────────────────────────────────────────────
 
-router.get('/stats', requireAuth, async (_req, res) => {
+router.get('/stats', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const ago24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -193,7 +192,7 @@ router.get('/stats', requireAuth, async (_req, res) => {
 
 // ── Users ────────────────────────────────────────────────────────────────────
 
-router.get('/users', requireAuth, async (_req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -243,7 +242,7 @@ router.get('/users', requireAuth, async (_req, res) => {
 
 // ── Shops ────────────────────────────────────────────────────────────────────
 
-router.get('/shops', requireAuth, async (_req, res) => {
+router.get('/shops', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -279,7 +278,7 @@ router.get('/shops', requireAuth, async (_req, res) => {
 
 // ── Recent sessions (for activity feed) ─────────────────────────────────────
 
-router.get('/sessions', requireAuth, async (_req, res) => {
+router.get('/sessions', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -298,7 +297,7 @@ router.get('/sessions', requireAuth, async (_req, res) => {
 
 // ── Billing (Stripe — FP products only) ───────────────────────────────────
 
-router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
+router.get('/billing', async (_req, res): Promise<void> => {
   try {
     res.json(await getForgePilotBilling())
   } catch (err) {
@@ -309,7 +308,7 @@ router.get('/billing', requireAuth, async (_req, res): Promise<void> => {
 
 // ── FP System Messages ────────────────────────────────────────────────────────
 
-router.get('/messages', requireAuth, async (_req, res) => {
+router.get('/messages', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -324,7 +323,7 @@ router.get('/messages', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/messages', requireOwner, async (req, res): Promise<void> => {
+router.post('/messages', async (req, res): Promise<void> => {
   const { title, body, type, active, expires_at } = req.body
   if (!title?.trim() || !body?.trim()) {
     res.status(400).json({ error: 'title and body are required' })
@@ -351,7 +350,7 @@ router.post('/messages', requireOwner, async (req, res): Promise<void> => {
   }
 })
 
-router.patch('/messages/:id', requireOwner, async (req, res) => {
+router.patch('/messages/:id', async (req, res) => {
   const { title, body, type, active, expires_at } = req.body
   try {
     const sb = getFPSupabase()
@@ -373,7 +372,7 @@ router.patch('/messages/:id', requireOwner, async (req, res) => {
   }
 })
 
-router.delete('/messages/:id', requireOwner, async (req, res) => {
+router.delete('/messages/:id', async (req, res) => {
   try {
     const sb = getFPSupabase()
     const { error } = await sb
@@ -390,7 +389,7 @@ router.delete('/messages/:id', requireOwner, async (req, res) => {
 
 // ── Feedback ────────────────────────────────────────────────────────────────
 
-router.get('/feedback', requireAuth, async (_req, res) => {
+router.get('/feedback', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -405,7 +404,7 @@ router.get('/feedback', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/feedback/:id', requireOwner, async (req, res) => {
+router.patch('/feedback/:id', async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status: string }
   try {
@@ -439,7 +438,7 @@ type InviteRow = {
   notes: string | null
 }
 
-router.post('/invite', requireOwner, async (req, res): Promise<void> => {
+router.post('/invite', async (req, res): Promise<void> => {
   const { email, full_name, role, notes } = req.body as {
     email?: string
     full_name?: string
@@ -521,7 +520,7 @@ router.post('/invite', requireOwner, async (req, res): Promise<void> => {
   }
 })
 
-router.get('/invites', requireAuth, async (_req, res) => {
+router.get('/invites', async (_req, res) => {
   try {
     const sb = getFPSupabase()
     const { data, error } = await sb
@@ -561,7 +560,7 @@ router.get('/invites', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/invites/:id/resend', requireOwner, async (req, res): Promise<void> => {
+router.post('/invites/:id/resend', async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -600,7 +599,7 @@ router.post('/invites/:id/resend', requireOwner, async (req, res): Promise<void>
   }
 })
 
-router.delete('/invites/:id', requireOwner, async (req, res): Promise<void> => {
+router.delete('/invites/:id', async (req, res): Promise<void> => {
   const { id } = req.params
   try {
     const sb = getFPSupabase()
@@ -641,7 +640,7 @@ router.delete('/invites/:id', requireOwner, async (req, res): Promise<void> => {
 
 // ── ForgeAssist insights (read) ─────────────────────────────────────────────
 
-router.get('/insights', requireAuth, async (req, res) => {
+router.get('/insights', async (req, res) => {
   try {
     const daysRaw = Number(req.query.days ?? '7')
     const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(365, Math.floor(daysRaw))) : 7
@@ -683,7 +682,7 @@ router.get('/insights', requireAuth, async (req, res) => {
 // have a row yet. Idempotent — re-running only analyzes sessions still
 // missing insights. Bounded by FP_INSIGHTS_BATCH_LIMIT per call.
 
-router.post('/backfill-insights', requireOwner, async (_req, res) => {
+router.post('/backfill-insights', async (_req, res) => {
   try {
     const { runInsightAnalysis } = await import('../../jobs/fp-insights.js')
     const summary = await runInsightAnalysis()

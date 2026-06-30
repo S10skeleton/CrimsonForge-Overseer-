@@ -8,7 +8,6 @@
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import type { AuthRequest } from '../middleware/auth.js'
-import { requireAdmin, requireOwner } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { audit } from '../../lib/audit.js'
 import { stagesFor, defaultStage, isPipeline } from '../../lib/crmPipelines.js'
@@ -31,7 +30,7 @@ function nextCursor<T extends { created_at: string }>(rows: T[], limit: number):
 }
 
 // ─── Companies ───────────────────────────────────────────────────────────────
-router.get('/companies', requireAdmin, async (req, res) => {
+router.get('/companies', async (req, res) => {
   const limit = parseLimit(req.query.limit)
   const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null
   let q = overseerDb.from('crm_companies').select('*').order('created_at', { ascending: false }).limit(limit)
@@ -46,7 +45,7 @@ router.get('/companies', requireAdmin, async (req, res) => {
   res.json({ data: rows, meta: { next_cursor: nextCursor(rows, limit) } })
 })
 
-router.get('/companies/:id', requireAdmin, async (req, res) => {
+router.get('/companies/:id', async (req, res) => {
   const id = String(req.params.id)
   const [company, contacts, deals, activities] = await Promise.all([
     overseerDb.from('crm_companies').select('*').eq('id', id).maybeSingle(),
@@ -58,7 +57,7 @@ router.get('/companies/:id', requireAdmin, async (req, res) => {
   res.json({ data: { company: company.data, contacts: contacts.data ?? [], deals: deals.data ?? [], activities: activities.data ?? [] } })
 })
 
-router.post('/companies', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/companies', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.name) { res.status(400).json({ error: 'name required' }); return }
   const { data, error } = await overseerDb.from('crm_companies').insert({
@@ -72,7 +71,7 @@ router.post('/companies', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/companies/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.patch('/companies/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const allowed = ['name', 'type', 'status', 'website', 'fp_shop_id', 'fp_customer_id', 'owner', 'notes', 'tags']
@@ -84,7 +83,7 @@ router.patch('/companies/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/companies/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/companies/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('crm_companies').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete company' }); return }
@@ -93,7 +92,7 @@ router.delete('/companies/:id', requireOwner, async (req: AuthRequest, res) => {
 })
 
 // ─── Contacts ────────────────────────────────────────────────────────────────
-router.post('/contacts', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/contacts', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.company_id || !b.name) { res.status(400).json({ error: 'company_id and name required' }); return }
   const { data, error } = await overseerDb.from('crm_contacts').insert({
@@ -105,7 +104,7 @@ router.post('/contacts', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/contacts/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.patch('/contacts/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const allowed = ['name', 'title', 'email', 'phone', 'is_primary', 'notes']
@@ -117,7 +116,7 @@ router.patch('/contacts/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/contacts/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/contacts/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('crm_contacts').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete contact' }); return }
@@ -134,7 +133,7 @@ async function attachCompanyNames<T extends { company_id: string | null }>(deals
   return deals.map(d => ({ ...d, company_name: d.company_id ? nameById.get(d.company_id) ?? null : null }))
 }
 
-router.get('/deals', requireAdmin, async (req, res) => {
+router.get('/deals', async (req, res) => {
   let q = overseerDb.from('crm_deals').select('*').order('updated_at', { ascending: false })
   if (typeof req.query.pipeline === 'string') q = q.eq('pipeline', req.query.pipeline)
   if (typeof req.query.status === 'string') q = q.eq('status', req.query.status)
@@ -143,7 +142,7 @@ router.get('/deals', requireAdmin, async (req, res) => {
   res.json({ data: await attachCompanyNames(data ?? []) })
 })
 
-router.get('/deals/pipeline/:pipeline', requireAdmin, async (req, res) => {
+router.get('/deals/pipeline/:pipeline', async (req, res) => {
   const pipeline = String(req.params.pipeline)
   if (!isPipeline(pipeline)) { res.status(400).json({ error: 'Unknown pipeline' }); return }
   const { data, error } = await overseerDb.from('crm_deals').select('*').eq('pipeline', pipeline).order('updated_at', { ascending: false })
@@ -153,7 +152,7 @@ router.get('/deals/pipeline/:pipeline', requireAdmin, async (req, res) => {
   res.json({ data: { pipeline, stages } })
 })
 
-router.post('/deals', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/deals', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.company_id || !b.name) { res.status(400).json({ error: 'company_id and name required' }); return }
   const pipeline = typeof b.pipeline === 'string' && isPipeline(b.pipeline) ? b.pipeline : 'fundraising'
@@ -169,7 +168,7 @@ router.post('/deals', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/deals/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.patch('/deals/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const allowed = ['name', 'pipeline', 'stage', 'amount', 'currency', 'probability', 'status', 'expected_close', 'owner', 'notes']
@@ -181,7 +180,7 @@ router.patch('/deals/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/deals/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/deals/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('crm_deals').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete deal' }); return }
@@ -190,7 +189,7 @@ router.delete('/deals/:id', requireOwner, async (req: AuthRequest, res) => {
 })
 
 // ─── Activities ──────────────────────────────────────────────────────────────
-router.get('/activities', requireAdmin, async (req, res) => {
+router.get('/activities', async (req, res) => {
   let q = overseerDb.from('crm_activities').select('*').order('created_at', { ascending: false }).limit(parseLimit(req.query.limit))
   if (typeof req.query.company_id === 'string') q = q.eq('company_id', req.query.company_id)
   if (typeof req.query.contact_id === 'string') q = q.eq('contact_id', req.query.contact_id)
@@ -200,7 +199,7 @@ router.get('/activities', requireAdmin, async (req, res) => {
   res.json({ data: data ?? [] })
 })
 
-router.post('/activities', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/activities', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.company_id) { res.status(400).json({ error: 'company_id required' }); return }
   const { data, error } = await overseerDb.from('crm_activities').insert({
@@ -213,7 +212,7 @@ router.post('/activities', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/activities/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.patch('/activities/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const allowed = ['type', 'subject', 'body', 'due_at', 'done', 'contact_id', 'deal_id']
@@ -225,7 +224,7 @@ router.patch('/activities/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/activities/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/activities/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('crm_activities').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete activity' }); return }
@@ -234,7 +233,7 @@ router.delete('/activities/:id', requireOwner, async (req: AuthRequest, res) => 
 })
 
 // ─── Lead conversion ─────────────────────────────────────────────────────────
-router.post('/leads/:id/convert', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/leads/:id/convert', async (req: AuthRequest, res) => {
   const leadId = String(req.params.id)
   const b = req.body as { type?: string; pipeline?: string; dealName?: string; amount?: number }
 

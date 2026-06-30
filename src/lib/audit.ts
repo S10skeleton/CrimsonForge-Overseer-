@@ -19,6 +19,11 @@ export const AUDIT_ACTIONS = [
   'admin.suspend',
   'admin.reactivate',
   'admin.password_reset',
+  'admin.permissions_change',
+  'admin.invite',
+  'admin.invite_accepted',
+  'admin.invite_resend',
+  'admin.invite_revoke',
   'elara.schedule_update',
   'elara.briefing_update',
   'elara.briefing_preview',
@@ -72,6 +77,9 @@ export const AUDITED_EVENTS: string[] = [
   'admin.suspend',
   'admin.reactivate',
   'admin.password_reset',
+  'admin.permissions_change',
+  'admin.invite',
+  'admin.invite_accepted',
   // future: 'api_key.minted', 'fp_user.suspended'
 ]
 
@@ -96,6 +104,9 @@ function eventTitle(input: AuditInput, actor: string): string {
     case 'admin.reactivate':     return `Admin reactivated: ${name}`
     case 'admin.password_reset': return `Password reset issued for ${name}`
     case 'auth.password_reset':  return `Password reset completed: ${name}`
+    case 'admin.invite':           return `Teammate invited: ${mv(input.meta, 'email') || name}`
+    case 'admin.invite_accepted':  return `Invite accepted: ${name}`
+    case 'admin.permissions_change': return `Permissions updated: ${name}`
     default:                     return `${input.action} by ${actor}`
   }
 }

@@ -2,12 +2,11 @@
  * Read endpoints for the panel Activity tab.
  *   GET /api/activity        — overseer_events (business activity stream)
  *   GET /api/activity/audit  — overseer_audit (privileged-action log)
- * Both requireAdmin, keyset-paginated newest-first. Never expose secrets
+ * Both keyset-paginated newest-first. Never expose secrets
  * (audit meta never contains them — enforced at the audit() call sites).
  */
 
 import { Router } from 'express'
-import { requireAdmin } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 
 const router = Router()
@@ -19,7 +18,7 @@ function parseLimit(raw: unknown): number {
 }
 
 // ─── GET /api/activity?limit&cursor&type ─────────────────────────────────────
-router.get('/', requireAdmin, async (req, res) => {
+router.get('/', async (req, res) => {
   const limit = parseLimit(req.query.limit)
   const cursor = req.query.cursor ? Number(req.query.cursor) : null
   const type = typeof req.query.type === 'string' ? req.query.type : null
@@ -45,7 +44,7 @@ router.get('/', requireAdmin, async (req, res) => {
 })
 
 // ─── GET /api/activity/audit?limit&cursor&action&actor ───────────────────────
-router.get('/audit', requireAdmin, async (req, res) => {
+router.get('/audit', async (req, res) => {
   const limit = parseLimit(req.query.limit)
   const cursor = req.query.cursor ? Number(req.query.cursor) : null
   const action = typeof req.query.action === 'string' ? req.query.action : null

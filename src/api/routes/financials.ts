@@ -6,7 +6,6 @@
 
 import { Router } from 'express'
 import type { AuthRequest } from '../middleware/auth.js'
-import { requireAdmin, requireOwner } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { getForgePilotBilling } from '../../lib/billing.js'
 import { audit } from '../../lib/audit.js'
@@ -15,7 +14,7 @@ const router = Router()
 const RAISE_TARGET = 750_000
 
 // ─── Revenue (live) ──────────────────────────────────────────────────────────
-router.get('/revenue', requireAdmin, async (_req, res) => {
+router.get('/revenue', async (_req, res) => {
   const fp = await getForgePilotBilling()
   const failedPaymentsAmount = fp.paymentFailures.reduce((s, f) => s + f.amount, 0)
   res.json({
@@ -35,7 +34,7 @@ router.get('/revenue', requireAdmin, async (_req, res) => {
 })
 
 // ─── MRR history (snapshots) ─────────────────────────────────────────────────
-router.get('/mrr-history', requireAdmin, async (req, res) => {
+router.get('/mrr-history', async (req, res) => {
   const months = Math.min(Math.max(Number(req.query.months) || 12, 1), 60)
   const product = typeof req.query.product === 'string' ? req.query.product : 'all'
   const since = new Date()
@@ -51,7 +50,7 @@ router.get('/mrr-history', requireAdmin, async (req, res) => {
 })
 
 // ─── Manual entries (burn / income / cash) ───────────────────────────────────
-router.get('/entries', requireAdmin, async (req, res) => {
+router.get('/entries', async (req, res) => {
   let q = overseerDb.from('financial_entries').select('*').order('month', { ascending: false })
   if (typeof req.query.type === 'string') q = q.eq('type', req.query.type)
   if (typeof req.query.from === 'string') q = q.gte('month', req.query.from)
@@ -61,7 +60,7 @@ router.get('/entries', requireAdmin, async (req, res) => {
   res.json({ data: data ?? [] })
 })
 
-router.post('/entries', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/entries', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.month || !b.type || b.amount === undefined) { res.status(400).json({ error: 'month, type, amount required' }); return }
   const { data, error } = await overseerDb.from('financial_entries').insert({
@@ -73,7 +72,7 @@ router.post('/entries', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/entries/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.patch('/entries/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const row: Record<string, unknown> = {}
@@ -84,7 +83,7 @@ router.patch('/entries/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/entries/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/entries/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('financial_entries').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete entry' }); return }
@@ -93,7 +92,7 @@ router.delete('/entries/:id', requireOwner, async (req: AuthRequest, res) => {
 })
 
 // ─── Runway ──────────────────────────────────────────────────────────────────
-router.get('/runway', requireAdmin, async (_req, res) => {
+router.get('/runway', async (_req, res) => {
   const { data } = await overseerDb.from('financial_entries').select('month, type, amount').order('month', { ascending: false })
   const entries = (data ?? []) as Array<{ month: string; type: string; amount: number }>
 
@@ -120,7 +119,7 @@ router.get('/runway', requireAdmin, async (_req, res) => {
 })
 
 // ─── Raise progress (from CRM fundraising deals) ─────────────────────────────
-router.get('/raise', requireAdmin, async (_req, res) => {
+router.get('/raise', async (_req, res) => {
   const { data } = await overseerDb
     .from('crm_deals')
     .select('id, name, company_id, stage, amount, status')

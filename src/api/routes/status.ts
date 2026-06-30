@@ -6,7 +6,6 @@
 
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '../middleware/auth.js'
 import { monitors } from '../../tools/index.js'
 
 const router = Router()
@@ -27,7 +26,7 @@ async function getForgePulseWaitlistCount(): Promise<number | null> {
   }
 }
 
-router.get('/', requireAuth, async (_req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const [
       uptime, railway, supabase, sentry, stripe, twilio, resend, netlify,

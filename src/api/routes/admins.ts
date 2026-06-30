@@ -12,15 +12,24 @@ import { overseerDb } from '../../lib/overseerDb.js'
 import { hashPassword } from '../../lib/password.js'
 import { audit } from '../../lib/audit.js'
 import { sendEmail, isEmailConfigured } from '../../notifications/email.js'
+import { inviteEmail } from '../../notifications/emailTemplates.js'
+import { presetPermissions } from '../../lib/permissions.js'
+import type { Permissions } from '../../lib/permissions.js'
 
 const router = Router()
 
-const SAFE_COLUMNS = 'id, username, email, role, status, must_change_password, last_login_at, created_at, created_by'
+const SAFE_COLUMNS = 'id, username, email, role, status, permissions, must_change_password, last_login_at, created_at, created_by'
+const INVITE_COLUMNS = 'id, email, display_name, username, role, status, expires_at, created_at, accepted_at'
 const ROLES: Role[] = ['owner', 'admin', 'read_only']
+const INVITE_ROLES = ['owner', 'admin', 'read_only', 'custom']
 
 function tempPassword(): string {
   // 18 bytes base64url → 24 chars, comfortably above the 12-char policy.
   return crypto.randomBytes(18).toString('base64url')
+}
+
+function sha256(s: string): string {
+  return crypto.createHash('sha256').update(s).digest('hex')
 }
 
 async function activeOwnerCount(): Promise<number> {
@@ -101,7 +110,7 @@ router.post('/', requireOwner, async (req: AuthRequest, res) => {
 // ─── PATCH /api/admins/:id  { role?, status?, email? } ───────────────────────
 router.patch('/:id', requireOwner, async (req: AuthRequest, res) => {
   const id = String(req.params.id)
-  const { role, status, email } = req.body as { role?: Role; status?: string; email?: string }
+  const { role, status, email, permissions } = req.body as { role?: Role; status?: string; email?: string; permissions?: Permissions }
 
   const { data: current } = await overseerDb
     .from('overseer_admins')
@@ -123,6 +132,7 @@ router.patch('/:id', requireOwner, async (req: AuthRequest, res) => {
     }
     updates.role = role
   }
+  if (permissions !== undefined) updates.permissions = permissions
   if (status !== undefined) {
     if (status !== 'active' && status !== 'suspended') {
       res.status(400).json({ error: 'Invalid status' })
@@ -168,8 +178,92 @@ router.patch('/:id', requireOwner, async (req: AuthRequest, res) => {
       targetType: 'admin', targetId: id, meta: { username: target.username, status: updates.status },
     })
   }
+  if (updates.permissions !== undefined) {
+    audit(req, { action: 'admin.permissions_change', targetType: 'admin', targetId: id, meta: { username: target.username } })
+  }
 
   res.json({ admin: data })
+})
+
+// ─── Invites ─────────────────────────────────────────────────────────────────
+const INVITE_TTL_MS = 72 * 60 * 60 * 1000
+
+async function emailInvite(opts: { mail: string; name?: string; inviterName?: string; rawToken: string }): Promise<{ emailed: boolean; acceptUrl: string }> {
+  const base = process.env.PANEL_RESET_URL_BASE || ''
+  const acceptUrl = `${base}/accept?token=${opts.rawToken}`
+  let emailed = false
+  if (isEmailConfigured()) {
+    const tpl = inviteEmail({ name: opts.name, inviterName: opts.inviterName, acceptUrl, expiresHours: 72 })
+    const sent = await sendEmail({ to: opts.mail, subject: tpl.subject, html: tpl.html, text: tpl.text })
+    emailed = sent.success
+  }
+  return { emailed, acceptUrl }
+}
+
+// POST /api/admins/invite — owner invites a teammate (no temp password)
+router.post('/invite', requireOwner, async (req: AuthRequest, res) => {
+  const { email, displayName, username, role, permissions } = req.body as
+    { email?: string; displayName?: string; username?: string; role?: string; permissions?: Permissions }
+  const mail = String(email ?? '').toLowerCase().trim()
+  if (!mail) { res.status(400).json({ error: 'email required' }); return }
+  const r = role && INVITE_ROLES.includes(role) ? role : 'custom'
+  const perms = permissions ?? presetPermissions(r)
+  const rawToken = crypto.randomBytes(32).toString('base64url')
+
+  const { data, error } = await overseerDb.from('overseer_invites').insert({
+    email: mail,
+    display_name: displayName ?? null,
+    username: username ? String(username).toLowerCase().trim() : null,
+    role: r,
+    permissions: perms,
+    token_hash: sha256(rawToken),
+    expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString(),
+    invited_by: req.panelUser?.id ?? null,
+  }).select(INVITE_COLUMNS).single()
+
+  if (error) { res.status(500).json({ error: 'Could not create invite' }); return }
+
+  audit(req, { action: 'admin.invite', targetType: 'invite', targetId: data.id, meta: { email: mail, role: r } })
+  const { emailed, acceptUrl } = await emailInvite({ mail, name: displayName, inviterName: req.panelUser?.username, rawToken })
+  res.status(201).json({ invite: data, emailed, acceptUrl: emailed ? undefined : acceptUrl })
+})
+
+// GET /api/admins/invites — pending/recent invites (never the token hash)
+router.get('/invites', requireAdmin, async (_req, res) => {
+  const { data, error } = await overseerDb
+    .from('overseer_invites')
+    .select(INVITE_COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) { res.status(500).json({ error: 'Could not load invites' }); return }
+  res.json(data ?? [])
+})
+
+// POST /api/admins/invites/:id/resend — fresh token + re-email
+router.post('/invites/:id/resend', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { data: inv } = await overseerDb.from('overseer_invites').select('id, email, display_name, status').eq('id', id).maybeSingle()
+  const invite = inv as { id: string; email: string; display_name: string | null; status: string } | null
+  if (!invite || invite.status === 'accepted') { res.status(404).json({ error: 'Invite not found or already accepted' }); return }
+
+  const rawToken = crypto.randomBytes(32).toString('base64url')
+  const { error } = await overseerDb.from('overseer_invites').update({
+    token_hash: sha256(rawToken), expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString(), status: 'invited',
+  }).eq('id', id)
+  if (error) { res.status(500).json({ error: 'Could not resend invite' }); return }
+
+  audit(req, { action: 'admin.invite_resend', targetType: 'invite', targetId: id, meta: { email: invite.email } })
+  const { emailed, acceptUrl } = await emailInvite({ mail: invite.email, name: invite.display_name ?? undefined, inviterName: req.panelUser?.username, rawToken })
+  res.json({ ok: true, emailed, acceptUrl: emailed ? undefined : acceptUrl })
+})
+
+// POST /api/admins/invites/:id/revoke
+router.post('/invites/:id/revoke', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { error } = await overseerDb.from('overseer_invites').update({ status: 'revoked' }).eq('id', id).neq('status', 'accepted')
+  if (error) { res.status(500).json({ error: 'Could not revoke invite' }); return }
+  audit(req, { action: 'admin.invite_revoke', targetType: 'invite', targetId: id })
+  res.json({ ok: true })
 })
 
 // ─── POST /api/admins/:id/reset-password ─────────────────────────────────────

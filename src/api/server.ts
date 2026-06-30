@@ -3,7 +3,9 @@
  */
 
 import express from 'express'
+import type { RequestHandler } from 'express'
 import cors from 'cors'
+import { area, requireArea, requireOwner } from './middleware/auth.js'
 import authRouter from './routes/auth.js'
 import adminsRouter from './routes/admins.js'
 import activityRouter from './routes/activity.js'
@@ -41,20 +43,48 @@ export function createApiServer(): express.Express {
 
   // ── API routes ──────────────────────────────────────────────────────────────
 
+  // ── Per-area permission guards (STEP7) ──────────────────────────────────────
+  // One mount-level guard per router enforces the area key (GET -> view, writes
+  // -> manage); routers that span areas pick the key by sub-path. Owner always
+  // passes. The routers' own handlers no longer carry guards (the mount does it).
+
+  // CRM spans leads / pipeline / companies — pick by sub-path.
+  const crmGuard: RequestHandler = (req, res, next) => {
+    const p = req.path
+    const key = p.includes('/deals') ? 'crm.pipeline' : p.includes('/leads') ? 'crm.leads' : 'crm.companies'
+    area(key)(req, res, next)
+  }
+  // Financials spans revenue / runway / raise.
+  const finGuard: RequestHandler = (req, res, next) => {
+    const p = req.path
+    const key = (p.includes('/entries') || p.includes('/runway')) ? 'financials.runway'
+      : p.includes('/raise') ? 'financials.raise' : 'financials.revenue'
+    area(key)(req, res, next)
+  }
+  // Cap table: reads need financials.captable; writes are owner-only (equity).
+  const capGuard: RequestHandler = (req, res, next) => {
+    if (req.method === 'GET') requireArea('financials.captable', 'view')(req, res, next)
+    else requireOwner(req, res, next)
+  }
+  // CFP: Leads list/edits map to CRM Leads; everything else is Customers.
+  const cfpGuard: RequestHandler = (req, res, next) => {
+    area(req.path.includes('/leads') ? 'crm.leads' : 'customers')(req, res, next)
+  }
+
   app.use('/api/auth', authRouter)
-  app.use('/api/admins', adminsRouter)
-  app.use('/api/activity', activityRouter)
-  app.use('/api/home', homeRouter)
-  app.use('/api/crm', crmRouter)
-  app.use('/api/financials', financialsRouter)
-  app.use('/api/captable', captableRouter)
-  app.use('/api/status', statusRouter)
-  app.use('/api/cfp', cfpRouter)
-  app.use('/api/elara/config', elaraConfigRouter)
-  app.use('/api/elara', elaraRouter)
+  app.use('/api/admins', adminsRouter)             // administration — owner/admin gates internal
+  app.use('/api/activity', requireArea('settings', 'view'), activityRouter)
+  app.use('/api/home', area('home'), homeRouter)
+  app.use('/api/crm', crmGuard, crmRouter)
+  app.use('/api/financials', finGuard, financialsRouter)
+  app.use('/api/captable', capGuard, captableRouter)
+  app.use('/api/status', area('system'), statusRouter)
+  app.use('/api/cfp', cfpGuard, cfpRouter)
+  app.use('/api/elara/config', area('elara'), elaraConfigRouter)
+  app.use('/api/elara', elaraRouter)               // assistant/voice/files keep their own requireAuth
   app.use('/api/voice', voiceRouter)
   app.use('/api/files', filesRouter)
-  app.use('/api/fp', fpRouter)
+  app.use('/api/fp', area('customers'), fpRouter)
 
   // ── 404 ─────────────────────────────────────────────────────────────────────
 

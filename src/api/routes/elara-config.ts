@@ -9,7 +9,6 @@
 
 import { Router } from 'express'
 import type { AuthRequest } from '../middleware/auth.js'
-import { requireAdmin } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { invalidateConfigCache } from '../../lib/elaraConfig.js'
 import { reloadSchedules, runMorningBriefing } from '../../scheduler.js'
@@ -27,7 +26,7 @@ async function safe<T>(p: PromiseLike<{ data: T | null; error: unknown }>, fallb
 }
 
 // ─── GET /api/elara/config — everything in one payload ───────────────────────
-router.get('/', requireAdmin, async (_req, res) => {
+router.get('/', async (_req, res) => {
   const [schedules, briefing, alertRules, destinations, routes, recipients, quietHours, customJobs] = await Promise.all([
     safe(overseerDb.from('elara_schedules').select('*').eq('is_custom', false).order('job_key'), []),
     safe(overseerDb.from('elara_briefing_config').select('*').eq('id', 1).maybeSingle(), null),
@@ -42,7 +41,7 @@ router.get('/', requireAdmin, async (_req, res) => {
 })
 
 // ─── Morning briefing config ─────────────────────────────────────────────────
-router.put('/briefing', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/briefing', async (req: AuthRequest, res) => {
   const { sections, ai_summary, timezone } = req.body as { sections?: Record<string, boolean>; ai_summary?: boolean; timezone?: string | null }
   const row: Record<string, unknown> = { id: 1, updated_at: new Date().toISOString() }
   if (sections !== undefined) row.sections = sections
@@ -57,7 +56,7 @@ router.put('/briefing', requireAdmin, async (req: AuthRequest, res) => {
 })
 
 // ─── Schedules ───────────────────────────────────────────────────────────────
-router.put('/schedules/:job_key', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/schedules/:job_key', async (req: AuthRequest, res) => {
   const job_key = String(req.params.job_key)
   const { cron, timezone, enabled, label } = req.body as { cron?: string; timezone?: string | null; enabled?: boolean; label?: string }
   const row: Record<string, unknown> = { job_key, updated_at: new Date().toISOString() }
@@ -75,7 +74,7 @@ router.put('/schedules/:job_key', requireAdmin, async (req: AuthRequest, res) =>
 })
 
 // ─── Alert rules ─────────────────────────────────────────────────────────────
-router.put('/alerts/:rule_key', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/alerts/:rule_key', async (req: AuthRequest, res) => {
   const rule_key = String(req.params.rule_key)
   const { enabled, severity, sms_enabled, threshold, destination_id, label } = req.body as {
     enabled?: boolean; severity?: string; sms_enabled?: boolean; threshold?: Record<string, number> | null; destination_id?: string | null; label?: string
@@ -96,7 +95,7 @@ router.put('/alerts/:rule_key', requireAdmin, async (req: AuthRequest, res) => {
 })
 
 // ─── Routes (bulk upsert) ────────────────────────────────────────────────────
-router.put('/routes', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/routes', async (req: AuthRequest, res) => {
   const { routes } = req.body as { routes?: Array<{ notification_type: string; destination_id: string | null }> }
   if (!Array.isArray(routes)) { res.status(400).json({ error: 'routes array required' }); return }
   const rows = routes.map(r => ({ notification_type: r.notification_type, destination_id: r.destination_id }))
@@ -108,7 +107,7 @@ router.put('/routes', requireAdmin, async (req: AuthRequest, res) => {
 })
 
 // ─── Destinations ────────────────────────────────────────────────────────────
-router.post('/destinations', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/destinations', async (req: AuthRequest, res) => {
   const { kind, label, target, enabled } = req.body as { kind?: string; label?: string; target?: string; enabled?: boolean }
   if (!kind || !label || !target) { res.status(400).json({ error: 'kind, label, target required' }); return }
   const { data, error } = await overseerDb.from('elara_notify_destinations')
@@ -119,7 +118,7 @@ router.post('/destinations', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.put('/destinations/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/destinations/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { kind, label, target, enabled } = req.body as { kind?: string; label?: string; target?: string; enabled?: boolean }
   const row: Record<string, unknown> = {}
@@ -134,7 +133,7 @@ router.put('/destinations/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data: { ok: true } })
 })
 
-router.delete('/destinations/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.delete('/destinations/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('elara_notify_destinations').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete destination' }); return }
@@ -144,7 +143,7 @@ router.delete('/destinations/:id', requireAdmin, async (req: AuthRequest, res) =
 })
 
 // ─── Recipients ──────────────────────────────────────────────────────────────
-router.post('/recipients', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/recipients', async (req: AuthRequest, res) => {
   const { kind, value, label, enabled } = req.body as { kind?: string; value?: string; label?: string; enabled?: boolean }
   if (!kind || !value) { res.status(400).json({ error: 'kind, value required' }); return }
   const { data, error } = await overseerDb.from('elara_recipients')
@@ -155,7 +154,7 @@ router.post('/recipients', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.put('/recipients/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/recipients/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { value, label, enabled } = req.body as { value?: string; label?: string; enabled?: boolean }
   const row: Record<string, unknown> = {}
@@ -169,7 +168,7 @@ router.put('/recipients/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data: { ok: true } })
 })
 
-router.delete('/recipients/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.delete('/recipients/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('elara_recipients').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete recipient' }); return }
@@ -179,7 +178,7 @@ router.delete('/recipients/:id', requireAdmin, async (req: AuthRequest, res) => 
 })
 
 // ─── Quiet hours ─────────────────────────────────────────────────────────────
-router.put('/quiet-hours', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/quiet-hours', async (req: AuthRequest, res) => {
   const { enabled, start_local, end_local, timezone, exempt_severities } = req.body as {
     enabled?: boolean; start_local?: string; end_local?: string; timezone?: string | null; exempt_severities?: string[]
   }
@@ -197,7 +196,7 @@ router.put('/quiet-hours', requireAdmin, async (req: AuthRequest, res) => {
 })
 
 // ─── Custom jobs ─────────────────────────────────────────────────────────────
-router.post('/custom-jobs', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/custom-jobs', async (req: AuthRequest, res) => {
   const { name, cron, timezone, action_type, payload, enabled } = req.body as {
     name?: string; cron?: string; timezone?: string | null; action_type?: string; payload?: Record<string, unknown>; enabled?: boolean
   }
@@ -212,7 +211,7 @@ router.post('/custom-jobs', requireAdmin, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.put('/custom-jobs/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.put('/custom-jobs/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { name, cron, timezone, action_type, payload, enabled } = req.body as {
     name?: string; cron?: string; timezone?: string | null; action_type?: string; payload?: Record<string, unknown>; enabled?: boolean
@@ -232,7 +231,7 @@ router.put('/custom-jobs/:id', requireAdmin, async (req: AuthRequest, res) => {
   res.json({ data: { ok: true } })
 })
 
-router.delete('/custom-jobs/:id', requireAdmin, async (req: AuthRequest, res) => {
+router.delete('/custom-jobs/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('elara_custom_jobs').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete custom job' }); return }
@@ -243,13 +242,13 @@ router.delete('/custom-jobs/:id', requireAdmin, async (req: AuthRequest, res) =>
 })
 
 // ─── Briefing actions ────────────────────────────────────────────────────────
-router.post('/briefing/preview', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/briefing/preview', async (req: AuthRequest, res) => {
   const text = await runMorningBriefing({ preview: true })
   audit(req, { action: 'elara.briefing_preview', targetType: 'briefing_config' })
   res.json({ data: { text } })
 })
 
-router.post('/briefing/send-now', requireAdmin, async (req: AuthRequest, res) => {
+router.post('/briefing/send-now', async (req: AuthRequest, res) => {
   runMorningBriefing().catch((err) => console.error('[elara-config] send-now failed:', err))
   audit(req, { action: 'elara.briefing_send_now', targetType: 'briefing_config' })
   res.json({ data: { ok: true } })

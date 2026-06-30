@@ -5,7 +5,6 @@
 
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth, requireOwner } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -18,7 +17,7 @@ function getCFPSupabase() {
 
 // ── Shops ───────────────────────────────────────────────────────────────────
 
-router.get('/shops', requireAuth, async (_req, res) => {
+router.get('/shops', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -81,7 +80,7 @@ router.get('/shops', requireAuth, async (_req, res) => {
 
 // ── Users ───────────────────────────────────────────────────────────────────
 
-router.get('/users', requireAuth, async (_req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
 
@@ -129,7 +128,7 @@ router.get('/users', requireAuth, async (_req, res) => {
 
 // ── Stats ───────────────────────────────────────────────────────────────────
 
-router.get('/stats', requireAuth, async (_req, res) => {
+router.get('/stats', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const [shops, users, tickets, messages] = await Promise.all([
@@ -161,7 +160,7 @@ router.get('/stats', requireAuth, async (_req, res) => {
 
 // ── Billing events ──────────────────────────────────────────────────────────
 
-router.get('/billing-events', requireAuth, async (_req, res) => {
+router.get('/billing-events', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -180,7 +179,7 @@ router.get('/billing-events', requireAuth, async (_req, res) => {
 
 // ── Leads ───────────────────────────────────────────────────────────────────
 
-router.get('/leads', requireAuth, async (_req, res) => {
+router.get('/leads', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -198,7 +197,7 @@ router.get('/leads', requireAuth, async (_req, res) => {
 
 // ── System Messages ─────────────────────────────────────────────────────────
 
-router.get('/messages', requireAuth, async (_req, res) => {
+router.get('/messages', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -214,7 +213,7 @@ router.get('/messages', requireAuth, async (_req, res) => {
   }
 })
 
-router.post('/messages', requireOwner, async (req, res) => {
+router.post('/messages', async (req, res) => {
   const { title, body, type, active, expires_at } = req.body as {
     title?: string
     body?: string
@@ -250,7 +249,7 @@ router.post('/messages', requireOwner, async (req, res) => {
   }
 })
 
-router.patch('/messages/:id', requireOwner, async (req, res) => {
+router.patch('/messages/:id', async (req, res) => {
   const { id } = req.params
   const { title, body, type, active, expires_at } = req.body as {
     title?: string
@@ -284,7 +283,7 @@ router.patch('/messages/:id', requireOwner, async (req, res) => {
   }
 })
 
-router.delete('/messages/:id', requireOwner, async (req, res) => {
+router.delete('/messages/:id', async (req, res) => {
   const { id } = req.params
 
   try {
@@ -307,7 +306,7 @@ router.delete('/messages/:id', requireOwner, async (req, res) => {
 // Keys actually used by chat.js: model, max_tokens, system_prompt_suffix
 // (temperature is stored but not yet read by the chat route)
 
-router.get('/ai-config', requireAuth, async (_req, res) => {
+router.get('/ai-config', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -331,7 +330,7 @@ router.get('/ai-config', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/ai-config', requireOwner, async (req, res) => {
+router.patch('/ai-config', async (req, res) => {
   const { updates } = req.body as {
     updates?: Array<{ config_key: string; config_value: string }>
   }
@@ -362,7 +361,7 @@ router.patch('/ai-config', requireOwner, async (req, res) => {
 })
 
 // ── Shop founder notes ──────────────────────────────────────────────────────
-router.patch('/shops/:id/notes', requireOwner, async (req, res) => {
+router.patch('/shops/:id/notes', async (req, res) => {
   const { id } = req.params
   const { founder_notes } = req.body as { founder_notes: string }
   try {
@@ -376,7 +375,7 @@ router.patch('/shops/:id/notes', requireOwner, async (req, res) => {
 })
 
 // ── Leads PATCH / DELETE ────────────────────────────────────────────────────
-router.patch('/leads/:id', requireOwner, async (req, res) => {
+router.patch('/leads/:id', async (req, res) => {
   const { id } = req.params
   const updates = req.body as Record<string, unknown>
   try {
@@ -389,7 +388,7 @@ router.patch('/leads/:id', requireOwner, async (req, res) => {
   }
 })
 
-router.delete('/leads/:id', requireOwner, async (req, res) => {
+router.delete('/leads/:id', async (req, res) => {
   const { id } = req.params
   try {
     const sb = getCFPSupabase()
@@ -402,7 +401,7 @@ router.delete('/leads/:id', requireOwner, async (req, res) => {
 })
 
 // ── Feedback ────────────────────────────────────────────────────────────────
-router.get('/feedback', requireAuth, async (_req, res) => {
+router.get('/feedback', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -416,7 +415,7 @@ router.get('/feedback', requireAuth, async (_req, res) => {
   }
 })
 
-router.patch('/feedback/:id', requireOwner, async (req, res) => {
+router.patch('/feedback/:id', async (req, res) => {
   const { id } = req.params
   const { status } = req.body as { status: string }
   try {
@@ -431,7 +430,7 @@ router.patch('/feedback/:id', requireOwner, async (req, res) => {
 
 // ── ForgePulse Waitlist ──────────────────────────────────────────────────────
 
-router.get('/forgepulse-waitlist', requireAuth, async (_req, res) => {
+router.get('/forgepulse-waitlist', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb
@@ -449,7 +448,7 @@ router.get('/forgepulse-waitlist', requireAuth, async (_req, res) => {
 
 // ── ForgePilot Waitlist ──────────────────────────────────────────────────────
 
-router.get('/forgepilot-waitlist', requireAuth, async (_req, res) => {
+router.get('/forgepilot-waitlist', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
     const { data, error } = await sb

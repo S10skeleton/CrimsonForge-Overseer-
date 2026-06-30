@@ -1,23 +1,26 @@
 /**
  * JWT auth middleware for the control panel API.
  *
- * Roles: 'owner' (full), 'admin' (write/privileged), 'read_only' (GET only).
- *   requireAuth   — any valid login (sets req.panelUser = { id, username, role })
- *   requireRole() — factory gating on an allowed role set
- *   requireAdmin  — owner or admin (any write/privileged action)
- *   requireOwner  — owner only (admin management, role changes)
+ * requireAuth re-loads the admin's current status + role + permissions from the
+ * DB on every request (STEP7), so a suspended account is rejected immediately
+ * and permission changes take effect without waiting for token expiry.
  *
- * Legacy: old tokens may carry only { role:'owner'|'viewer' }. 'viewer' maps to
- * 'read_only'; a missing id/username degrades gracefully to ''.
+ *   requireAuth          — any active login; sets req.panelUser incl. permissions
+ *   requireArea(key,lvl) — per-area permission gate (owner always passes)
+ *   requireAdmin         — owner or admin (legacy; broad privileged actions)
+ *   requireOwner         — owner only (administration)
  */
 
 import type { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { overseerDb } from '../../lib/overseerDb.js'
+import { resolveAccess } from '../../lib/permissions.js'
+import type { Permissions } from '../../lib/permissions.js'
 
 export type Role = 'owner' | 'admin' | 'read_only'
 
 export interface AuthRequest extends Request {
-  panelUser?: { id: string; username: string; role: Role }
+  panelUser?: { id: string; username: string; role: Role; permissions: Permissions }
 }
 
 interface PanelJwtPayload {
@@ -32,7 +35,7 @@ export function normalizeRole(role: string | undefined): Role {
   return 'read_only'
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization
   if (!header?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Unauthorized' })
@@ -41,41 +44,78 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
   const token = header.slice(7)
   const secret = process.env.PANEL_JWT_SECRET
-
   if (!secret) {
     res.status(500).json({ error: 'JWT secret not configured' })
     return
   }
 
+  let payload: PanelJwtPayload
   try {
-    const payload = jwt.verify(token, secret) as PanelJwtPayload
+    payload = jwt.verify(token, secret) as PanelJwtPayload
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' })
+    return
+  }
+
+  // Per-request status + permission load (fail-safe: reject on error, don't open).
+  try {
+    const { data, error } = await overseerDb
+      .from('overseer_admins')
+      .select('status, role, permissions')
+      .eq('id', payload.sub ?? '')
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data || data.status !== 'active') {
+      res.status(401).json({ error: 'Session is no longer valid' })
+      return
+    }
+
     req.panelUser = {
       id: payload.sub ?? '',
       username: payload.username ?? '',
-      role: normalizeRole(payload.role),
+      role: normalizeRole(data.role),
+      permissions: (data.permissions as Permissions) ?? {},
     }
     next()
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token' })
+  } catch (err) {
+    console.error('[auth] per-request load failed:', err)
+    res.status(401).json({ error: 'Auth check failed' })
   }
 }
 
-export function requireRole(...allowed: Role[]) {
+/** Per-area permission gate. Owner always passes; otherwise needs key@level. */
+export function requireArea(key: string, level: 'view' | 'manage') {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     requireAuth(req, res, () => {
-      if (!req.panelUser || !allowed.includes(req.panelUser.role)) {
-        res.status(403).json({ error: 'Insufficient permissions' })
-        return
-      }
-      next()
+      const u = req.panelUser
+      if (!u) { res.status(401).json({ error: 'Unauthorized' }); return }
+      if (u.role === 'owner' || resolveAccess(u.permissions, key, level)) { next(); return }
+      res.status(403).json({ error: 'Insufficient permissions' })
     })
   }
 }
 
-/** Owner or admin — any write/privileged action. */
-export const requireAdmin = requireRole('owner', 'admin')
+/**
+ * Method-aware area gate: GET/HEAD require `view`, anything else `manage`.
+ * Convenient as a single router- or route-level guard (e.g. area('crm.leads')).
+ */
+export function area(key: string) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    const level = req.method === 'GET' || req.method === 'HEAD' ? 'view' : 'manage'
+    requireArea(key, level)(req, res, next)
+  }
+}
 
-/** Owner only — admin management, role changes. Name preserved for existing imports. */
+/** Owner or admin — legacy broad gate for privileged actions. */
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void {
+  requireAuth(req, res, () => {
+    if (req.panelUser?.role === 'owner' || req.panelUser?.role === 'admin') { next(); return }
+    res.status(403).json({ error: 'Insufficient permissions' })
+  })
+}
+
+/** Owner only — administration (invites, roles, permissions, suspend). */
 export function requireOwner(req: AuthRequest, res: Response, next: NextFunction): void {
   requireAuth(req, res, () => {
     if (req.panelUser?.role !== 'owner') {

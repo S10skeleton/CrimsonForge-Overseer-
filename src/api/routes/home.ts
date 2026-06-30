@@ -10,7 +10,6 @@
 
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
-import { requireAuth } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -30,7 +29,7 @@ interface HomeSummary {
   pipeline: { available: false } // CRM pipeline (Phase 5) — no source yet
 }
 
-router.get('/summary', requireAuth, async (_req, res) => {
+router.get('/summary', async (_req, res) => {
   const ago7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const summary: HomeSummary = {

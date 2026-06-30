@@ -9,7 +9,6 @@
 
 import { Router } from 'express'
 import type { AuthRequest } from '../middleware/auth.js'
-import { requireAdmin, requireOwner } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { audit } from '../../lib/audit.js'
 
@@ -19,13 +18,13 @@ interface Security { id: string; holder_name: string; holder_type: string; secur
 interface Safe { id: string; investor_name: string; crm_company_id: string | null; instrument_type: string; amount: number; valuation_cap: number | null; discount_pct: number | null; mfn: boolean; pro_rata: boolean; date_signed: string | null; status: string; notes: string | null }
 
 // ─── Securities ──────────────────────────────────────────────────────────────
-router.get('/securities', requireAdmin, async (_req, res) => {
+router.get('/securities', async (_req, res) => {
   const { data, error } = await overseerDb.from('cap_table_securities').select('*').order('issued', { ascending: false })
   if (error) { res.status(500).json({ error: 'Could not load securities' }); return }
   res.json({ data: data ?? [] })
 })
 
-router.post('/securities', requireOwner, async (req: AuthRequest, res) => {
+router.post('/securities', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.holder_name) { res.status(400).json({ error: 'holder_name required' }); return }
   const { data, error } = await overseerDb.from('cap_table_securities').insert({
@@ -38,7 +37,7 @@ router.post('/securities', requireOwner, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/securities/:id', requireOwner, async (req: AuthRequest, res) => {
+router.patch('/securities/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -49,7 +48,7 @@ router.patch('/securities/:id', requireOwner, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/securities/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/securities/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('cap_table_securities').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete security' }); return }
@@ -58,7 +57,7 @@ router.delete('/securities/:id', requireOwner, async (req: AuthRequest, res) => 
 })
 
 // ─── SAFEs / notes ───────────────────────────────────────────────────────────
-router.get('/safes', requireAdmin, async (req, res) => {
+router.get('/safes', async (req, res) => {
   let q = overseerDb.from('cap_table_safes').select('*').order('created_at', { ascending: false })
   if (typeof req.query.status === 'string') q = q.eq('status', req.query.status)
   const { data, error } = await q
@@ -66,7 +65,7 @@ router.get('/safes', requireAdmin, async (req, res) => {
   res.json({ data: data ?? [] })
 })
 
-router.post('/safes', requireOwner, async (req: AuthRequest, res) => {
+router.post('/safes', async (req: AuthRequest, res) => {
   const b = req.body as Record<string, unknown>
   if (!b.investor_name || b.amount === undefined) { res.status(400).json({ error: 'investor_name and amount required' }); return }
   const { data, error } = await overseerDb.from('cap_table_safes').insert({
@@ -80,7 +79,7 @@ router.post('/safes', requireOwner, async (req: AuthRequest, res) => {
   res.status(201).json({ data })
 })
 
-router.patch('/safes/:id', requireOwner, async (req: AuthRequest, res) => {
+router.patch('/safes/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const b = req.body as Record<string, unknown>
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -91,7 +90,7 @@ router.patch('/safes/:id', requireOwner, async (req: AuthRequest, res) => {
   res.json({ data })
 })
 
-router.delete('/safes/:id', requireOwner, async (req: AuthRequest, res) => {
+router.delete('/safes/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
   const { error } = await overseerDb.from('cap_table_safes').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete SAFE' }); return }
@@ -100,7 +99,7 @@ router.delete('/safes/:id', requireOwner, async (req: AuthRequest, res) => {
 })
 
 // ─── Summary (issued-basis ownership + outstanding SAFEs, kept separate) ──────
-router.get('/summary', requireAdmin, async (_req, res) => {
+router.get('/summary', async (_req, res) => {
   const [secRes, safeRes] = await Promise.all([
     overseerDb.from('cap_table_securities').select('*'),
     overseerDb.from('cap_table_safes').select('*'),
@@ -128,7 +127,7 @@ router.get('/summary', requireAdmin, async (_req, res) => {
 })
 
 // ─── Investors (CRM companies joined to their SAFEs) ─────────────────────────
-router.get('/investors', requireAdmin, async (_req, res) => {
+router.get('/investors', async (_req, res) => {
   const [coRes, safeRes] = await Promise.all([
     overseerDb.from('crm_companies').select('id, name, type, owner').eq('type', 'investor'),
     overseerDb.from('cap_table_safes').select('*'),

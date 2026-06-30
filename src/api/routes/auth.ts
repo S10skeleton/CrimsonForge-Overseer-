@@ -21,6 +21,8 @@ import {
 } from '../../lib/password.js'
 import { audit } from '../../lib/audit.js'
 import { sendEmail } from '../../notifications/email.js'
+import { resetEmail } from '../../notifications/emailTemplates.js'
+import type { Permissions } from '../../lib/permissions.js'
 
 const router = Router()
 
@@ -132,7 +134,7 @@ router.post('/login', async (req: AuthRequest, res) => {
   overseerDb.from('overseer_admins').update({ last_login_at: new Date().toISOString() }).eq('id', admin.id)
     .then(() => {}, (err: unknown) => console.error('[auth] last_login update failed:', err))
 
-  req.panelUser = { id: admin.id, username: admin.username, role: admin.role }
+  req.panelUser = { id: admin.id, username: admin.username, role: admin.role, permissions: {} }
   audit(req, { action: 'auth.login' })
 
   res.json({
@@ -168,12 +170,8 @@ router.post('/forgot', async (req: AuthRequest, res) => {
 
         const base = process.env.PANEL_RESET_URL_BASE || ''
         const link = `${base}/reset?token=${rawToken}`
-        await sendEmail({
-          to: account.email,
-          subject: 'Reset your Crimson Forge Overseer password',
-          text: `A password reset was requested for ${account.username}.\n\nReset link (valid 30 minutes):\n${link}\n\nIf you didn't request this, you can ignore this email.`,
-          html: `<p>A password reset was requested for <b>${account.username}</b>.</p><p><a href="${link}">Reset your password</a> (valid 30 minutes).</p><p>If you didn't request this, you can ignore this email.</p>`,
-        })
+        const tpl = resetEmail({ name: account.username, resetUrl: link })
+        await sendEmail({ to: account.email, subject: tpl.subject, html: tpl.html, text: tpl.text })
         audit(req, { action: 'auth.password_reset_requested', targetType: 'admin', targetId: account.id, meta: { username: account.username } })
       }
     }
@@ -228,7 +226,7 @@ router.post('/reset', async (req: AuthRequest, res) => {
     return
   }
 
-  req.panelUser = { id: account.id, username: account.username, role: 'read_only' }
+  req.panelUser = { id: account.id, username: account.username, role: 'read_only', permissions: {} }
   audit(req, { action: 'auth.password_reset', targetType: 'admin', targetId: account.id, meta: { username: account.username } })
   res.json({ ok: true })
 })
@@ -277,6 +275,82 @@ router.post('/change-password', requireAuth, async (req: AuthRequest, res) => {
 
   audit(req, { action: 'auth.change_password', targetType: 'admin', targetId: account.id })
   res.json({ ok: true })
+})
+
+// ─── POST /api/auth/accept-invite  { token, username?, password } ────────────
+// Public: creates the account from a valid invite (invitee sets their own pw).
+router.post('/accept-invite', async (req: AuthRequest, res) => {
+  const { token, username, password } = req.body as { token?: string; username?: string; password?: string }
+  const secret = process.env.PANEL_JWT_SECRET
+  if (!token || !password || !secret) {
+    res.status(400).json({ error: 'Invalid invite' })
+    return
+  }
+  try {
+    assertPasswordStrength(password)
+  } catch (err) {
+    if (err instanceof PasswordPolicyError) { res.status(400).json({ error: err.message }); return }
+    throw err
+  }
+
+  const { data } = await overseerDb
+    .from('overseer_invites')
+    .select('id, email, username, role, permissions, invited_by')
+    .eq('token_hash', sha256(token))
+    .eq('status', 'invited')
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle()
+
+  const invite = data as { id: string; email: string; username: string | null; role: string; permissions: Permissions; invited_by: string | null } | null
+  if (!invite) {
+    res.status(400).json({ error: 'This invite is invalid or has expired' })
+    return
+  }
+
+  const uname = String(invite.username || username || invite.email.split('@')[0]).toLowerCase().trim()
+  if (!uname) { res.status(400).json({ error: 'A username is required' }); return }
+
+  const { data: clash } = await overseerDb.from('overseer_admins').select('id').eq('username', uname).maybeSingle()
+  if (clash) { res.status(409).json({ error: 'That username is taken — choose another' }); return }
+
+  const adminRole = invite.role === 'custom' ? 'read_only' : invite.role
+  const password_hash = await hashPassword(password)
+
+  const { data: admin, error } = await overseerDb.from('overseer_admins').insert({
+    username: uname,
+    email: invite.email,
+    password_hash,
+    role: adminRole,
+    status: 'active',
+    must_change_password: false,
+    permissions: invite.permissions ?? {},
+    created_by: invite.invited_by ?? null,
+  }).select('id, username, email, role').single()
+
+  if (error) {
+    const dup = /duplicate|unique/i.test(error.message)
+    res.status(dup ? 409 : 500).json({ error: dup ? 'That username or email already exists' : 'Could not create account' })
+    return
+  }
+
+  await overseerDb.from('overseer_invites').update({ status: 'accepted', accepted_at: new Date().toISOString() }).eq('id', invite.id)
+
+  req.panelUser = { id: admin.id, username: admin.username, role: adminRole as 'owner' | 'admin' | 'read_only', permissions: {} }
+  audit(req, { action: 'admin.invite_accepted', targetType: 'admin', targetId: admin.id, meta: { username: uname } })
+
+  const sessionToken = jwt.sign({ sub: admin.id, username: admin.username, role: adminRole }, secret, { expiresIn: '24h' })
+  res.status(201).json({
+    token: sessionToken,
+    role: adminRole,
+    user: { id: admin.id, username: admin.username, email: admin.email, must_change_password: false },
+  })
+})
+
+// ─── GET /api/auth/me ────────────────────────────────────────────────────────
+// Lets the panel refresh role/permissions without a full re-login.
+router.get('/me', requireAuth, (req: AuthRequest, res) => {
+  const u = req.panelUser
+  res.json({ id: u?.id, username: u?.username, role: u?.role, permissions: u?.permissions ?? {} })
 })
 
 export default router
