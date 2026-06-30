@@ -116,17 +116,16 @@ Return a JSON array (may be empty if nothing worth remembering):
   {
     "key": "short_identifier_snake_case",
     "value": "the fact or observation to store",
-    "category": "one of: preference, work_pattern, health, decision, stakeholder, project_decision, observation"
+    "category": "one of: preference, work_pattern, decision, stakeholder, project_decision, observation"
   }
 ]
 
-Categories:
-- preference: how Clutch likes things done
-- work_pattern: when/how he works best
-- health: supplement/routine/health changes
+Categories (business only — no personal/health content):
+- preference: how the team likes things done
+- work_pattern: when/how the team works best
 - decision: a concrete decision that was made
-- stakeholder: something learned about Wayne, Steve, Sam, or others
-- project_decision: a CFP product/technical decision
+- stakeholder: something learned about an investor, partner, or teammate
+- project_decision: a product/technical decision
 - observation: a notable pattern or insight
 
 Return ONLY the JSON array, no other text.`

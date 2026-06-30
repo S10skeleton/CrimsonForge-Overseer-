@@ -254,26 +254,33 @@ export async function sendBriefing(briefing: MorningBriefing): Promise<void> {
 }
 
 /**
- * Sends an immediate alert to Slack
+ * Format an alert for Slack, keyed on severity so good news doesn't read as an
+ * outage (FIX5). critical -> red ALERT + Detected; warning -> yellow Heads up;
+ * info -> green / the message's own emoji (new signup, recovery, etc.).
+ */
+function formatAlert(alert: Alert): string {
+  const tail =
+    (alert.details ? `\n\n${alert.details}` : '') +
+    (alert.actionUrl ? `\nView: ${alert.actionUrl}` : '')
+
+  if (alert.severity === 'critical') {
+    const detected = new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })
+    return `\uD83D\uDD34 ALERT \u2014 ${alert.tool.toUpperCase()}\nDetected: ${detected}\n\n${alert.message}${tail}`
+  }
+  if (alert.severity === 'warning') {
+    return `\uD83D\uDFE1 Heads up \u2014 ${alert.message}${tail}`
+  }
+  // info \u2014 positive/neutral. Keep the message's own leading emoji if it has one.
+  const hasOwnEmoji = /^\p{Extended_Pictographic}/u.test(alert.message.trim())
+  return `${hasOwnEmoji ? '' : '\uD83D\uDFE2 '}${alert.message}${tail}`
+}
+
+/**
+ * Sends an immediate alert to Slack (webhook).
  */
 export async function sendAlert(alert: Alert): Promise<void> {
   try {
-    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
-    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()} ISSUE\n`
-    message += `Detected: ${new Date().toLocaleTimeString('en-US', { timeZone: process.env.TIMEZONE || 'America/Detroit' })}\n\n`
-    message += `${alert.message}\n`
-
-    if (alert.details) {
-      message += `\n${alert.details}\n`
-    }
-
-    if (alert.actionUrl) {
-      message += `\nView: ${alert.actionUrl}\n`
-    }
-
-    await postToSlack({
-      text: message,
-    })
+    await postToSlack({ text: formatAlert(alert) })
   } catch (err) {
     console.error('Error sending alert to Slack:', err)
   }
@@ -291,12 +298,7 @@ export async function sendAlertToChannel(channelId: string | undefined, alert: A
   }
 
   try {
-    const emoji = alert.severity === 'critical' ? '\uD83D\uDD34' : '\u26A0\uFE0F'
-    let message = `${emoji} ALERT \u2014 ${alert.tool.toUpperCase()}\n`
-    message += `${alert.message}\n`
-    if (alert.details) message += `\n${alert.details}\n`
-    if (alert.actionUrl) message += `\nView: ${alert.actionUrl}\n`
-
+    const message = formatAlert(alert)
     const slackApp = getSlackApp()
     if (slackApp) {
       await slackApp.client.chat.postMessage({
