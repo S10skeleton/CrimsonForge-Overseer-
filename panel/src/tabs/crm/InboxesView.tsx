@@ -13,7 +13,7 @@ import { useConfirm } from '../../components/ConfirmDialog'
 import { errMsg } from './crmShared'
 
 export default function InboxesView({ role }: { role: string }) {
-  const canManage = role === 'owner' || role === 'admin'
+  const canManage = role === 'owner'
   const qc = useQueryClient(); const toast = useToast(); const confirm = useConfirm()
   const accountsQ = useQuery({ queryKey: ['crm', 'sync-accounts'], queryFn: api.crm.syncAccounts })
   const blockQ = useQuery({ queryKey: ['crm', 'blocklist'], queryFn: api.crm.blocklist })
@@ -35,6 +35,9 @@ export default function InboxesView({ role }: { role: string }) {
   const configured = accountsQ.data?.configured
   const domain = accountsQ.data?.domain
   const blocks = blockQ.data ?? []
+
+  // Owner-only surface (the blocklist reveals sensitive info-flow decisions).
+  if (role !== 'owner') return <div style={{ color: 'var(--text-muted)', padding: 24 }}>Not available.</div>
 
   return (
     <div>

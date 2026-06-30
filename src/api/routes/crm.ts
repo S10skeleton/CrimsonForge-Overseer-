@@ -355,9 +355,16 @@ async function buildCustom(
 }
 
 // ─── Email/calendar sync (P1b) ───────────────────────────────────────────────
-// Connected accounts + a blocklist + on-demand thread fetch. Reads =
-// crm.companies@view, writes = @manage (owner/admin) via the mount guard.
-// Rollout-safe (tables may not be migrated yet) + audited.
+// Connected accounts + a blocklist + on-demand thread fetch. Rollout-safe +
+// audited. The connected-inbox surface (accounts + blocklist) is OWNER-ONLY: the
+// blocklist reveals sensitive info-flow decisions, so admins must not see it.
+// (The mount guard only enforces crm.companies — admins can have manage — so we
+// add an explicit owner check here. /sync/thread stays on the normal CRM gate.)
+router.use(['/sync/accounts', '/sync/blocklist'], (req: AuthRequest, res, next) => {
+  if (req.panelUser?.role !== 'owner') { res.status(403).json({ error: 'Owner access required' }); return }
+  next()
+})
+
 router.get('/sync/accounts', async (_req, res) => {
   const { data, error } = await overseerDb.from('crm_sync_accounts').select('*').order('created_at', { ascending: true })
   res.json({ data: error ? [] : (data ?? []), configured: isSyncConfigured(), domain: workspaceDomain() })
