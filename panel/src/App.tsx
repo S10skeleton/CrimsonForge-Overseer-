@@ -5,6 +5,7 @@ import ResetPassword from './pages/ResetPassword'
 import AcceptInvite from './pages/AcceptInvite'
 import Panel from './pages/Panel'
 import { PermissionsProvider } from './lib/permissions'
+import AskElara from './components/AskElara'
 import type { Permissions } from './lib/permissions'
 import { api } from './api'
 import Placeholder from './components/Placeholder'
@@ -132,6 +133,7 @@ export default function App() {
             : (
               <PermissionsProvider value={{ permissions, role }}>
                 <Panel role={role} onLogout={handleLogout} onIdleLogout={() => clearSession('idle')} />
+                <AskElara />
               </PermissionsProvider>
             )
         }

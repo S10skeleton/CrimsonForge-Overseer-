@@ -25,6 +25,25 @@ import { runForgePilotUptimeCheck, forgePilotUptimeTool }     from './uptime-for
 import { listIssuesTool, createIssueTool, closeIssueTool } from './github-issues.js'
 import { webSearchTool } from './search.js'
 import { listKnowledgeTool, updateKnowledgeTool } from './knowledge.js'
+import { proposable } from '../agent/propose.js'
+import { crmReadTools } from './crm.js'
+import { crmLogNoteTool, crmRiskyActionTools, quoSendSmsTool } from './crm-actions.js'
+
+// Human-readable proposal summaries for the CRM action tools (Ask-Elara cards).
+function crmActionSummary(name: string, i: Record<string, unknown>): string {
+  switch (name) {
+    case 'crm_create_company': return `🏢 Create company “${i.name}”`
+    case 'crm_create_contact': return `👤 Create contact “${i.name}”`
+    case 'crm_create_deal': return `💼 Create deal “${i.name}”`
+    case 'crm_update_deal': return `✏️ Update deal${i.stage ? ` → ${i.stage}` : ''}${i.status ? ` (${i.status})` : ''}${i.amount != null ? ` $${i.amount}` : ''}`
+    case 'crm_update_contact': return `✏️ Update contact`
+    case 'crm_update_company': return `✏️ Update company`
+    case 'crm_delete_company': return `🗑️ Delete company ${i.id}`
+    case 'crm_delete_contact': return `🗑️ Delete contact ${i.id}`
+    case 'crm_delete_deal': return `🗑️ Delete deal ${i.id}`
+    default: return name
+  }
+}
 
 // ─── For Scheduler ────────────────────────────────────────────────────────
 
@@ -62,9 +81,9 @@ export const allAgentTools = [
   // Google workspace
   gmailTool,
   calendarTool,
-  createCalendarEventTool,
-  updateCalendarEventTool,
-  deleteCalendarEventTool,
+  proposable(createCalendarEventTool, (i) => `📅 Create event “${i.summary ?? i.title}”`, ['summary', 'start', 'end']),
+  proposable(updateCalendarEventTool, (i) => `📅 Update calendar event ${i.eventId ?? ''}`),
+  proposable(deleteCalendarEventTool, (i) => `🗑️ Delete calendar event ${i.eventId ?? ''}`),
   driveTool,
   driveSearchTool,
   driveReadTool,
@@ -76,18 +95,23 @@ export const allAgentTools = [
   // Contacts + outbound email
   listContactsTool,
   contactsSearchTool,
-  sendEmailTool,
+  proposable(sendEmailTool, (i) => `✉️ Email ${i.to}: ${i.subject ?? ''}`, ['subject', 'body']),
   // Memory and learning
   ...memoryTools,
   // Revenue
   stripeMetricsTool,
   twilioStatsTool,
-  sendSMSTool,
+  proposable(sendSMSTool, (i) => `📱 SMS ${i.to}: “${i.body ?? i.message ?? ''}”`, ['body', 'message']),
   resendStatsTool,
   // GitHub Issues
   listIssuesTool,
-  createIssueTool,
-  closeIssueTool,
+  proposable(createIssueTool, (i) => `🐙 Create GitHub issue: ${i.title ?? ''}`, ['title', 'body']),
+  proposable(closeIssueTool, (i) => `🐙 Close GitHub issue #${i.number ?? i.issue_number ?? ''}`),
+  // CRM — reads (auto), internal note (auto), risky actions (proposals)
+  ...crmReadTools,
+  crmLogNoteTool,
+  quoSendSmsTool,
+  ...crmRiskyActionTools.map((t) => proposable(t, (i) => crmActionSummary(t.name, i))),
   // Deploy monitoring
   netlifyTool,
   // ForgePilot monitoring
