@@ -1,86 +1,101 @@
 # OVERSEER CRM-Attio — Phase 1b: Gmail + Calendar auto-logging + auto-create contacts
 
-**Repo:** `CrimsonForge-Overseer`. **Branch:** off `main`, after P1a — e.g. `feat/crm-p1b-email-sync`.
-**Type:** The headline Attio feature — your and Matt's work email + calendar auto-flow into the CRM, auto-creating contacts/companies and logging every thread/meeting onto their timeline. Backend sync engine + a small settings view. DB applied by PM via MCP.
+**Repo:** `CrimsonForge-Overseer`. **Branch:** off `main` after P1a — e.g. `feat/crm-p1b-email-sync`.
+**Type:** The headline Attio feature — work email + calendar auto-flow into the CRM, auto-creating contacts/companies and logging real correspondence onto their timeline. **Built conservatively** (a messy inbox must NOT flood the CRM). Backend sync engine + a small settings view. DB applied by PM via MCP.
 
-## Why
+## v1 vs expansion (important — start simple)
 
-Clutch's #1 Attio feature: never hand-enter a contact — Attio watched your inbox/calendar, created People/Companies from whoever you corresponded with, and logged the history. We replicate that for the `@crimsonforge.pro` Workspace.
+- **v1 (build this now):** reuse the **existing single-account Google OAuth** already in Railway (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN`) — the same credential Elara's current Gmail/Calendar tools use — to sync **the one connected account (admin@crimsonforge.pro)**. **No new Google setup required.**
+- **Expansion (later):** add **Workspace domain-wide delegation** (a service account) to also sync `matt@` and `shane@` from one credential. Documented at the bottom; do NOT build it in v1.
 
-## Approach: Google Workspace domain-wide delegation (not per-user OAuth)
+## ⛔ GUARDRAILS
 
-All users are on one Workspace (`crimsonforge.pro`). A **service account with domain-wide delegation** can impersonate any domain user and read their mail/calendar — authorized once by the Workspace admin (Shane). This is separate from the existing `GOOGLE_REFRESH_TOKEN` (a single user OAuth token, used by Elara's current Google tools — leave it as-is).
-
-### Google Cloud / Workspace setup (PM/Clutch prerequisite — Shane, as Workspace admin)
-1. In Google Cloud, create (or reuse) a **service account**; enable **domain-wide delegation**; create a JSON key.
-2. In Google **Admin console → Security → API controls → Domain-wide delegation**, authorize the service account's **client ID** for **read-only** scopes:
-   - `https://www.googleapis.com/auth/gmail.readonly`
-   - `https://www.googleapis.com/auth/calendar.readonly`
-3. Provide to the Overseer backend env: `GOOGLE_SA_CLIENT_EMAIL`, `GOOGLE_SA_PRIVATE_KEY`, and `GOOGLE_WORKSPACE_DOMAIN=crimsonforge.pro`.
-
-Read-only only — we ingest, never send or modify.
+1. **Conservative ingest — the inbox is messy, do NOT flood the CRM.** See the filter rules in Step 2; they're core, not optional.
+2. **Read-only** Google access. Reuse `src/lib/google-auth.ts` (existing OAuth client) — no new auth plumbing for v1.
+3. **Overseer DB only**, PM applies DDL. Fail-safe per run (an error never blocks the scheduler).
+4. **Don't store full email bodies** (v1). Store light metadata + snippet; fetch the full thread **on demand** from Gmail when the user opens an item (read in-app, minimal stored private content).
+5. Backend-first, role-gated (`requireArea('crm.companies','manage')`-level for config; owner for blocklist edits), audited.
 
 ## Step 0 — Database (PM applies via MCP; reference)
 
 ```sql
--- Which mailboxes to ingest (start: Admin@, Matt@; add Shane@ later)
-create table if not exists crm_sync_mailboxes (
-  email       text primary key,            -- e.g. admin@crimsonforge.pro
-  label       text,
+create table if not exists crm_sync_accounts (
+  id          uuid primary key default gen_random_uuid(),
+  email       text not null unique,         -- admin@crimsonforge.pro (v1)
+  method      text not null default 'oauth' check (method in ('oauth','delegation')),
   enabled     boolean not null default true,
   last_sync   timestamptz,
   created_at  timestamptz not null default now()
 );
 
--- Dedup ledger so a thread/event logs once even across multiple synced mailboxes
+create table if not exists crm_sync_blocklist (
+  id          uuid primary key default gen_random_uuid(),
+  pattern     text not null,                -- domain ('motor.com') or address ('x@y.com')
+  reason      text,
+  created_at  timestamptz not null default now()
+);
+
 create table if not exists crm_sync_seen (
   source      text not null check (source in ('gmail','calendar')),
-  external_id text not null,                -- gmail thread/message id | calendar event id
-  activity_id uuid,                          -- the crm_activities row created
+  external_id text not null,                -- gmail thread id | calendar event id
+  activity_id uuid,
   created_at  timestamptz not null default now(),
   primary key (source, external_id)
 );
 ```
 
-Existing `crm_activities` already supports `type in ('call','email','meeting','note','task')` — use `email`/`meeting`. (P1a added `custom`; not required here.)
+Existing `crm_activities` already supports `type in ('email','meeting',...)` and links to contact/company. The full thread is fetched live (not stored); the activity stores subject + snippet + gmail thread id (for the on-demand fetch).
 
 ## Step 1 — Google sync lib (`src/lib/googleSync.ts`)
 
-- Build a JWT auth client from the service account that **impersonates** a given `subject` mailbox (`google-auth-library` JWT with `subject: mailbox`). One helper `clientFor(mailbox)` → Gmail + Calendar clients.
-- `gmail.users.threads.list` (incremental via `historyId`/`q: newer_than:Nd` for first run) → for each thread, extract participants (From/To/Cc), subject, snippet, timestamp.
-- `calendar.events.list` (updatedMin since last sync) → attendees, title, time, location.
+- Reuse the existing OAuth client (`google-auth.ts`) for the connected account. (Leave a `clientFor(account)` seam so the expansion can swap in a delegation/JWT client per mailbox later.)
+- Gmail: list threads (`q: newer_than:` for first run capped at ~90 days, then incremental); fetch participants (From/To/Cc), subject, snippet, timestamp, labels, headers.
+- Calendar: `events.list` (updatedMin since last sync) → attendees, title, time, location.
 
-## Step 2 — Sync engine (`src/jobs/crm-sync.ts`, registered as a schedule)
+## Step 2 — Junk filter (CORE — apply before creating anything)
 
-Add a built-in schedule `crm_email_sync` (e.g. every 20 min) via the STEP4 schedule system (so it shows in Elara Controls → Scheduled jobs; PM seeds the `elara_schedules` row). Per enabled mailbox:
-1. Impersonate the mailbox; pull new Gmail threads + Calendar events since `last_sync`.
-2. For each **external** participant (email domain ≠ `crm_workspace` domain): **upsert `crm_contacts`** (match by email; create if new) and **upsert `crm_companies`** by email domain (skip free-mail domains like gmail.com/outlook.com → contact only, no company). **Never** create contacts for internal `@crimsonforge.pro` addresses.
-3. **Log an activity:** insert one `crm_activities` row (`type:'email'` or `'meeting'`, subject, body=snippet/summary, linked `contact_id` + `company_id`) — guarded by `crm_sync_seen` so it's logged once.
-4. Update `crm_sync_mailboxes.last_sync`. Fail-safe per mailbox (one mailbox erroring never blocks others; log + continue).
+A thread/event is ingested only if it passes ALL of these:
+1. **You participated outbound** — the synced account **sent at least one message** in the thread (skip pure-inbound newsletters/cold email). For calendar, the account is organizer or accepted attendee.
+2. **Gmail Primary category only** — skip `CATEGORY_PROMOTIONS`, `CATEGORY_SOCIAL`, `CATEGORY_UPDATES`, `CATEGORY_FORUMS`.
+3. **Not automated/bulk** — skip senders matching `no-?reply@`, `mailer-daemon`, `bounce`, `notifications@`, and any message carrying a `List-Unsubscribe` / `Precedence: bulk` header.
+4. **Not blocklisted** — skip any participant whose domain/address matches `crm_sync_blocklist` (see Step 4 — **MOTOR seeded here**).
+5. **External human** — at least one participant is external (domain ≠ `crm_workspace`/crimsonforge.pro); never create contacts for internal `@crimsonforge.pro` addresses.
 
-Keep it conservative: only log threads that involve at least one external party (skip purely-internal mail), and cap history on first run (e.g. last 90 days) to avoid a flood.
+Only after passing: **upsert `crm_contacts`** (match by email; create if new), **upsert `crm_companies`** by email domain (skip free-mail domains gmail.com/outlook.com/etc. → contact only, no company), and **log one `crm_activities`** row (`type:'email'|'meeting'`, subject, snippet, thread id), guarded by `crm_sync_seen`. Conservative by design — better to under-capture.
 
-## Step 3 — Panel: "Connected inboxes" + richer timeline
+## Step 3 — Sync engine (`src/jobs/crm-sync.ts`, scheduled)
 
-- A small **Settings (or CRM) → Connected inboxes** view (owner/admin): list `crm_sync_mailboxes` with enabled toggle + last-sync time; add/remove a mailbox (must be a domain user). Audited.
-- The contact/company **activity timeline** (from 5b) now shows the auto-logged `email`/`meeting` items (sender, subject, time, "via Gmail/Calendar" tag). No new timeline UI needed beyond rendering these types nicely.
+Register a built-in schedule `crm_email_sync` (~every 20 min) via the STEP4 schedule system (shows in Elara Controls → Scheduled jobs; PM seeds the `elara_schedules` row). For each enabled `crm_sync_accounts` row: pull new threads/events since `last_sync`, run the Step-2 filter, upsert/log, advance `last_sync`. Fail-safe per account.
 
-## Step 4 — (privacy/scope notes — bake in, don't skip)
+## Step 4 — Blocklist + MOTOR
 
-- Read-only scopes; only **business correspondence with external parties** is logged (internal-only threads skipped). 
-- Logged items are visible to CRM-permitted admins — fine for shared work email, but note it in the Connected-inboxes view ("emails with external contacts are logged to the CRM").
-- A mailbox can be disabled anytime (stops ingest; existing logged activities remain).
+- Seed `crm_sync_blocklist` with the confirmed entries so none ever become a CRM contact/activity (Clutch still gets all these emails in Gmail normally; toggleable later by removing an entry):
+  - `motor.com` (domain) — Clutch controls MOTOR's good/bad-news flow manually
+  - `alicia.sokolowski@gmail.com` — personal
+  - `steve.fishguy@gmail.com` (+ `steve.fisher@gmail.com` if that variant is also his) — Steve Fisher, personal/advisor
+  - `samkory@gmail.com` — Sam Kory, personal/advisor
+  - `wfwanano@gmail.com` — Wayne Fisher, personal/advisor
+  - (NOTE: `7573433032s@gmail.com` is **Matt** — do NOT block; it's internal anyway.)
+- The blocklist is editable in the settings view (Step 5).
+
+## Step 5 — Panel: Connected inbox + on-demand thread + timeline
+
+- **Settings → Connected inboxes** (owner/admin): the synced account(s) with enabled toggle + last-sync time; the **blocklist** editor (add/remove domains/addresses); category/automated-sender filter toggles. Audited.
+- **Contact/company timeline** (from 5b): shows the auto-logged `email`/`meeting` items (sender, subject, snippet, time, "via Gmail/Calendar" tag). **Clicking an email fetches the full thread live from Gmail and shows it in-app** — full body is NOT stored in our DB.
 
 ## Verify
 
-1. After setup, enabling `admin@crimsonforge.pro` → within a sync cycle, recent external email threads appear as `email` activities on the right contacts; unknown senders auto-create a contact (+ company by domain); internal-only threads are skipped; `gmail.com` senders create a contact but no company.
-2. Calendar meetings with external attendees log as `meeting` activities linked to those contacts.
-3. Re-running the sync doesn't duplicate (dedup via `crm_sync_seen`); `last_sync` advances.
-4. Disabling a mailbox stops new ingest; one mailbox failing doesn't stop the others.
-5. `crm_email_sync` shows in Elara Controls → Scheduled jobs (enable/disable/cron). All config changes audited. `npm run build` clean.
+1. Sync admin@ → only **real two-way** threads with **external** people appear as contacts + `email` activities; newsletters/promos/automated/inbound-only are skipped; internal-only threads skipped; gmail.com senders → contact, no company.
+2. **MOTOR is excluded** — no MOTOR contact or activity is ever created while its domain is in the blocklist.
+3. Clicking an email opens the full thread (fetched live); no full bodies in the DB.
+4. Re-running doesn't duplicate (`crm_sync_seen`); `last_sync` advances; one account erroring doesn't block the job.
+5. `crm_email_sync` shows in Elara Controls → Scheduled jobs; blocklist + toggles editable + audited. `npm run build` clean.
 
 ## Hand-off for the PM (Clutch)
 
-- Do the Google Cloud service-account + domain-wide-delegation setup (Workspace admin) and add `GOOGLE_SA_CLIENT_EMAIL` / `GOOGLE_SA_PRIVATE_KEY` / `GOOGLE_WORKSPACE_DOMAIN` to Railway.
-- I'll apply Step 0 tables + seed `crm_sync_mailboxes` (admin@, matt@; shane@ disabled until you start using it) + the `crm_email_sync` schedule row via MCP when the code's in.
-- After this: **P2 (Quo calls/texts → timelines)**, then **P3 (table/saved views)**, then **Elara viewing**.
+- **No new Google work for v1** — uses the existing OAuth (admin@). I apply Step 0 tables, seed `crm_sync_accounts` (admin@, oauth), the `crm_email_sync` schedule row, and the **MOTOR blocklist** entry via MCP when the code's in (I'll confirm MOTOR's exact domain first).
+- Heads-up: your Railway `GOOGLE_CALENDER_ID` is misspelled vs the code's `GOOGLE_CALENDAR_ID` — verify/rename so calendar reads work.
+
+## Expansion (later, NOT v1) — multi-inbox via domain-wide delegation
+
+To also sync `matt@`/`shane@` from one credential: create a GCP **service account** with **domain-wide delegation**, authorize read-only `gmail.readonly` + `calendar.readonly` for the client ID in Google Admin, set `GOOGLE_SA_CLIENT_EMAIL`/`GOOGLE_SA_PRIVATE_KEY`/`GOOGLE_WORKSPACE_DOMAIN`, and add those mailboxes as `crm_sync_accounts` rows with `method='delegation'`. The `clientFor(account)` seam from Step 1 swaps in the JWT/impersonation client. Everything else (filter, engine, panel) is unchanged.

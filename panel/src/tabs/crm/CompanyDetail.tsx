@@ -8,6 +8,7 @@ import { useToast } from '../../components/Toast'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { errMsg, TYPE_BADGE, fmtAmount, prettyStage, PIPELINE_OPTIONS, COMPANY_TYPES } from './crmShared'
 import { CustomFields, ManageFieldsModal, useFields } from './CustomFields'
+import ThreadModal from './ThreadModal'
 
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task']
 const ACTIVITY_GLYPH: Record<string, string> = { note: '✎', call: '☎', email: '✉', meeting: '◔', task: '✓' }
@@ -28,6 +29,7 @@ export default function CompanyDetail({ role }: { role: string }) {
   const [dealForm, setDealForm] = useState({ name: '', pipeline: 'fundraising', amount: '' })
   const [act, setAct] = useState({ type: 'note', subject: '', body: '' })
   const [manageObj, setManageObj] = useState<CrmObject | null>(null)
+  const [threadActivity, setThreadActivity] = useState<string | null>(null)
 
   const addContact = useMutation({ mutationFn: () => api.crm.createContact({ company_id: id, ...contactForm }), onSuccess: () => { invalidate(); setContactForm({ name: '', title: '', email: '', phone: '' }); toast.success('Contact added') }, onError: (e) => toast.error(errMsg(e)) })
   const delContact = useMutation({ mutationFn: (cid: string) => api.crm.deleteContact(cid), onSuccess: () => { invalidate(); toast.success('Contact removed') }, onError: (e) => toast.error(errMsg(e)) })
@@ -168,7 +170,10 @@ export default function CompanyDetail({ role }: { role: string }) {
                   )}
                 </div>
                 {a.body && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{a.body}</div>}
-                <div style={{ fontSize: 11.5, color: 'var(--text-hint)', marginTop: 2 }}>{a.created_by ? `${a.created_by} · ` : ''}{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-hint)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span>{a.created_by ? `${a.created_by} · ` : ''}{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
+                  {a.created_by === 'Gmail' && <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setThreadActivity(a.id)}>View thread</button>}
+                </div>
               </div>
               {isOwner && <button className="btn btn-ghost btn-sm" onClick={() => delActivity.mutate(a.id)}>✕</button>}
             </div>
@@ -177,6 +182,7 @@ export default function CompanyDetail({ role }: { role: string }) {
       </div>
 
       {manageObj && <ManageFieldsModal object={manageObj} onClose={() => setManageObj(null)} />}
+      {threadActivity && <ThreadModal activityId={threadActivity} onClose={() => setThreadActivity(null)} />}
     </div>
   )
 }

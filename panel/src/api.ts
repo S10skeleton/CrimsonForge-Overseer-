@@ -123,7 +123,9 @@ export interface CrmFieldDef {
   type: CrmFieldType; options: string[] | null; position: number; archived: boolean; created_at: string
 }
 export type CrmCustom = Record<string, unknown>
-export interface CrmSyncMailbox { email: string; label: string | null; enabled: boolean; last_sync: string | null; created_at: string }
+export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; created_at: string }
+export interface CrmBlocklistEntry { id: string; pattern: string; reason: string | null; created_at: string }
+export interface CrmThreadMessage { id: string; from: string; to: string; date: string; subject: string; body: string }
 
 export interface CrmCompany {
   id: string; name: string; type: string; status: string; website: string | null
@@ -316,10 +318,14 @@ export const api = {
     deleteField: (id: string) => request(`/api/crm/fields/${id}`, { method: 'DELETE' }),
 
     // Connected inboxes (Gmail/Calendar sync, P1b)
-    mailboxes: () => request<{ data: CrmSyncMailbox[]; configured: boolean; domain: string | null }>('/api/crm/sync/mailboxes'),
-    addMailbox: (m: { email: string; label?: string }) => request<{ data: CrmSyncMailbox }>('/api/crm/sync/mailboxes', { method: 'POST', body: JSON.stringify(m) }).then(r => r.data),
-    updateMailbox: (email: string, m: { enabled?: boolean; label?: string }) => request(`/api/crm/sync/mailboxes/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify(m) }),
-    removeMailbox: (email: string) => request(`/api/crm/sync/mailboxes/${encodeURIComponent(email)}`, { method: 'DELETE' }),
+    syncAccounts: () => request<{ data: CrmSyncAccount[]; configured: boolean; domain: string }>('/api/crm/sync/accounts'),
+    addSyncAccount: (m: { email: string; method?: string }) => request<{ data: CrmSyncAccount }>('/api/crm/sync/accounts', { method: 'POST', body: JSON.stringify(m) }).then(r => r.data),
+    updateSyncAccount: (email: string, m: { enabled: boolean }) => request(`/api/crm/sync/accounts/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify(m) }),
+    removeSyncAccount: (email: string) => request(`/api/crm/sync/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' }),
+    blocklist: () => request<{ data: CrmBlocklistEntry[] }>('/api/crm/sync/blocklist').then(r => r.data),
+    addBlock: (b: { pattern: string; reason?: string }) => request<{ data: CrmBlocklistEntry }>('/api/crm/sync/blocklist', { method: 'POST', body: JSON.stringify(b) }).then(r => r.data),
+    removeBlock: (id: string) => request(`/api/crm/sync/blocklist/${id}`, { method: 'DELETE' }),
+    thread: (activityId: string) => request<{ data: { subject: string; messages: CrmThreadMessage[] } }>(`/api/crm/sync/thread?activity_id=${encodeURIComponent(activityId)}`).then(r => r.data),
   },
 
   elaraConfig: {
