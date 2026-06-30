@@ -270,11 +270,9 @@ Write the morning briefing for Slack in your voice as Elara. Structure:
 
 5. **Email** \u2014 Flag anything needing a response today. Skip boilerplate.
 
-6. **TODAY'S FOCUS** \u2014 3 specific, concrete tasks. Bias toward ForgePilot unless CFP has active fires. Not categories \u2014 real work. "Ship VIN scanner to TestFlight" not "work on mobile."
+6. **TODAY'S FOCUS** \u2014 3 specific, concrete tasks for the team. Bias toward ForgePilot unless CFP has active fires. Not categories \u2014 real work. "Ship VIN scanner to TestFlight" not "work on mobile."
 
-7. **Health check** \u2014 One line. Supplements? Workout?
-
-Your voice. Direct. Warm. ForgePilot-first. No filler.`
+Your voice. Direct. Professional. ForgePilot-first. No filler.`
 
   try {
     const response = await client.messages.create({

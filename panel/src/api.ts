@@ -446,7 +446,6 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify({ status: 'resolved' }),
       }),
-    checkins: () => request<any[]>('/api/elara/checkins'),
     briefings: () => request<any[]>('/api/elara/briefings'),
     tools: () => request<any[]>('/api/elara/tools'),
     docDebt: () => request<any[]>('/api/elara/doc-debt'),

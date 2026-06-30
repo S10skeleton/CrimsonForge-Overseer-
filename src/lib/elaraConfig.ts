@@ -43,7 +43,7 @@ function defaultSchedules(): Schedule[] {
     { job_key: 'morning_briefing',   label: 'Morning briefing',          cron: `0 ${briefingHour} * * *`, timezone: null, enabled: true, is_custom: false },
     { job_key: 'fp_insights',        label: 'ForgePilot insights',       cron: `0 ${insightsHour} * * *`, timezone: null, enabled: true, is_custom: false },
     { job_key: 'health_check',       label: 'Health check',              cron: '*/15 * * * *',           timezone: null, enabled: true, is_custom: false },
-    { job_key: 'checkins_summarize', label: 'Check-ins + summarization', cron: '* * * * *',              timezone: null, enabled: true, is_custom: false },
+    { job_key: 'summarize',          label: 'Conversation summarization', cron: '* * * * *',             timezone: null, enabled: true, is_custom: false },
     { job_key: 'mrr_snapshot',       label: 'MRR snapshot',              cron: '55 23 * * *',            timezone: null, enabled: true, is_custom: false },
   ]
 }

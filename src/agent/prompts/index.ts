@@ -4,7 +4,6 @@
  */
 
 import { IDENTITY_PROMPT } from './identity.js'
-import { FOUNDER_PROMPT } from './founder.js'
 import { PROJECT_PROMPT } from './project.js'
 import { RULES_PROMPT } from './rules.js'
 import { loadRuntimeMemory, buildMemoryPrompt, buildKnowledgePrompt } from './memory.js'
@@ -32,7 +31,6 @@ export async function buildSystemPrompt(recentBriefing?: MorningBriefing): Promi
 
   return [
     IDENTITY_PROMPT,
-    FOUNDER_PROMPT,
     projectSection,
     RULES_PROMPT,
     memoryPrompt,
@@ -47,7 +45,6 @@ export async function buildSystemPrompt(recentBriefing?: MorningBriefing): Promi
 export function buildSystemPromptSync(): string {
   return [
     IDENTITY_PROMPT,
-    FOUNDER_PROMPT,
     PROJECT_PROMPT,
     RULES_PROMPT,
   ].join('\n\n')

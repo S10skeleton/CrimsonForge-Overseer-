@@ -10,7 +10,6 @@ import { checkForNewSubscribers } from './tools/stripe.js'
 import { sendBriefing, sendRawMessage, sendAgentMessage, notifyAlert } from './notifications/slack.js'
 import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
-import { runCheckinDispatcher } from './jobs/checkins.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
 import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
@@ -556,28 +555,31 @@ async function runMorningBriefing(opts: { preview?: boolean } = {}): Promise<str
         })
       : null
 
+    const isAI = aiBriefingText != null
     let outText: string
-
-    if (aiBriefingText) {
-      outText = aiBriefingText
-      if (!preview) {
-        await sendRawMessage(aiBriefingText)
-        await storeBriefing(aiBriefingText)
-        console.log('[SCHEDULER] AI morning briefing sent.')
-      }
+    if (isAI) {
+      outText = aiBriefingText as string
     } else {
-      // Structured briefing (AI off or unavailable)
       const statusEmoji = overallStatus === 'down' ? '🔴' : overallStatus === 'degraded' ? '🟡' : '🟢'
       outText = `${statusEmoji} Status: ${overallStatus}\n` +
         (alerts.length ? alerts.map((a) => `• ${a.message}`).join('\n') : 'No alerts.')
-      if (!preview) {
-        console.log('[SCHEDULER] AI unavailable/off — sending structured briefing.')
-        await sendBriefing(briefing)
-        await storeBriefing(`[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
-      }
     }
 
-    if (!preview) console.log('[SCHEDULER] Morning briefing complete.')
+    if (!preview) {
+      // Route the briefing through its configured destination (like alerts),
+      // falling back to the legacy webhook if no Slack channel is routed (FIX4).
+      const dest = await resolveDestination('briefing')
+      if (dest && dest.kind === 'slack' && dest.target && dest.target !== 'webhook') {
+        await sendAgentMessage(outText, dest.target)
+      } else if (isAI) {
+        await sendRawMessage(outText)
+      } else {
+        await sendBriefing(briefing)
+      }
+      await storeBriefing(isAI ? outText : `[Structured briefing] Status: ${briefing.overallStatus} — ${briefing.timestamp}`)
+      console.log('[SCHEDULER] Morning briefing sent.')
+    }
+
     return outText
   } catch (err) {
     console.error('[SCHEDULER] Error in morning briefing:', err)
@@ -592,8 +594,7 @@ const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
   morning_briefing: () => runMorningBriefing(),
   fp_insights: () => runInsightAnalysis(),
   health_check: () => runSilentHealthCheck(),
-  checkins_summarize: async () => {
-    try { await runCheckinDispatcher() } catch (err) { console.error('[SCHEDULER] check-in dispatcher:', err) }
+  summarize: async () => {
     try { await runSummarizationDispatcher() } catch (err) { console.error('[SCHEDULER] summarization dispatcher:', err) }
   },
   mrr_snapshot: () => runMrrSnapshot(),

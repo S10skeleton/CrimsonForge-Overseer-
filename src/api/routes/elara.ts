@@ -123,25 +123,6 @@ router.patch('/parking-lot/:id', requireOwner, async (req, res) => {
   }
 })
 
-// ── Check-ins ───────────────────────────────────────────────────────────────
-
-router.get('/checkins', requireAuth, async (_req, res) => {
-  try {
-    const sb = getElaraSupabase()
-    const { data, error } = await sb
-      .from('agent_routines')
-      .select('routine_type, items, notes, updated_at')
-      .eq('routine_type', 'checkin')
-      .single()
-
-    if (error && error.code !== 'PGRST116') throw error
-    res.json(data?.items ?? [])
-  } catch (err) {
-    console.error('[elara] Error:', err)
-    res.status(500).json({ error: err instanceof Error ? err.message : JSON.stringify(err) })
-  }
-})
-
 // ── Briefings ───────────────────────────────────────────────────────────────
 
 router.get('/briefings', requireAuth, async (_req, res) => {
