@@ -119,7 +119,7 @@ export function FpAccounts() {
           <div style={{ padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>No users yet.</div>
         ) : (
           <table>
-            <thead><tr><th>User</th><th>Plan</th><th>OBD</th><th>Last session</th><th className="mobile-hide">Joined</th></tr></thead>
+            <thead><tr><th>User</th><th>Phone</th><th>Plan</th><th>OBD</th><th>Last session</th><th className="mobile-hide">Joined</th></tr></thead>
             <tbody>
               {users.data!.map(u => (
                 <tr key={u.id}>
@@ -130,6 +130,7 @@ export function FpAccounts() {
                       {u.cfp_linked && <span style={{ color: 'var(--cobalt)', marginLeft: 8 }}>CFP linked</span>}
                     </div>
                   </td>
+                  <td className="mono" style={{ fontSize: 12, color: 'var(--text-muted)' }}>{u.phone || '—'}</td>
                   <td><span className={`badge ${planBadge(u.subscription_tier)}`}>{u.subscription_tier}</span></td>
                   <td style={{ fontSize: 11, color: u.obd_enabled ? 'var(--green)' : 'var(--text-muted)' }}>{u.obd_enabled ? 'OBD ✓' : 'no OBD'}</td>
                   <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{u.last_session_at ? rel(u.last_session_at) : 'no sessions'}</td>

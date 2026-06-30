@@ -195,12 +195,15 @@ router.get('/stats', async (_req, res) => {
 router.get('/users', async (_req, res) => {
   try {
     const sb = getFPSupabase()
-    const { data, error } = await sb
-      .from('fp_users')
-      .select('id, email, subscription_tier, shop_role, obd_enabled, cfp_shop_id, shop_id, created_at, updated_at')
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
+    // `phone` is captured at signup; tolerate DBs without the column yet by
+    // retrying without it (P1a: surface phone read-only on Accounts).
+    const baseCols = 'id, email, subscription_tier, shop_role, obd_enabled, cfp_shop_id, shop_id, created_at, updated_at'
+    const selectUsers = (withPhone: boolean) =>
+      sb.from('fp_users').select(withPhone ? `${baseCols}, phone` : baseCols).order('created_at', { ascending: false })
+    let ur = await selectUsers(true)
+    if (ur.error) ur = await selectUsers(false)
+    if (ur.error) throw ur.error
+    const data = ur.data
 
     // Count sessions per user
     const userIds = (data ?? []).map((u: any) => u.id)

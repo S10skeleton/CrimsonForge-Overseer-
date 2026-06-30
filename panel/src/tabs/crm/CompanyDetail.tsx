@@ -7,9 +7,12 @@ import type { CrmContact, CrmDeal, CrmActivity } from '../../api'
 import { useToast } from '../../components/Toast'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { errMsg, TYPE_BADGE, fmtAmount, prettyStage, PIPELINE_OPTIONS, COMPANY_TYPES } from './crmShared'
+import { CustomFields, ManageFieldsModal, useFields } from './CustomFields'
 
 const ACTIVITY_TYPES = ['note', 'call', 'email', 'meeting', 'task']
 const ACTIVITY_GLYPH: Record<string, string> = { note: '✎', call: '☎', email: '✉', meeting: '◔', task: '✓' }
+
+type CrmObject = 'company' | 'contact' | 'deal'
 
 export default function CompanyDetail({ role }: { role: string }) {
   const { id = '' } = useParams()
@@ -19,10 +22,12 @@ export default function CompanyDetail({ role }: { role: string }) {
 
   const { data, isLoading, error } = useQuery({ queryKey: ['crm', 'company', id], queryFn: () => api.crm.company(id) })
   const invalidate = () => qc.invalidateQueries({ queryKey: ['crm', 'company', id] })
+  const companyFields = useFields('company')
 
   const [contactForm, setContactForm] = useState({ name: '', title: '', email: '', phone: '' })
   const [dealForm, setDealForm] = useState({ name: '', pipeline: 'fundraising', amount: '' })
   const [act, setAct] = useState({ type: 'note', subject: '', body: '' })
+  const [manageObj, setManageObj] = useState<CrmObject | null>(null)
 
   const addContact = useMutation({ mutationFn: () => api.crm.createContact({ company_id: id, ...contactForm }), onSuccess: () => { invalidate(); setContactForm({ name: '', title: '', email: '', phone: '' }); toast.success('Contact added') }, onError: (e) => toast.error(errMsg(e)) })
   const delContact = useMutation({ mutationFn: (cid: string) => api.crm.deleteContact(cid), onSuccess: () => { invalidate(); toast.success('Contact removed') }, onError: (e) => toast.error(errMsg(e)) })
@@ -36,6 +41,11 @@ export default function CompanyDetail({ role }: { role: string }) {
   if (isLoading) return <div style={{ color: 'var(--text-muted)' }}>Loading…</div>
   if (error || !data) return <div style={{ color: 'var(--red-text)' }}>{error ? errMsg(error) : 'Not found'}</div>
   const { company, contacts, deals, activities } = data
+  const hasCompanyFields = (companyFields.data?.length ?? 0) > 0
+
+  const manageBtn = (obj: CrmObject) => canEdit && (
+    <button className="btn btn-ghost btn-sm" onClick={() => setManageObj(obj)} title="Manage fields">⚙ Fields</button>
+  )
 
   return (
     <div>
@@ -57,24 +67,44 @@ export default function CompanyDetail({ role }: { role: string }) {
 
       <div className="home-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.1fr) minmax(0,1fr)', gap: 18, alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 18 }}>
+          {/* Custom details */}
+          {(canEdit || hasCompanyFields) && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div className="section-label" style={{ margin: 0 }}>Details</div>
+                {manageBtn('company')}
+              </div>
+              {hasCompanyFields
+                ? <CustomFields object="company" recordId={company.id} custom={company.custom} canEdit={canEdit} />
+                : <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No custom fields yet. Add attributes with “⚙ Fields”.</div>}
+            </div>
+          )}
+
           {/* Contacts */}
           <div className="card">
-            <div className="section-label">Contacts</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div className="section-label" style={{ margin: 0 }}>Contacts</div>
+              {manageBtn('contact')}
+            </div>
             {contacts.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>None yet.</div>}
             {contacts.map((c: CrmContact) => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.name}{c.is_primary && <span className="badge badge-dim" style={{ marginLeft: 6, fontSize: 9 }}>primary</span>}</div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text-hint)' }}>{[c.title, c.email, c.phone].filter(Boolean).join(' · ')}</div>
+              <div key={c.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.name}{c.is_primary && <span className="badge badge-dim" style={{ marginLeft: 6, fontSize: 9 }}>primary</span>}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-hint)' }}>{[c.title, c.email, c.phone].filter(Boolean).join(' · ') || '—'}</div>
+                  </div>
+                  {isOwner && <button className="btn btn-ghost btn-sm" onClick={async () => { if (await confirm({ title: 'Remove contact?', body: c.name, confirmLabel: 'Remove', danger: true })) delContact.mutate(c.id) }}>✕</button>}
                 </div>
-                {isOwner && <button className="btn btn-ghost btn-sm" onClick={async () => { if (await confirm({ title: 'Remove contact?', body: c.name, confirmLabel: 'Remove', danger: true })) delContact.mutate(c.id) }}>✕</button>}
+                <CustomFields object="contact" recordId={c.id} custom={c.custom} canEdit={canEdit} />
               </div>
             ))}
             {canEdit && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                <input value={contactForm.name} onChange={e => setContactForm({ ...contactForm, name: e.target.value })} placeholder="Name" style={{ flex: '1 1 110px' }} />
-                <input value={contactForm.title} onChange={e => setContactForm({ ...contactForm, title: e.target.value })} placeholder="Title" style={{ flex: '1 1 90px' }} />
-                <input value={contactForm.email} onChange={e => setContactForm({ ...contactForm, email: e.target.value })} placeholder="Email" style={{ flex: '1 1 130px' }} />
+                <input value={contactForm.name} onChange={e => setContactForm({ ...contactForm, name: e.target.value })} placeholder="Name" style={{ flex: '1 1 100px' }} />
+                <input value={contactForm.title} onChange={e => setContactForm({ ...contactForm, title: e.target.value })} placeholder="Title" style={{ flex: '1 1 80px' }} />
+                <input value={contactForm.email} onChange={e => setContactForm({ ...contactForm, email: e.target.value })} placeholder="Email" style={{ flex: '1 1 120px' }} />
+                <input value={contactForm.phone} onChange={e => setContactForm({ ...contactForm, phone: e.target.value })} placeholder="Phone" type="tel" style={{ flex: '1 1 110px' }} />
                 <button className="btn btn-primary btn-sm" disabled={!contactForm.name.trim() || addContact.isPending} onClick={() => addContact.mutate()}>Add</button>
               </div>
             )}
@@ -82,15 +112,21 @@ export default function CompanyDetail({ role }: { role: string }) {
 
           {/* Deals */}
           <div className="card">
-            <div className="section-label">Deals</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div className="section-label" style={{ margin: 0 }}>Deals</div>
+              {manageBtn('deal')}
+            </div>
             {deals.length === 0 && <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>None yet.</div>}
             {deals.map((d: CrmDeal) => (
-              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border)' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-hint)' }}>{d.pipeline} · {prettyStage(d.stage)} · <span className={`badge ${d.status === 'won' ? 'badge-green' : d.status === 'lost' ? 'badge-red' : 'badge-dim'}`}>{d.status}</span></div>
+              <div key={d.id} style={{ padding: '9px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-hint)' }}>{d.pipeline} · {prettyStage(d.stage)} · <span className={`badge ${d.status === 'won' ? 'badge-green' : d.status === 'lost' ? 'badge-red' : 'badge-dim'}`}>{d.status}</span></div>
+                  </div>
+                  <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{fmtAmount(d.amount, d.currency)}</span>
                 </div>
-                <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{fmtAmount(d.amount, d.currency)}</span>
+                <CustomFields object="deal" recordId={d.id} custom={d.custom} canEdit={canEdit} />
               </div>
             ))}
             {canEdit && (
@@ -139,6 +175,8 @@ export default function CompanyDetail({ role }: { role: string }) {
           ))}
         </div>
       </div>
+
+      {manageObj && <ManageFieldsModal object={manageObj} onClose={() => setManageObj(null)} />}
     </div>
   )
 }

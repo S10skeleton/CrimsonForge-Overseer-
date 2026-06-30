@@ -217,12 +217,13 @@ export function CfpAccounts({ role }: { role: string }) {
         ) : (
           <>
             <table>
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Shop</th><th>Status</th><th>Legal</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Shop</th><th>Status</th><th>Legal</th></tr></thead>
               <tbody>
                 {filteredUsers.map(u => (
                   <tr key={u.id} style={{ opacity: u.deactivated ? .5 : 1 }}>
                     <td style={{ fontWeight: 600 }}>{u.full_name || '—'}</td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{u.email || '—'}</td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 13 }} className="mono">{u.phone || '—'}</td>
                     <td><span className={`badge ${ROLE_BADGE[u.role] ?? 'badge-dim'}`}>{u.role?.replace('_', ' ') ?? '—'}</span></td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{u.shops?.name ?? '—'}</td>
                     <td><span className={`badge ${u.deactivated ? 'badge-red' : 'badge-green'}`}>{u.deactivated ? 'Inactive' : 'Active'}</span></td>
