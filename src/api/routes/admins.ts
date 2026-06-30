@@ -7,7 +7,7 @@
 import { Router } from 'express'
 import crypto from 'crypto'
 import type { Role, AuthRequest } from '../middleware/auth.js'
-import { requireAdmin, requireOwner } from '../middleware/auth.js'
+import { requireOwner } from '../middleware/auth.js'
 import { overseerDb } from '../../lib/overseerDb.js'
 import { hashPassword } from '../../lib/password.js'
 import { audit } from '../../lib/audit.js'
@@ -15,7 +15,7 @@ import { sendEmail, isEmailConfigured } from '../../notifications/email.js'
 import { inviteEmail } from '../../notifications/emailTemplates.js'
 import { presetPermissions } from '../../lib/permissions.js'
 import type { Permissions } from '../../lib/permissions.js'
-import { bumpTrustedVersion } from './auth.js'
+import { bumpTrustedVersion, bumpSessionVersion } from './auth.js'
 
 const router = Router()
 
@@ -42,8 +42,11 @@ async function activeOwnerCount(): Promise<number> {
   return count ?? 0
 }
 
+// All /api/admins routes are OWNER-ONLY (SUPERADMIN-2 — Admins & Roles is now an
+// owner surface inside SuperAdmin). The invitee accept flow lives on /api/auth/*
+// and stays public so teammates can accept.
 // ─── GET /api/admins ─────────────────────────────────────────────────────────
-router.get('/', requireAdmin, async (_req, res) => {
+router.get('/', requireOwner, async (_req, res) => {
   const { data, error } = await overseerDb
     .from('overseer_admins')
     .select(SAFE_COLUMNS)
@@ -201,6 +204,34 @@ router.post('/:id/reset-2fa', requireOwner, async (req: AuthRequest, res) => {
   res.json({ ok: true })
 })
 
+// ─── POST /api/admins/:id/force-logout ── sign one account out everywhere ──────
+// Bumps session_version (kills active 24h sessions) AND trusted_device_version
+// (forgets trusted devices → TOTP again). For a lost/compromised device.
+router.post('/:id/force-logout', requireOwner, async (req: AuthRequest, res) => {
+  const id = String(req.params.id)
+  const { data: current } = await overseerDb.from('overseer_admins').select('id, username').eq('id', id).maybeSingle()
+  const target = current as { id: string; username: string } | null
+  if (!target) { res.status(404).json({ error: 'Admin not found' }); return }
+
+  await bumpSessionVersion(id)
+  await bumpTrustedVersion(id)
+  audit(req, { action: 'admin.force_logout', targetType: 'admin', targetId: id, meta: { username: target.username } })
+  res.json({ ok: true })
+})
+
+// ─── POST /api/admins/signout-all ── sign EVERY account out everywhere ─────────
+router.post('/signout-all', requireOwner, async (req: AuthRequest, res) => {
+  const { data, error } = await overseerDb.from('overseer_admins').select('id').eq('status', 'active')
+  if (error) { res.status(500).json({ error: 'Could not load accounts' }); return }
+  const ids = (data ?? []).map((r: { id: string }) => r.id)
+  for (const id of ids) {
+    await bumpSessionVersion(id)
+    await bumpTrustedVersion(id)
+  }
+  audit(req, { action: 'admin.signout_all', targetType: 'admin', targetId: 'all', meta: { count: ids.length } })
+  res.json({ ok: true, count: ids.length })
+})
+
 // ─── Invites ─────────────────────────────────────────────────────────────────
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000
 
@@ -245,7 +276,7 @@ router.post('/invite', requireOwner, async (req: AuthRequest, res) => {
 })
 
 // GET /api/admins/invites — pending/recent invites (never the token hash)
-router.get('/invites', requireAdmin, async (_req, res) => {
+router.get('/invites', requireOwner, async (_req, res) => {
   const { data, error } = await overseerDb
     .from('overseer_invites')
     .select(INVITE_COLUMNS)

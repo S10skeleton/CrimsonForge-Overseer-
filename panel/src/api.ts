@@ -235,6 +235,8 @@ export const api = {
     resendInvite: (id: string) => request<{ ok: boolean; emailed: boolean; acceptUrl?: string }>(`/api/admins/invites/${id}/resend`, { method: 'POST' }),
     revokeInvite: (id: string) => request<{ ok: boolean }>(`/api/admins/invites/${id}/revoke`, { method: 'POST' }),
     reset2fa: (id: string) => request<{ ok: boolean }>(`/api/admins/${id}/reset-2fa`, { method: 'POST' }),
+    forceLogout: (id: string) => request<{ ok: boolean }>(`/api/admins/${id}/force-logout`, { method: 'POST' }),
+    signoutAll: () => request<{ ok: boolean; count: number }>('/api/admins/signout-all', { method: 'POST' }),
   },
 
   home: {

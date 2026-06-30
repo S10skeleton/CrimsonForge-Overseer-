@@ -27,7 +27,9 @@ import CompaniesView  from './tabs/crm/CompaniesView'
 import CompanyDetail  from './tabs/crm/CompanyDetail'
 import CrmTable       from './tabs/crm/CrmTable'
 import InboxesView    from './tabs/crm/InboxesView'
-import SuperAdminView from './tabs/superadmin/SuperAdminView'
+import SuperAdminLayout from './tabs/superadmin/SuperAdminLayout'
+import BlocklistView   from './tabs/superadmin/BlocklistView'
+import SessionsView    from './tabs/superadmin/SessionsView'
 import PhoneHub       from './tabs/phone/PhoneHub'
 import FinancialsLayout from './tabs/financials/FinancialsLayout'
 import RevenueView      from './tabs/financials/RevenueView'
@@ -193,12 +195,18 @@ export default function App() {
         </Route>
         <Route path="system"     element={<SystemTab />} />
 
-        {/* SuperAdmin — owner-only (view self-guards; backend stays owner-only) */}
-        <Route path="superadmin" element={<SuperAdminView />} />
+        {/* SuperAdmin — owner-only control center (layout self-guards; backend owner-only) */}
+        <Route path="superadmin" element={<SuperAdminLayout />}>
+          <Route index element={<Navigate to="/superadmin/blocklist" replace />} />
+          <Route path="blocklist" element={<BlocklistView />} />
+          <Route path="admins"    element={<AdminsTab role={role} />} />
+          <Route path="sessions"  element={<SessionsView />} />
+        </Route>
 
         {/* Settings */}
         <Route path="settings/security"     element={<SecuritySettings />} />
-        <Route path="settings/admins"       element={<AdminsTab role={role} />} />
+        {/* Admins & Roles moved into SuperAdmin (owner-only) — keep the old path working */}
+        <Route path="settings/admins"       element={<Navigate to="/superadmin/admins" replace />} />
         <Route path="settings/audit"        element={<Placeholder title="Audit Log" phase="Phase 2" note="overseer_audit viewer (events available now under Activity)." />} />
         <Route path="settings/integrations" element={<Placeholder title="Integrations" phase="Phase 2" note="Slack, Gmail, Calendar, Twilio, Resend, Stripe, Railway, Sentry, Netlify." />} />
         <Route path="activity"              element={<ActivityTab />} />
