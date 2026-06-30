@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { CfpOverview, CfpAccounts } from './customers/CrimsonForgeViews'
-import { FpOverview, FpAccounts, FpSessions, FpInsights, FpInvites } from './customers/ForgePilotViews'
+import { FpOverview, FpAccounts, FpSessions, FpInsights, FpInvites, FpWaitlist } from './customers/ForgePilotViews'
 import BillingTab from './BillingTab'
 import MessagesTab from './MessagesTab'
 import FeedbackTab from './FeedbackTab'
@@ -35,6 +35,7 @@ const PRODUCTS: Product[] = [
       { key: 'sessions', label: 'Sessions' },
       { key: 'insights', label: 'Insights' },
       { key: 'invites',  label: 'Invites' },
+      { key: 'waitlist', label: 'Waitlist' },
       { key: 'billing',  label: 'Billing' },
       { key: 'messages', label: 'Messages' },
       { key: 'feedback', label: 'Feedback' },
@@ -66,6 +67,7 @@ function renderView(slug: string, view: string, role: string) {
       case 'sessions': return <FpSessions />
       case 'insights': return <FpInsights />
       case 'invites':  return <FpInvites role={role} />
+      case 'waitlist': return <FpWaitlist />
       case 'billing':  return <ForgePilotBillingTab />
       case 'messages': return <ForgePilotMessagesTab role={role} />
       case 'feedback': return <ForgePilotFeedbackTab role={role} />

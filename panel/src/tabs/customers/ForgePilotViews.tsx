@@ -11,6 +11,7 @@ import { api } from '../../api'
 import { useToast } from '../../components/Toast'
 import { useConfirm } from '../../components/ConfirmDialog'
 import InsightsPanel from '../../components/InsightsPanel'
+import WaitlistTable from '../../components/WaitlistTable'
 import { CustomerView, MetricCards, DataCard, fmtNum } from './shared'
 
 const PRODUCT = 'forgepilot' as const
@@ -188,6 +189,16 @@ export function FpInsights() {
   return (
     <CustomerView title="Insights" product={PRODUCT}>
       <InsightsPanel insights={insights.data ?? []} loading={insights.isLoading} daysFilter={days} onDaysFilterChange={setDays} />
+    </CustomerView>
+  )
+}
+
+// ── Waitlist ────────────────────────────────────────────────────────────────
+export function FpWaitlist() {
+  const waitlist = useQuery({ queryKey: ['cfp', 'forgepilot-waitlist'], queryFn: api.cfp.forgePilotWaitlist })
+  return (
+    <CustomerView title="Waitlist" product={PRODUCT}>
+      <WaitlistTable entries={waitlist.data ?? []} loading={waitlist.isLoading} product="forgepilot" />
     </CustomerView>
   )
 }
