@@ -31,10 +31,11 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'platform', label: 'Platform', items: [
+      // Platform stays infra-only. ForgePulse is a customer product — reachable
+      // under Customers → ForgePulse (the standalone item here was redundant).
       { to: '/enterprise', label: 'Enterprise', glyph: '◰', permKey: 'enterprise' },
       { to: '/financials', label: 'Financials', glyph: '⬨', permKey: 'financials' },
       { to: '/system',     label: 'System',     glyph: '◈', permKey: 'system' },
-      { to: '/forgepulse', label: 'ForgePulse', glyph: '◎', permKey: 'customers' },
     ],
   },
   {
