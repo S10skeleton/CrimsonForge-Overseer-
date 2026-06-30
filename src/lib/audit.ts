@@ -48,7 +48,9 @@ export const AUDIT_ACTIONS = [
   'crm.lead_convert',
 ] as const
 
-export type AuditAction = (typeof AUDIT_ACTIONS)[number] | (string & {})
+// `string & Record<never, never>` keeps literal autocomplete while still
+// accepting any string (the `& {}` idiom, written to satisfy ban-types).
+export type AuditAction = (typeof AUDIT_ACTIONS)[number] | (string & Record<never, never>)
 
 /**
  * Actions that also emit an activity event (live audit feed in #cf-activity).

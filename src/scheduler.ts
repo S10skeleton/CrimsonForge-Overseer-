@@ -45,7 +45,7 @@ async function storeBriefing(content: string): Promise<void> {
     }
 
     const lines = content.split('\n').filter(l => l.trim())
-    const summaryLine = lines[0]?.replace(/[🟢🟡🔴]/g, '').trim() ?? ''
+    const summaryLine = lines[0]?.replace(/[🟢🟡🔴]/gu, '').trim() ?? ''
 
     await sb.from('agent_briefings').insert({
       content,
@@ -319,7 +319,7 @@ async function runMorningBriefing(opts: { preview?: boolean } = {}): Promise<str
         monitors.netlify(),
       ])
 
-    function getResult<T>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } {
+    const getResult = <T,>(result: PromiseSettledResult<T>): T & { success: boolean; error?: string } => {
       if (result.status === 'rejected') {
         return {
           success: false,

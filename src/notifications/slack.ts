@@ -310,7 +310,7 @@ export async function sendAlertToChannel(channelId: string | undefined, alert: A
   } catch (err) {
     console.error('[slack] Error sending alert to channel:', err)
     // Best-effort fallback
-    try { await sendAlert(alert) } catch {}
+    try { await sendAlert(alert) } catch { /* best-effort — already logged */ }
   }
 }
 
