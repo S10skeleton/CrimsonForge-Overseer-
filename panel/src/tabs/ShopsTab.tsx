@@ -206,7 +206,7 @@ export default function ShopsTab({ role }: { role: string }) {
                   <div
                     onClick={() => { if (readOnly) return; setEditingNotes(shop.id); setNotesDraft(shop.founder_notes || '') }}
                     style={{ fontSize: 12, color: 'var(--dim)', cursor: readOnly ? 'default' : 'pointer' }}
-                    title={readOnly ? 'Owner access required to edit notes' : undefined}
+                    title={readOnly ? 'SuperAdmin access required to edit notes' : undefined}
                   >
                     {shop.founder_notes ? <span>{shop.founder_notes}</span> : !readOnly && <span style={{ opacity: .5 }}>+ Add notes</span>}
                   </div>

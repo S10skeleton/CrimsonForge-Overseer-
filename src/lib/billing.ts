@@ -35,16 +35,17 @@ const EMPTY: FPBilling = {
   paymentFailures: [], hasPaymentFailures: false, planBreakdown: { solo: 0, shop: 0 },
 }
 
-export async function getForgePilotBilling(): Promise<FPBilling> {
+/** Compute billing over the subscriptions matching `include` (shared by FP + CFP). */
+async function computeBilling(include: (sub: Stripe.Subscription) => boolean): Promise<FPBilling> {
   const stripeKey = process.env.STRIPE_SECRET_KEY
   if (!stripeKey) return EMPTY
 
   const stripe = new Stripe(stripeKey)
 
   const allActive = await stripe.subscriptions.list({ status: 'active', limit: 100 })
-  const fpActive = allActive.data.filter(isFPSub)
+  const active = allActive.data.filter(include)
 
-  const mrr = fpActive.reduce((sum, sub) => {
+  const mrr = active.reduce((sum, sub) => {
     const item = sub.items.data[0]
     if (!item) return sum
     const amount = item.price.unit_amount || 0
@@ -55,15 +56,15 @@ export async function getForgePilotBilling(): Promise<FPBilling> {
   const startOfMonth = new Date()
   startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
 
-  const newThisMonth = fpActive.filter((s) => new Date(s.created * 1000) >= startOfMonth).length
+  const newThisMonth = active.filter((s) => new Date(s.created * 1000) >= startOfMonth).length
 
   const cancelled = await stripe.subscriptions.list({
     status: 'canceled', created: { gte: Math.floor(startOfMonth.getTime() / 1000) }, limit: 100,
   })
-  const cancelledThisMonth = cancelled.data.filter(isFPSub).length
+  const cancelledThisMonth = cancelled.data.filter(include).length
 
   const planBreakdown = { solo: 0, shop: 0 }
-  for (const sub of fpActive) {
+  for (const sub of active) {
     for (const item of sub.items.data) {
       const pid = item.price.product as string
       if (pid === FP_SOLO) planBreakdown.solo++
@@ -78,7 +79,7 @@ export async function getForgePilotBilling(): Promise<FPBilling> {
     if (!subId) continue
     try {
       const sub = await stripe.subscriptions.retrieve(subId)
-      if (!isFPSub(sub)) continue
+      if (!include(sub)) continue
     } catch { continue }
     const customer = inv.customer as Stripe.Customer
     paymentFailures.push({
@@ -92,10 +93,21 @@ export async function getForgePilotBilling(): Promise<FPBilling> {
   }
 
   return {
-    activeSubscriptions: fpActive.length,
+    activeSubscriptions: active.length,
     mrr: Math.round(mrr * 100) / 100,
     newThisMonth, cancelledThisMonth,
     paymentFailures, hasPaymentFailures: paymentFailures.length > 0,
     planBreakdown,
   }
+}
+
+export async function getForgePilotBilling(): Promise<FPBilling> {
+  return computeBilling(isFPSub)
+}
+
+// CrimsonForge Pro = the shared Stripe account's NON-ForgePilot subscriptions.
+// $0/0 today (all paid subs are FP's); real CFP revenue once CFP has its own.
+// TODO: define CFP_PRODUCT_IDS and filter positively once CFP billing exists.
+export async function getCfpBilling(): Promise<FPBilling> {
+  return computeBilling((sub) => !isFPSub(sub))
 }

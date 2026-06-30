@@ -7,6 +7,7 @@
 import { Router } from 'express'
 import { createClient } from '@supabase/supabase-js'
 import { monitors } from '../../tools/index.js'
+import { getCfpBilling } from '../../lib/billing.js'
 
 const router = Router()
 
@@ -31,7 +32,7 @@ router.get('/', async (_req, res) => {
     const [
       uptime, railway, supabase, sentry, stripe, twilio, resend, netlify,
       fpSupabase, fpStripe, fpUptime,
-      pulseWaitlistCount,
+      pulseWaitlistCount, cfpStripe,
     ] = await Promise.allSettled([
       monitors.uptime(),
       monitors.railway(),
@@ -45,6 +46,7 @@ router.get('/', async (_req, res) => {
       monitors.fp_stripe(),
       monitors.fp_uptime(),
       getForgePulseWaitlistCount(),
+      getCfpBilling().then((data) => ({ success: true, data })),
     ])
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +66,7 @@ router.get('/', async (_req, res) => {
       supabase: resolve(supabase),
       sentry:   resolve(sentry),
       stripe:   resolve(stripe),
+      cfp_stripe: resolve(cfpStripe),  // CFP-scoped (non-FP) revenue for the CFP card
       twilio:   resolve(twilio),
       resend:   resolve(resend),
       netlify:  resolve(netlify),

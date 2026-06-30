@@ -292,7 +292,7 @@ export default function ForgePilotTab({ role }: { role: string }) {
             <button
               onClick={() => { setInviteModal(true); setInviteError(null) }}
               disabled={readOnly}
-              title={readOnly ? 'Owner access required' : undefined}
+              title={readOnly ? 'SuperAdmin access required' : undefined}
               style={{
                 marginLeft: 'auto',
                 background: 'var(--accent)',
@@ -369,13 +369,13 @@ export default function ForgePilotTab({ role }: { role: string }) {
                       <button
                         onClick={() => handleResend(inv.id)}
                         disabled={readOnly}
-                        title={readOnly ? 'Owner access required' : undefined}
+                        title={readOnly ? 'SuperAdmin access required' : undefined}
                         style={{ ...smallBtn('var(--cyan)'), ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
                       >RESEND</button>
                       <button
                         onClick={() => handleRevoke(inv.id, inv.email)}
                         disabled={readOnly}
-                        title={readOnly ? 'Owner access required' : undefined}
+                        title={readOnly ? 'SuperAdmin access required' : undefined}
                         style={{ ...smallBtn('var(--red)'), ...(readOnly ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
                       >REVOKE</button>
                     </>

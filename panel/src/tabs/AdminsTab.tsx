@@ -9,7 +9,8 @@ import PermissionMatrix from '../components/PermissionMatrix'
 import { presetPermissions } from '../lib/permissions'
 import type { Permissions } from '../lib/permissions'
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', admin: 'Admin', read_only: 'Read-only', custom: 'Custom' }
+// Display only — the stored/checked role value stays 'owner' (see OVERSEER-TWEAK).
+const ROLE_LABEL: Record<string, string> = { owner: 'SuperAdmin', admin: 'Admin', read_only: 'Read-only', custom: 'Custom' }
 
 function errMsg(e: unknown): string {
   if (e instanceof Error) { try { return JSON.parse(e.message).error ?? e.message } catch { return e.message } }
@@ -86,7 +87,7 @@ export default function AdminsTab({ role }: { role: string }) {
             <div style={{ flex: '1 1 130px' }}><label className="mono" style={{ fontSize: 10, color: 'var(--text-hint)' }}>NAME</label><input value={inv.displayName} onChange={e => setInv({ ...inv, displayName: e.target.value })} /></div>
             <div style={{ flex: '0 1 120px' }}><label className="mono" style={{ fontSize: 10, color: 'var(--text-hint)' }}>USERNAME</label><input value={inv.username} onChange={e => setInv({ ...inv, username: e.target.value })} placeholder="optional" /></div>
             <div style={{ flex: '0 1 120px' }}><label className="mono" style={{ fontSize: 10, color: 'var(--text-hint)' }}>PRESET</label>
-              <select value={inv.role} onChange={e => onRolePreset(e.target.value)}><option value="admin">Admin</option><option value="read_only">Read-only</option><option value="owner">Owner</option><option value="custom">Custom</option></select></div>
+              <select value={inv.role} onChange={e => onRolePreset(e.target.value)}><option value="admin">Admin</option><option value="read_only">Read-only</option><option value="owner">SuperAdmin</option><option value="custom">Custom</option></select></div>
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-hint)', marginBottom: 8 }}>{inv.role === 'custom' ? 'Set each area below.' : 'Preset applied — switch to Custom to edit per area.'}</div>
           <PermissionMatrix value={invPerms} onChange={setInvPerms} disabled={inv.role !== 'custom'} />
@@ -135,7 +136,7 @@ export default function AdminsTab({ role }: { role: string }) {
                       <td>
                         {isOwner ? (
                           <select value={a.role} onChange={e => changeRole(a, e.target.value)} style={{ width: 'auto', padding: '5px 8px' }}>
-                            <option value="owner">Owner</option><option value="admin">Admin</option><option value="read_only">Read-only</option>
+                            <option value="owner">SuperAdmin</option><option value="admin">Admin</option><option value="read_only">Read-only</option>
                           </select>
                         ) : <span className={`badge ${a.role === 'owner' ? 'badge-crimson' : a.role === 'admin' ? 'badge-violet' : 'badge-dim'}`}>{ROLE_LABEL[a.role]}</span>}
                       </td>
