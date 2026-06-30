@@ -74,16 +74,17 @@ export default function AskElara() {
   return (
     <>
       <button onClick={() => setOpen(o => !o)} title="Ask Elara" style={{
-        position: 'fixed', bottom: 22, right: 22, zIndex: 200, width: 56, height: 56, borderRadius: '50%',
-        border: 'none', cursor: 'pointer', background: ACCENT, boxShadow: '0 6px 20px rgba(89,73,172,.4)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+        position: 'fixed', bottom: 18, right: 18, zIndex: 200, width: 88, height: 88,
+        border: 'none', cursor: 'pointer', background: 'transparent', padding: 0, overflow: 'hidden',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <img src="/elara-mark.png" alt="Elara" width={48} height={48} />
+        {/* Icon has built-in transparent padding — scale it up and clip to enlarge the mark itself (no circle). */}
+        <img src="/elara-mark.png" alt="Elara" width={176} height={176} style={{ filter: 'drop-shadow(0 4px 12px rgba(89,73,172,.45))' }} />
       </button>
 
       {open && (
         <div style={{
-          position: 'fixed', bottom: 90, right: 22, zIndex: 200, width: 'min(420px, calc(100vw - 32px))', height: 'min(620px, calc(100vh - 130px))',
+          position: 'fixed', bottom: 116, right: 22, zIndex: 200, width: 'min(420px, calc(100vw - 32px))', height: 'min(620px, calc(100vh - 160px))',
           background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 12px 40px rgba(26,29,35,.22)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'fade-up .2s ease both',
         }}>
