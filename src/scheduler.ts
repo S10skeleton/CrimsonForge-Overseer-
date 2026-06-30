@@ -12,6 +12,7 @@ import { generateAIBriefing } from './agent/index.js'
 import { setLastBriefing } from './slack-bot.js'
 import { runSummarizationDispatcher } from './jobs/summarize.js'
 import { runDmarcDigest, getDmarcBriefingLine } from './jobs/dmarc-digest.js'
+import { runCrmSync } from './jobs/crm-sync.js'
 import { runInsightAnalysis } from './jobs/fp-insights.js'
 import { runMrrSnapshot } from './jobs/mrr-snapshot.js'
 import { runForgePilotSupabaseCheck } from './tools/supabase-forgepilot.js'
@@ -601,6 +602,7 @@ const BUILTIN_JOBS: Record<string, () => Promise<unknown>> = {
     try { await runSummarizationDispatcher() } catch (err) { console.error('[SCHEDULER] summarization dispatcher:', err) }
   },
   mrr_snapshot: () => runMrrSnapshot(),
+  crm_email_sync: () => runCrmSync(),
   dmarc_digest: () => runDmarcDigest(),
 }
 

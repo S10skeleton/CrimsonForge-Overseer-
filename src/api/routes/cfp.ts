@@ -84,18 +84,16 @@ router.get('/users', async (_req, res) => {
   try {
     const sb = getCFPSupabase()
 
-    // Fetch profiles — email is NOT stored in profiles, it lives in auth.users
-    const { data: profiles, error: profilesError } = await sb
-      .from('profiles')
-      .select(`
-        id, full_name, role, deactivated,
-        tos_accepted_at, tos_version, privacy_accepted_at,
-        created_at, updated_at,
-        shops:shop_id(id, name)
-      `)
-      .order('created_at', { ascending: false })
-
-    if (profilesError) throw profilesError
+    // Fetch profiles — email is NOT stored in profiles, it lives in auth.users.
+    // `phone` is captured at signup; tolerate DBs where the column isn't present
+    // yet by retrying the select without it (P1a: surface phone read-only).
+    const baseCols = `id, full_name, role, deactivated, tos_accepted_at, tos_version, privacy_accepted_at, created_at, updated_at, shops:shop_id(id, name)`
+    const selectProfiles = (withPhone: boolean) =>
+      sb.from('profiles').select(withPhone ? `${baseCols}, phone` : baseCols).order('created_at', { ascending: false })
+    let pr = await selectProfiles(true)
+    if (pr.error) pr = await selectProfiles(false)
+    if (pr.error) throw pr.error
+    const profiles = pr.data
 
     // Fetch emails from auth.users via admin API (requires service role key)
     const { data: authData, error: authError } = await sb.auth.admin.listUsers({
@@ -109,14 +107,14 @@ router.get('/users', async (_req, res) => {
       return
     }
 
-    // Join emails onto profiles
-    const emailMap = Object.fromEntries(
-      (authData.users ?? []).map((u) => [u.id, u.email ?? null])
-    )
+    // Join emails (+ auth phone as a fallback) onto profiles
+    const emailMap = Object.fromEntries((authData.users ?? []).map((u) => [u.id, u.email ?? null]))
+    const phoneMap = Object.fromEntries((authData.users ?? []).map((u) => [u.id, u.phone ?? null]))
 
     const enriched = (profiles ?? []).map((p: any) => ({
       ...p,
       email: emailMap[p.id] ?? null,
+      phone: p.phone ?? phoneMap[p.id] ?? null,
     }))
 
     res.json(enriched)

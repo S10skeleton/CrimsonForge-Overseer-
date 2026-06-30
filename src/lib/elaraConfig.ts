@@ -45,6 +45,7 @@ function defaultSchedules(): Schedule[] {
     { job_key: 'health_check',       label: 'Health check',              cron: '*/15 * * * *',           timezone: null, enabled: true, is_custom: false },
     { job_key: 'summarize',          label: 'Conversation summarization', cron: '* * * * *',             timezone: null, enabled: true, is_custom: false },
     { job_key: 'mrr_snapshot',       label: 'MRR snapshot',              cron: '55 23 * * *',            timezone: null, enabled: true, is_custom: false },
+    { job_key: 'crm_email_sync',     label: 'CRM email + calendar sync', cron: '*/20 * * * *',           timezone: null, enabled: true, is_custom: false },
     { job_key: 'dmarc_digest',       label: 'DMARC email-security digest', cron: '30 7 * * *',           timezone: null, enabled: true, is_custom: false },
   ]
 }

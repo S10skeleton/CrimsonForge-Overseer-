@@ -117,16 +117,26 @@ export interface ElaraConfig {
   customJobs: ElaraCustomJob[]
 }
 
+export type CrmFieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'phone' | 'email' | 'url' | 'boolean' | 'currency'
+export interface CrmFieldDef {
+  id: string; object: 'company' | 'contact' | 'deal'; key: string; label: string
+  type: CrmFieldType; options: string[] | null; position: number; archived: boolean; created_at: string
+}
+export type CrmCustom = Record<string, unknown>
+export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; created_at: string }
+export interface CrmBlocklistEntry { id: string; pattern: string; reason: string | null; created_at: string }
+export interface CrmThreadMessage { id: string; from: string; to: string; date: string; subject: string; body: string }
+
 export interface CrmCompany {
   id: string; name: string; type: string; status: string; website: string | null
   fp_shop_id: string | null; fp_customer_id: string | null; source_lead_id: string | null
-  owner: string | null; notes: string | null; tags: string[]; created_at: string; updated_at: string
+  owner: string | null; notes: string | null; tags: string[]; custom?: CrmCustom; created_at: string; updated_at: string
 }
-export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; created_at: string }
+export interface CrmContact { id: string; company_id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean; notes: string | null; custom?: CrmCustom; created_at: string }
 export interface CrmDeal {
   id: string; company_id: string; company_name?: string | null; name: string; pipeline: string; stage: string
   amount: number | null; currency: string; probability: number | null; status: string; expected_close: string | null
-  owner: string | null; notes: string | null; created_at: string; updated_at: string
+  owner: string | null; notes: string | null; custom?: CrmCustom; created_at: string; updated_at: string
 }
 export interface CrmActivity { id: string; company_id: string; contact_id: string | null; deal_id: string | null; type: string; subject: string | null; body: string | null; due_at: string | null; done: boolean; created_by: string | null; created_at: string }
 export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
@@ -292,6 +302,30 @@ export const api = {
 
     convertLead: (id: string, body: { type?: string; pipeline?: string; dealName?: string; amount?: number }) =>
       request<{ data: { company: CrmCompany; alreadyConverted?: boolean } }>(`/api/crm/leads/${id}/convert`, { method: 'POST', body: JSON.stringify(body) }).then(r => r.data),
+
+    // Custom field definitions (Attio-style attributes)
+    fields: (object?: 'company' | 'contact' | 'deal', all?: boolean) => {
+      const p = new URLSearchParams()
+      if (object) p.set('object', object)
+      if (all) p.set('all', '1')
+      const qs = p.toString()
+      return request<{ data: CrmFieldDef[] }>(`/api/crm/fields${qs ? `?${qs}` : ''}`).then(r => r.data)
+    },
+    createField: (f: { object: string; key: string; label: string; type: string; options?: string[] | null; position?: number }) =>
+      request<{ data: CrmFieldDef }>('/api/crm/fields', { method: 'POST', body: JSON.stringify(f) }).then(r => r.data),
+    updateField: (id: string, f: Partial<Pick<CrmFieldDef, 'label' | 'options' | 'position' | 'archived'>>) =>
+      request<{ data: CrmFieldDef }>(`/api/crm/fields/${id}`, { method: 'PATCH', body: JSON.stringify(f) }).then(r => r.data),
+    deleteField: (id: string) => request(`/api/crm/fields/${id}`, { method: 'DELETE' }),
+
+    // Connected inboxes (Gmail/Calendar sync, P1b)
+    syncAccounts: () => request<{ data: CrmSyncAccount[]; configured: boolean; domain: string }>('/api/crm/sync/accounts'),
+    addSyncAccount: (m: { email: string; method?: string }) => request<{ data: CrmSyncAccount }>('/api/crm/sync/accounts', { method: 'POST', body: JSON.stringify(m) }).then(r => r.data),
+    updateSyncAccount: (email: string, m: { enabled: boolean }) => request(`/api/crm/sync/accounts/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify(m) }),
+    removeSyncAccount: (email: string) => request(`/api/crm/sync/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' }),
+    blocklist: () => request<{ data: CrmBlocklistEntry[] }>('/api/crm/sync/blocklist').then(r => r.data),
+    addBlock: (b: { pattern: string; reason?: string }) => request<{ data: CrmBlocklistEntry }>('/api/crm/sync/blocklist', { method: 'POST', body: JSON.stringify(b) }).then(r => r.data),
+    removeBlock: (id: string) => request(`/api/crm/sync/blocklist/${id}`, { method: 'DELETE' }),
+    thread: (activityId: string) => request<{ data: { subject: string; messages: CrmThreadMessage[] } }>(`/api/crm/sync/thread?activity_id=${encodeURIComponent(activityId)}`).then(r => r.data),
   },
 
   elaraConfig: {

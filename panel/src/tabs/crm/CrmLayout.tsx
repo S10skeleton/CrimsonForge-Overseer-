@@ -13,6 +13,8 @@ export default function CrmLayout() {
   const loc = useLocation()
   const navigate = useNavigate()
   const tabs = TABS.filter(t => canView(permissions, role, t.key))
+  // Connected inboxes is owner/admin only (no separate permission key).
+  if (role === 'owner' || role === 'admin') tabs.push({ to: '/crm/inboxes', label: 'Inboxes', key: 'crm.companies' })
 
   // Land on the first allowed sub-tab (and bounce off hidden ones).
   useEffect(() => {
