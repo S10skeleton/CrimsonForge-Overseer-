@@ -129,10 +129,16 @@ router.get('/raise', async (_req, res) => {
     .order('updated_at', { ascending: false })
   const deals = (data ?? []) as Array<{ id: string; name: string; company_id: string; stage: string; amount: number | null; status: string }>
 
-  // "Committed" = open/won fundraising deals (lost excluded).
+  // Honest split: committed = SIGNED (closed-won) only; pipeline = still open
+  // (diligence, etc.). Lost is excluded from both. An open deal must never read
+  // as committed money — that's misleading on our own dashboard and externally.
   const live = deals.filter(d => d.status !== 'lost')
-  const committed = live.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+  const committed = deals.filter(d => d.status === 'won')
+    .reduce((s, d) => s + (Number(d.amount) || 0), 0)
+  const pipeline = deals.filter(d => d.status === 'open')
+    .reduce((s, d) => s + (Number(d.amount) || 0), 0)
 
+  // Funnel still shows every live (non-lost) stage.
   const byStageMap = new Map<string, { stage: string; count: number; amount: number }>()
   for (const d of live) {
     const cur = byStageMap.get(d.stage) ?? { stage: d.stage, count: 0, amount: 0 }
@@ -140,7 +146,7 @@ router.get('/raise', async (_req, res) => {
     byStageMap.set(d.stage, cur)
   }
 
-  res.json({ data: { target: RAISE_TARGET, committed, byStage: [...byStageMap.values()], deals } })
+  res.json({ data: { target: RAISE_TARGET, committed, pipeline, byStage: [...byStageMap.values()], deals } })
 })
 
 export default router
