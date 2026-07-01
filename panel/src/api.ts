@@ -306,6 +306,8 @@ export const api = {
     createDeal: (d: Partial<CrmDeal> & { company_id: string; name: string }) => request<{ data: CrmDeal }>('/api/crm/deals', { method: 'POST', body: JSON.stringify(d) }),
     updateDeal: (id: string, d: Partial<CrmDeal>) => request(`/api/crm/deals/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
     deleteDeal: (id: string) => request(`/api/crm/deals/${id}`, { method: 'DELETE' }),
+    merge: (object: 'companies' | 'contacts', keepId: string, mergeId: string) =>
+      request<{ data: { ok: boolean; keepId: string } }>(`/api/crm/${object}/merge`, { method: 'POST', body: JSON.stringify({ keepId, mergeId }) }),
 
     activities: (params: { company_id?: string; contact_id?: string; deal_id?: string }) => {
       const p = new URLSearchParams()
