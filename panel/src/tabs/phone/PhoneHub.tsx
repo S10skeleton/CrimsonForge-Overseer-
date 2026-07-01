@@ -6,7 +6,7 @@
  */
 import { useState, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { api } from '../../api'
 import type { QuoInbox } from '../../api'
 import { useToast } from '../../components/Toast'
@@ -19,6 +19,7 @@ function errMsg(e: unknown): string {
   return 'Something went wrong'
 }
 const rel = (d?: string) => (d ? formatDistanceToNow(new Date(d), { addSuffix: true }) : '—')
+const abs = (d?: string) => (d ? format(new Date(d), 'MMM d, yyyy · h:mm a') : '—')
 
 export default function PhoneHub() {
   const { permissions, role } = usePermissions()
@@ -137,7 +138,7 @@ function Conversations({ inbox, mayManage }: { inbox: QuoInbox; mayManage: boole
                 return (
                   <div key={m.id} style={{ alignSelf: out ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
                     <div style={{ padding: '8px 12px', borderRadius: 10, fontSize: 13, background: out ? 'var(--accent)' : 'var(--bg-elevated)', color: out ? '#fff' : 'var(--text-primary)' }}>{m.text ?? m.body}</div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-hint)', marginTop: 2, textAlign: out ? 'right' : 'left' }}>{rel(m.createdAt)}</div>
+                    <div title={rel(m.createdAt)} style={{ fontSize: 10.5, color: 'var(--text-hint)', marginTop: 2, textAlign: out ? 'right' : 'left' }}>{abs(m.createdAt)}</div>
                   </div>
                 )
               })}
@@ -173,7 +174,7 @@ function Calls({ inbox }: { inbox: QuoInbox }) {
                   <td style={{ fontWeight: 600 }}>{c.direction === 'incoming' ? c.from : c.to}</td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{c.status ?? '—'}</td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{c.duration ? `${Math.round(c.duration / 60)}m` : '—'}</td>
-                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{rel(c.createdAt)}</td>
+                  <td title={rel(c.createdAt)} style={{ color: 'var(--text-muted)', fontSize: 12 }}>{abs(c.createdAt)}</td>
                   <td><button className="btn btn-ghost btn-sm" onClick={() => setOpenId(openId === c.id ? '' : c.id)}>{openId === c.id ? 'Hide' : 'Transcript'}</button></td>
                 </tr>
                 {openId === c.id && (

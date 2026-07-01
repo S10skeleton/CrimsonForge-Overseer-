@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { api } from '../../api'
 import type { CrmContact, CrmDeal, CrmActivity } from '../../api'
 import { useToast } from '../../components/Toast'
@@ -178,7 +178,7 @@ export default function CompanyDetail({ role }: { role: string }) {
                 </div>
                 {a.body && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{a.body}</div>}
                 <div style={{ fontSize: 11.5, color: 'var(--text-hint)', marginTop: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span>{a.created_by ? `${a.created_by} · ` : ''}{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
+                  <span title={formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}>{a.created_by ? `${a.created_by} · ` : ''}{format(new Date(a.created_at), 'MMM d, yyyy · h:mm a')}</span>
                   {a.created_by === 'Gmail' && <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setThreadActivity(a.id)}>View thread</button>}
                 </div>
               </div>
