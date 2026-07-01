@@ -8,21 +8,42 @@ export default function RaiseView() {
   if (raise.isLoading) return <div style={{ color: 'var(--text-muted)' }}>Loading…</div>
   if (raise.isError) return <div style={{ color: 'var(--red-text)' }}>{errMsg(raise.error)}</div>
   const r = raise.data!
-  const pct = r.target > 0 ? Math.min(100, Math.round((r.committed / r.target) * 100)) : 0
+  const pipeline = r.pipeline ?? 0
+  const committedPct = r.target > 0 ? Math.min(100, (r.committed / r.target) * 100) : 0
+  const pipelinePct = r.target > 0 ? Math.min(100 - committedPct, (pipeline / r.target) * 100) : 0
 
   return (
     <div style={{ display: 'grid', gap: 18 }}>
       <div className="card">
         <div className="section-label">Raise progress</div>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)' }}>{fmtMoney(r.committed)}</span>
-          <span style={{ color: 'var(--text-muted)' }}>committed of {fmtMoney(r.target)} target</span>
-          <span className="badge badge-crimson" style={{ marginLeft: 'auto' }}>{pct}%</span>
+        <div style={{ display: 'flex', gap: 22, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: .6 }}>Target</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)' }}>{fmtMoney(r.target)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: .6 }}>Committed (signed)</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{fmtMoney(r.committed)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-hint)', textTransform: 'uppercase', letterSpacing: .6 }}>In pipeline</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-muted)' }}>{fmtMoney(pipeline)}</div>
+          </div>
+          <span className="badge badge-crimson" style={{ marginLeft: 'auto', alignSelf: 'center' }}>{Math.round(committedPct)}% signed</span>
         </div>
-        <div style={{ height: 10, background: 'var(--bg-elevated)', borderRadius: 6, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)' }} />
+        {/* Solid = signed money; hatched = still in play (never mistaken for closed). */}
+        <div style={{ height: 12, background: 'var(--bg-elevated)', borderRadius: 6, overflow: 'hidden', display: 'flex' }}>
+          <div style={{ width: `${committedPct}%`, height: '100%', background: 'var(--accent)' }} />
+          <div style={{
+            width: `${pipelinePct}%`, height: '100%',
+            background: 'repeating-linear-gradient(45deg, rgba(192,48,42,.28) 0, rgba(192,48,42,.28) 5px, rgba(192,48,42,.12) 5px, rgba(192,48,42,.12) 10px)',
+          }} />
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-hint)', marginTop: 8 }}>From CRM fundraising deals (lost excluded). Manage in CRM → Pipeline.</div>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-hint)', marginTop: 8, flexWrap: 'wrap' }}>
+          <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: 'var(--accent)', marginRight: 5 }} />Committed (signed)</span>
+          <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: 'repeating-linear-gradient(45deg, rgba(192,48,42,.28) 0, rgba(192,48,42,.28) 3px, rgba(192,48,42,.12) 3px, rgba(192,48,42,.12) 6px)', marginRight: 5 }} />In pipeline (open)</span>
+          <span style={{ marginLeft: 'auto' }}>From CRM fundraising deals (lost excluded). Manage in CRM → Pipeline.</span>
+        </div>
       </div>
 
       <div className="card">

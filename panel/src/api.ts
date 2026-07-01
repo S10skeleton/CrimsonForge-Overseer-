@@ -161,7 +161,7 @@ export interface Revenue { mrr: number; arr: number; activeSubs: number; newThis
 export interface MrrPoint { snapshot_date: string; mrr: number; arr: number; active_subs: number; new_subs: number; churned_subs: number }
 export interface FinEntry { id: string; month: string; type: string; category: string | null; label: string | null; amount: number; notes: string | null; created_by: string | null; created_at: string }
 export interface Runway { cashOnHand: number | null; avgMonthlyBurn: number | null; runwayMonths: number | null }
-export interface RaiseProgress { target: number; committed: number; byStage: Array<{ stage: string; count: number; amount: number }>; deals: Array<{ id: string; name: string; company_id: string; stage: string; amount: number | null; status: string }> }
+export interface RaiseProgress { target: number; committed: number; pipeline: number; byStage: Array<{ stage: string; count: number; amount: number }>; deals: Array<{ id: string; name: string; company_id: string; stage: string; amount: number | null; status: string }> }
 
 export interface CapSecurity { id: string; holder_name: string; holder_type: string; security_class: string; crm_company_id: string | null; shares: number | null; pct: number | null; issued: boolean; notes: string | null; computedPct?: number | null }
 export interface CapSafe { id: string; investor_name: string; crm_company_id: string | null; instrument_type: string; amount: number; valuation_cap: number | null; discount_pct: number | null; mfn: boolean; pro_rata: boolean; date_signed: string | null; status: string; notes: string | null }
