@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useIdleLogout } from '../lib/useIdleLogout'
 import { usePermissions, canViewArea } from '../lib/permissions'
 
-interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean; ownerOnly?: boolean; permKey?: string }
+interface Leaf { to: string; label: string; glyph: string; adminOnly?: boolean; ownerOnly?: boolean; permKey?: string; anyPermKeys?: string[] }
 interface Section { id: string; label: string; accent?: string; online?: boolean; items: Leaf[] }
 
 // ─── Function-based information architecture (Overseer 2.0) ──────────────────
@@ -18,10 +18,10 @@ const ELARA: Section = {
 
 const SECTIONS: Section[] = [
   {
+    // One CRM entry — CrmLayout's in-page tabs own all sub-nav (Leads/Pipeline/
+    // Companies/Table/Phone/Inboxes). Shown if any CRM area is viewable.
     id: 'crm', label: 'CRM', items: [
-      { to: '/crm/leads',     label: 'Leads',     glyph: '◇', permKey: 'crm.leads' },
-      { to: '/crm/pipeline',  label: 'Pipeline',  glyph: '▤', permKey: 'crm.pipeline' },
-      { to: '/crm/companies', label: 'Companies', glyph: '◉', permKey: 'crm.companies' },
+      { to: '/crm', label: 'CRM', glyph: '◇', anyPermKeys: ['crm.leads', 'crm.pipeline', 'crm.companies', 'crm.phone'] },
     ],
   },
   {
@@ -92,7 +92,9 @@ export default function Panel({ role, onLogout, onIdleLogout }: Props) {
 
   // A nav leaf shows if the role/permission allows it (owner sees everything).
   const visible = (it: Leaf) =>
-    (!it.adminOnly || role !== 'read_only') && (!it.ownerOnly || role === 'owner') && (!it.permKey || canViewArea(permissions, role, it.permKey))
+    (!it.adminOnly || role !== 'read_only') && (!it.ownerOnly || role === 'owner') &&
+    (!it.permKey || canViewArea(permissions, role, it.permKey)) &&
+    (!it.anyPermKeys || it.anyPermKeys.some(k => canViewArea(permissions, role, k)))
 
   const allLeaves: Leaf[] = [HOME_LEAF, ...ELARA.items, ...SECTIONS.flatMap(s => s.items)]
   const firstVisible = allLeaves.find(visible)?.to ?? '/home'
