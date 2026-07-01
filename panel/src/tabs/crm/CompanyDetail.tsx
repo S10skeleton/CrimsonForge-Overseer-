@@ -94,7 +94,7 @@ export default function CompanyDetail({ role }: { role: string }) {
               <div key={c.id} style={{ padding: '8px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.name}{c.is_primary && <span className="badge badge-dim" style={{ marginLeft: 6, fontSize: 9 }}>primary</span>}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}><Link to={`/crm/contacts/${c.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{c.name}</Link>{c.is_primary && <span className="badge badge-dim" style={{ marginLeft: 6, fontSize: 9 }}>primary</span>}</div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-hint)' }}>{[c.title, c.email, c.phone].filter(Boolean).join(' · ') || '—'}</div>
                   </div>
                   {c.phone && (
