@@ -23,6 +23,7 @@ import fpRouter from './routes/fp.js'
 import elaraChatRouter from './routes/elara-chat.js'
 import quoRouter from './routes/quo.js'
 import quoWebhookRouter from './routes/quo-webhook.js'
+import mobileRouter from './routes/mobile.js'
 
 export function createApiServer(): express.Express {
   const app = express()
@@ -96,6 +97,7 @@ export function createApiServer(): express.Express {
   app.use('/api/voice', voiceRouter)
   app.use('/api/files', filesRouter)
   app.use('/api/fp', area('customers'), fpRouter)
+  app.use('/api/mobile', mobileRouter)             // mobile companion (triage) — owner/admin gate internal
 
   // ── 404 ─────────────────────────────────────────────────────────────────────
 
