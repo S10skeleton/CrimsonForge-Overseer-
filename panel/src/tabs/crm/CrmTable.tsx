@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { api } from '../../api'
 import type { CrmFilter, CrmSavedView, ViewConfig } from '../../api'
 import { useToast } from '../../components/Toast'
+import { useConfirm } from '../../components/ConfirmDialog'
 import { usePermissions, canManage } from '../../lib/permissions'
 import { useFields } from './CustomFields'
 import { COMPANY_TYPES } from './crmShared'
@@ -77,7 +78,7 @@ const fmtMoney = (n: unknown) => { const x = Number(n); return Number.isNaN(x) ?
 export default function CrmTable() {
   const { permissions, role } = usePermissions()
   const navigate = useNavigate()
-  const qc = useQueryClient(); const toast = useToast()
+  const qc = useQueryClient(); const toast = useToast(); const confirm = useConfirm()
   const [object, setObject] = useState<Obj>(() => (localStorage.getItem('crm_table_object') as Obj) || 'companies')
   const mayManage = canManage(permissions, role, object === 'deals' ? 'crm.pipeline' : 'crm.companies')
 
@@ -115,6 +116,7 @@ export default function CrmTable() {
   }
 
   const columns = (config.columns ?? DEFAULT_COLS[object]).map(k => colByKey.get(k)).filter(Boolean) as Col[]
+  const singular = object === 'companies' ? 'company' : object === 'contacts' ? 'contact' : 'deal'
   const dataQ = useQuery({
     queryKey: ['crm', 'query', object, config.filters, config.sort, page, config.pageSize],
     queryFn: () => api.crm.query(object, { filters: config.filters, sort: config.sort, page, pageSize: config.pageSize ?? 50 }),
@@ -133,6 +135,24 @@ export default function CrmTable() {
     mutationFn: ({ id, col, value }: { id: string; col: Col; value: unknown }) =>
       patch(id, col.key.startsWith('custom.') ? { custom: { [col.key.slice(7)]: value } } : { [col.key]: value }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['crm', 'query', object] }); toast.success('Saved') },
+    onError: (e) => toast.error(errMsg(e)),
+  })
+
+  // Row delete (re-parents children server-side) + merge duplicates (CRM-FIX2).
+  const canMerge = object !== 'deals' // merge is contacts|companies only
+  const colSpan = columns.length + (canMerge && mayManage ? 1 : 0) + (mayManage ? 1 : 0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  useEffect(() => { setSelected(new Set()) }, [object, page, config.filters])
+  const toggleSel = (id: string) => setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
+  const delRow = useMutation({
+    mutationFn: (id: string) => object === 'companies' ? api.crm.deleteCompany(id) : object === 'contacts' ? api.crm.deleteContact(id) : api.crm.deleteDeal(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['crm', 'query', object] }); toast.success('Deleted') },
+    onError: (e) => toast.error(errMsg(e)),
+  })
+  const mergeRows = useMutation({
+    mutationFn: ({ keepId, mergeId }: { keepId: string; mergeId: string }) => api.crm.merge(object as 'companies' | 'contacts', keepId, mergeId),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['crm', 'query', object] }); setSelected(new Set()); toast.success('Merged') },
     onError: (e) => toast.error(errMsg(e)),
   })
 
@@ -214,30 +234,59 @@ export default function CrmTable() {
       {/* Filter builder */}
       {showFilter && <FilterBar cols={allCols} filters={config.filters ?? []} onChange={f => setCfg({ filters: f })} />}
 
+      {/* Merge bar — appears when exactly two rows are selected (companies/contacts) */}
+      {canMerge && mayManage && selected.size > 0 && (
+        <MergeBar
+          selected={rows.filter(r => selected.has(String(r.id)))}
+          object={object}
+          busy={mergeRows.isPending}
+          onClear={() => setSelected(new Set())}
+          onMerge={(keepId, mergeId) => mergeRows.mutate({ keepId, mergeId })}
+        />
+      )}
+
       {/* Table */}
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
+                {canMerge && mayManage && <th style={{ width: 30 }}></th>}
                 {columns.map(c => (
                   <th key={c.key} onClick={() => toggleSort(c.key)} style={{ cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     {c.label}{config.sort?.field === c.key ? (config.sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
                   </th>
                 ))}
+                {mayManage && <th style={{ width: 40 }}></th>}
               </tr>
             </thead>
             <tbody>
-              {dataQ.isLoading && <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Loading…</td></tr>}
-              {!dataQ.isLoading && rows.length === 0 && <tr><td colSpan={columns.length} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No rows.</td></tr>}
-              {rows.map(r => (
-                <tr key={String(r.id)}>
+              {dataQ.isLoading && <tr><td colSpan={colSpan} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Loading…</td></tr>}
+              {!dataQ.isLoading && rows.length === 0 && <tr><td colSpan={colSpan} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>No rows.</td></tr>}
+              {rows.map(r => {
+                const id = String(r.id)
+                return (
+                <tr key={id} style={selected.has(id) ? { background: 'rgba(89,73,172,.06)' } : undefined}>
+                  {canMerge && mayManage && (
+                    <td style={{ width: 30 }} onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" style={{ width: 'auto' }} checked={selected.has(id)} onChange={() => toggleSel(id)} title="Select to merge" />
+                    </td>
+                  )}
                   {columns.map(c => (
                     <Cell key={c.key} col={c} row={r} mayManage={mayManage} link={c.link ? rowLink(r) : null}
-                      onNav={(to) => navigate(to)} onSave={(value) => editCell.mutate({ id: String(r.id), col: c, value })} />
+                      onNav={(to) => navigate(to)} onSave={(value) => editCell.mutate({ id, col: c, value })} />
                   ))}
+                  {mayManage && (
+                    <td style={{ width: 40, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red-text)', padding: '2px 7px' }} title="Delete row"
+                        onClick={async () => {
+                          const label = String(r.name ?? id)
+                          if (await confirm({ title: `Delete ${singular}?`, body: `“${label}” will be removed. Its history (activities, deals) is kept and detached, not deleted.`, confirmLabel: 'Delete', danger: true })) delRow.mutate(id)
+                        }}>✕</button>
+                    </td>
+                  )}
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -304,6 +353,48 @@ function CellEditor({ col, value, onCommit, onCancel }: { col: Col; value: unkno
   )
   const inputType = col.type === 'number' || col.type === 'currency' ? 'number' : col.type === 'date' ? 'date' : 'text'
   return <input autoFocus type={inputType} value={draft ?? ''} onChange={e => setDraft(inputType === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)} onBlur={commit} onKeyDown={key} style={{ minWidth: 120 }} />
+}
+
+// ── Merge bar ────────────────────────────────────────────────────────────────
+// Select exactly two rows → pick which to keep → the other's history moves onto
+// the keeper, blank fields fill in, and the duplicate is removed.
+function MergeBar({ selected, object, busy, onClear, onMerge }: {
+  selected: Record<string, unknown>[]; object: Obj; busy: boolean
+  onClear: () => void; onMerge: (keepId: string, mergeId: string) => void
+}) {
+  const [keepId, setKeepId] = useState<string>(String(selected[0]?.id ?? ''))
+  const two = selected.length === 2
+  const name = (r: Record<string, unknown>) => String(r.name ?? r.id)
+  const valid = two && selected.some(r => String(r.id) === keepId)
+
+  return (
+    <div className="card" style={{ marginBottom: 12, padding: 12, borderColor: 'var(--elara)' }}>
+      {!two ? (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          Select <strong>two</strong> {object} to merge ({selected.length} selected).
+          <button className="btn btn-ghost btn-sm" onClick={onClear} style={{ marginLeft: 'auto' }}>Clear</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>Merge — keep:</span>
+          {selected.map(r => (
+            <label key={String(r.id)} style={{ display: 'inline-flex', gap: 5, alignItems: 'center', fontSize: 13 }}>
+              <input type="radio" name="mergekeep" style={{ width: 'auto' }} checked={keepId === String(r.id)} onChange={() => setKeepId(String(r.id))} />
+              {name(r)}
+            </label>
+          ))}
+          <span style={{ fontSize: 12, color: 'var(--text-hint)' }}>· the other’s activities/deals move to the keeper; blanks filled; duplicate removed</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost btn-sm" onClick={onClear}>Cancel</button>
+            <button className="btn btn-primary btn-sm" disabled={!valid || busy}
+              onClick={() => { const merge = selected.find(r => String(r.id) !== keepId); if (merge) onMerge(keepId, String(merge.id)) }}>
+              {busy ? 'Merging…' : 'Merge'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── Filter bar ───────────────────────────────────────────────────────────────

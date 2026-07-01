@@ -99,6 +99,10 @@ router.patch('/companies/:id', async (req: AuthRequest, res) => {
 
 router.delete('/companies/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
+  // Re-parent children to null rather than cascade-destroy the company's history.
+  await overseerDb.from('crm_contacts').update({ company_id: null }).eq('company_id', id)
+  await overseerDb.from('crm_deals').update({ company_id: null }).eq('company_id', id)
+  await overseerDb.from('crm_activities').update({ company_id: null }).eq('company_id', id)
   const { error } = await overseerDb.from('crm_companies').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete company' }); return }
   audit(req, { action: 'crm.company_delete', targetType: 'crm_company', targetId: id })
@@ -143,10 +147,60 @@ router.patch('/contacts/:id', async (req: AuthRequest, res) => {
 
 router.delete('/contacts/:id', async (req: AuthRequest, res) => {
   const id = String(req.params.id)
+  // Keep the contact's activity history — just detach it.
+  await overseerDb.from('crm_activities').update({ contact_id: null }).eq('contact_id', id)
   const { error } = await overseerDb.from('crm_contacts').delete().eq('id', id)
   if (error) { res.status(500).json({ error: 'Could not delete contact' }); return }
   audit(req, { action: 'crm.contact_delete', targetType: 'crm_contact', targetId: id })
   res.json({ data: { ok: true } })
+})
+
+// ─── Merge duplicates (CRM-FIX2) — POST /:object/merge {keepId, mergeId} ──────
+// object ∈ companies|contacts. Reparents children onto the keeper, fills blank
+// fields from the merged record, then deletes the merged record. Manage-gated
+// via crmGuard (POST → manage on crm.companies). Audited.
+router.post('/:object/merge', async (req: AuthRequest, res) => {
+  const object = String(req.params.object)
+  if (object !== 'companies' && object !== 'contacts') { res.status(404).json({ error: 'Unknown object' }); return }
+  const { keepId, mergeId } = req.body as { keepId?: string; mergeId?: string }
+  if (!keepId || !mergeId || keepId === mergeId) { res.status(400).json({ error: 'keepId and a different mergeId required' }); return }
+
+  const table = object === 'companies' ? 'crm_companies' : 'crm_contacts'
+  const { data: keep } = await overseerDb.from(table).select('*').eq('id', keepId).maybeSingle()
+  const { data: merge } = await overseerDb.from(table).select('*').eq('id', mergeId).maybeSingle()
+  if (!keep || !merge) { res.status(404).json({ error: 'Record not found' }); return }
+
+  const keepRow = keep as Record<string, unknown>
+  const mergeRow = merge as Record<string, unknown>
+
+  // Reparent children from mergeId → keepId.
+  if (object === 'companies') {
+    await overseerDb.from('crm_contacts').update({ company_id: keepId }).eq('company_id', mergeId)
+    await overseerDb.from('crm_deals').update({ company_id: keepId }).eq('company_id', mergeId)
+    await overseerDb.from('crm_activities').update({ company_id: keepId }).eq('company_id', mergeId)
+  } else {
+    await overseerDb.from('crm_activities').update({ contact_id: keepId }).eq('contact_id', mergeId)
+  }
+
+  // Fill blank fields on the keeper from the merged record (never overwrite).
+  const cols = object === 'companies'
+    ? ['website', 'notes', 'type', 'status', 'fp_shop_id', 'fp_customer_id', 'owner']
+    : ['email', 'phone', 'title', 'notes']
+  const blank = (v: unknown) => v === null || v === undefined || v === ''
+  const patch: Record<string, unknown> = {}
+  for (const c of cols) if (blank(keepRow[c]) && !blank(mergeRow[c])) patch[c] = mergeRow[c]
+  const keepCustom = (keepRow.custom as Record<string, unknown> | null) ?? {}
+  const mergeCustom = (mergeRow.custom as Record<string, unknown> | null) ?? {}
+  const mergedCustom: Record<string, unknown> = { ...keepCustom }
+  for (const k of Object.keys(mergeCustom)) if (blank(mergedCustom[k]) && !blank(mergeCustom[k])) mergedCustom[k] = mergeCustom[k]
+  if (Object.keys(mergedCustom).length) patch.custom = mergedCustom
+  if (Object.keys(patch).length) await overseerDb.from(table).update(patch).eq('id', keepId)
+
+  const { error } = await overseerDb.from(table).delete().eq('id', mergeId)
+  if (error) { res.status(500).json({ error: 'Reparented, but could not remove the duplicate' }); return }
+
+  audit(req, { action: 'crm.merge', targetType: object === 'companies' ? 'crm_company' : 'crm_contact', targetId: keepId, meta: { mergedId: mergeId, filled: Object.keys(patch) } })
+  res.json({ data: { ok: true, keepId } })
 })
 
 // ─── Deals ───────────────────────────────────────────────────────────────────

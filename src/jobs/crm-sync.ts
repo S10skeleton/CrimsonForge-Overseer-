@@ -39,30 +39,82 @@ function isBlocked(email: string, blocklist: Set<string>): boolean {
   return false
 }
 
+// ── Dedup helpers (CRM-FIX2) ────────────────────────────────────────────────
+// Normalize a website/domain for comparison: lowercase, strip scheme + www + path.
+function normalizeDomain(raw: string | null | undefined): string {
+  if (!raw) return ''
+  return String(raw).toLowerCase().trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+}
+// Loose first-name match between an email local-part and a contact's name, so a
+// synced "chris@…" attaches to a manual name-only "Christopher …" instead of
+// spawning a dupe. Conservative: prefix match on the leading token, ≥3 chars.
+function nameMatchesLocalPart(name: string | null | undefined, email: string): boolean {
+  const lp = (email.split('@')[0] || '').toLowerCase().split(/[._-]/)[0].replace(/[^a-z]/g, '')
+  if (lp.length < 3 || !name) return false
+  return name.toLowerCase().split(/[^a-z]+/).filter(Boolean)
+    .some((t) => t === lp || t.startsWith(lp) || lp.startsWith(t))
+}
+
 // ── Upserts ───────────────────────────────────────────────────────────────
 async function upsertCompanyByDomain(domain: string): Promise<string | null> {
   if (!domain || isFreeMail(domain) || isEspDomain(domain)) return null // never company-ify ESP/bulk (FIX 3)
-  const { data: existing } = await overseerDb
-    .from('crm_companies').select('id').or(`website.eq.${domain},name.eq.${domain}`).limit(1).maybeSingle()
-  if (existing) return existing.id
+  const d = normalizeDomain(domain)
+
+  // 1. Existing company whose website normalizes to this domain, or name == domain.
+  const { data: companies } = await overseerDb.from('crm_companies').select('id, website, name')
+  const byWebsite = (companies ?? []).find(
+    (c: { id: string; website: string | null; name: string | null }) =>
+      normalizeDomain(c.website) === d || (c.name ?? '').toLowerCase() === d,
+  )
+  if (byWebsite) { console.log(`[crm-sync] company match (website/name) ${d} → ${byWebsite.id}`); return byWebsite.id }
+
+  // 2. A company that already "owns" this domain via any contact's email — link,
+  //    don't create a second company for the same domain.
+  const { data: owners } = await overseerDb.from('crm_contacts').select('company_id, email').ilike('email', `%@${d}`)
+  const owner = (owners ?? []).find(
+    (ct: { company_id: string | null; email: string | null }) => ct.company_id && normalizeDomain(domainOf((ct.email ?? '').toLowerCase())) === d,
+  )
+  if (owner?.company_id) { console.log(`[crm-sync] company match (contact-owned) ${d} → ${owner.company_id}`); return owner.company_id }
+
+  // 3. Create a fresh company for a genuinely new domain.
   const { data, error } = await overseerDb.from('crm_companies').insert({
-    name: domain, type: 'prospect', website: domain, notes: 'Auto-created from email sync',
+    name: d, type: 'prospect', website: d, notes: 'Auto-created from email sync',
   }).select('id').single()
-  if (error) { console.error('[crm-sync] company upsert failed:', domain, error.message); return null }
+  if (error) { console.error('[crm-sync] company upsert failed:', d, error.message); return null }
+  console.log(`[crm-sync] company created ${d} → ${data.id}`)
   return data.id
 }
 
 async function upsertContact(party: Party, companyId: string | null): Promise<string | null> {
   const email = party.email
+
+  // 1. Exact email match — the canonical dedup.
   const { data: existing } = await overseerDb.from('crm_contacts').select('id, company_id').eq('email', email).limit(1).maybeSingle()
   if (existing) {
     if (companyId && !existing.company_id) await overseerDb.from('crm_contacts').update({ company_id: companyId }).eq('id', existing.id)
+    console.log(`[crm-sync] contact match (email) ${email} → ${existing.id}`)
     return existing.id
   }
+
+  // 2. No email match: if the company already has a name-only contact whose name
+  //    plausibly matches this local-part, attach the email to THAT contact.
+  if (companyId) {
+    const { data: nameOnly } = await overseerDb
+      .from('crm_contacts').select('id, name, email').eq('company_id', companyId).is('email', null)
+    const cand = (nameOnly ?? []).find((c: { id: string; name: string | null }) => nameMatchesLocalPart(c.name, email))
+    if (cand) {
+      await overseerDb.from('crm_contacts').update({ email }).eq('id', cand.id)
+      console.log(`[crm-sync] contact match (name↔local-part) ${email} → ${cand.id}`)
+      return cand.id
+    }
+  }
+
+  // 3. Create.
   const { data, error } = await overseerDb.from('crm_contacts').insert({
     company_id: companyId, name: party.name || email, email, is_primary: false,
   }).select('id').single()
   if (error) { console.error('[crm-sync] contact upsert failed:', email, error.message); return null }
+  console.log(`[crm-sync] contact created ${email} → ${data.id}`)
   return data.id
 }
 
