@@ -6,6 +6,11 @@ import AcceptInvite from './pages/AcceptInvite'
 import Panel from './pages/Panel'
 import { PermissionsProvider } from './lib/permissions'
 import AskElara from './components/AskElara'
+import { useIsMobile } from './mobile/useIsMobile'
+import MobileShell from './mobile/MobileShell'
+import PulseTab from './mobile/PulseTab'
+import TriageTab from './mobile/TriageTab'
+import ElaraMobileTab from './mobile/ElaraTab'
 import type { Permissions } from './lib/permissions'
 import { api } from './api'
 import Placeholder from './components/Placeholder'
@@ -113,10 +118,32 @@ export default function App() {
   // Manual logout — no reason flag (so Login shows no expiry message).
   const handleLogout = () => clearSession()
 
+  const isMobile = useIsMobile()
+
   if (checking) return null
 
   return (
     <Routes>
+      {/* Mobile companion (MOBILE-1) — small screens / installed PWA. Desktop
+          renders the panel below, unchanged. */}
+      <Route
+        path="/m"
+        element={
+          !token ? <Navigate to="/login" replace />
+            : mustChange ? <Navigate to="/reset" replace />
+            : (
+              <PermissionsProvider value={{ permissions, role }}>
+                <MobileShell role={role} onLogout={handleLogout} />
+              </PermissionsProvider>
+            )
+        }
+      >
+        <Route index element={<Navigate to="/m/pulse" replace />} />
+        <Route path="pulse" element={<PulseTab />} />
+        <Route path="triage" element={<TriageTab />} />
+        <Route path="elara" element={<ElaraMobileTab />} />
+      </Route>
+
       <Route
         path="/login"
         element={token ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />}
@@ -133,6 +160,7 @@ export default function App() {
         element={
           !token ? <Navigate to="/login" replace />
             : mustChange ? <Navigate to="/reset" replace />
+            : isMobile ? <Navigate to="/m/pulse" replace />
             : (
               <PermissionsProvider value={{ permissions, role }}>
                 <Panel role={role} onLogout={handleLogout} onIdleLogout={() => clearSession('idle')} />

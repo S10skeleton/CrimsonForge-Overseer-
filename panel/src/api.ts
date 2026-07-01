@@ -168,6 +168,9 @@ export interface CapSafe { id: string; investor_name: string; crm_company_id: st
 export interface CapSummary { totalIssuedShares: number; holders: CapSecurity[]; optionPoolReserved: number; fullyDilutedShares: number; outstandingSafes: { count: number; total: number; list: CapSafe[] } }
 export interface CapInvestor { id: string; name: string; type: string; owner: string | null; safes: CapSafe[]; outstandingTotal: number }
 
+export interface TriageItem { severity: 'critical' | 'warning' | 'info'; title: string; detail: string; source: string; actionUrl?: string }
+export interface TriageResult { items: TriageItem[]; briefing: { summary: string | null; date: string | null } | null; checkedAt: string }
+
 export interface HomeSummary {
   signupsThisWeek: number | null
   leads: { open: number | null; hot: number | null; total: number | null }
@@ -241,6 +244,10 @@ export const api = {
 
   home: {
     summary: () => request<HomeSummary>('/api/home/summary'),
+  },
+
+  mobile: {
+    triage: () => request<{ data: TriageResult }>('/api/mobile/triage').then(r => r.data),
   },
 
   financials: {
