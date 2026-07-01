@@ -132,7 +132,7 @@ export interface CrmFilter { field: string; op: string; value: unknown }
 export interface ViewConfig { columns?: string[]; filters?: CrmFilter[]; sort?: { field: string; dir: 'asc' | 'desc' }; group?: string | null; pageSize?: number }
 export interface CrmSavedView { id: string; object: string; name: string; owner: string | null; shared: boolean; is_default: boolean; config: ViewConfig; position: number }
 export interface CrmQueryResult { rows: Record<string, unknown>[]; total: number; page: number; pageSize: number }
-export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; created_at: string }
+export interface CrmSyncAccount { email: string; method: string; enabled: boolean; last_sync: string | null; last_error?: string | null; created_at: string }
 export interface CrmBlocklistEntry { id: string; pattern: string; reason: string | null; created_at: string }
 export interface CrmThreadMessage { id: string; from: string; to: string; date: string; subject: string; body: string }
 

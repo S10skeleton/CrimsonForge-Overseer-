@@ -13,6 +13,15 @@ import { useToast } from '../../components/Toast'
 import { useConfirm } from '../../components/ConfirmDialog'
 import { errMsg } from './crmShared'
 
+// Honest sync status from enabled + last_sync (CRM-FIX3) — no more permanent
+// "Syncing". Amber "Pending" = enabled but never completed a run.
+function syncBadge(a: { enabled: boolean; last_sync: string | null }): { label: string; cls: string; style?: React.CSSProperties } {
+  if (!a.enabled) return { label: 'Paused', cls: 'badge badge-dim' }
+  if (!a.last_sync) return { label: 'Pending', cls: 'badge', style: { background: 'rgba(217,119,6,.12)', color: 'var(--yellow)', borderColor: 'rgba(217,119,6,.3)' } }
+  const ageMin = (Date.now() - new Date(a.last_sync).getTime()) / 60000
+  return ageMin <= 90 ? { label: 'Synced', cls: 'badge badge-green' } : { label: 'Active', cls: 'badge badge-dim' }
+}
+
 export default function InboxesView({ role }: { role: string }) {
   const canManage = role === 'owner'
   const qc = useQueryClient(); const toast = useToast(); const confirm = useConfirm()
@@ -56,7 +65,10 @@ export default function InboxesView({ role }: { role: string }) {
                 <tr key={a.email}>
                   <td style={{ fontWeight: 600 }}>{a.email}</td>
                   <td><span className="badge badge-dim">{a.method}</span></td>
-                  <td><span className={`badge ${a.enabled ? 'badge-green' : 'badge-dim'}`}>{a.enabled ? 'Syncing' : 'Paused'}</span></td>
+                  <td>
+                    {(() => { const s = syncBadge(a); return <span className={s.cls} style={s.style}>{s.label}</span> })()}
+                    {a.last_error && <span title={a.last_error} style={{ marginLeft: 6, cursor: 'help' }}>⚠️</span>}
+                  </td>
                   <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{a.last_sync ? formatDistanceToNow(new Date(a.last_sync), { addSuffix: true }) : 'never'}</td>
                   <td>
                     {canManage && (

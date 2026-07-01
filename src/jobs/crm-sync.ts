@@ -145,41 +145,69 @@ async function resolveParties(parties: Party[], ourDomain: string, blocklist: Se
 }
 
 // ── Per-account sync ────────────────────────────────────────────────────────
+// Gmail and Calendar run in INDEPENDENT try/catch (CRM-FIX3): one failing — e.g.
+// calendar.readonly not authorized on the delegation, or a GOOGLE_CALENDAR_ID
+// typo — must not abort the other or skip the last_sync write. We ALWAYS advance
+// last_sync when the account was reached (even on partial success) so we stop
+// re-scanning 90 days every run (a driver of duplicates).
 async function syncAccount(acct: Account, ourDomain: string, blocklist: Set<string>): Promise<void> {
   const { gmail, calendar } = clientFor({ email: acct.email, method: acct.method })
   const sinceMs = acct.last_sync ? new Date(acct.last_sync).getTime() : Date.now() - FIRST_RUN_DAYS * 86400000
   const afterUnix = Math.floor(sinceMs / 1000)
+  const errors: string[] = []
 
-  // Gmail
-  const threads = await fetchThreads(gmail, acct.email, afterUnix)
-  for (const t of threads) {
-    // Junk filter — all must pass.
-    if (!t.sentByAccount) continue                       // 1. outbound participation
-    if (t.skipCategory) continue                         // 2. Primary only
-    if (t.automated) continue                            // 3. not automated/bulk
-    const external = t.participants.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
-    if (external.length === 0) continue                  // 5. external human present
-    if (external.every((p) => isBlocked(p.email, blocklist))) continue // 4. blocklist
-    const { contactId, companyId } = await resolveParties(t.participants, ourDomain, blocklist)
-    if (!contactId) continue
-    await logOnce('gmail', t.threadId, { type: 'email', subject: t.subject, body: t.snippet, contact_id: contactId, company_id: companyId, via: 'Gmail' })
+  // Gmail — isolated.
+  try {
+    const threads = await fetchThreads(gmail, acct.email, afterUnix)
+    for (const t of threads) {
+      // Junk filter — all must pass.
+      if (!t.sentByAccount) continue                       // 1. outbound participation
+      if (t.skipCategory) continue                         // 2. Primary only
+      if (t.automated) continue                            // 3. not automated/bulk
+      const external = t.participants.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
+      if (external.length === 0) continue                  // 5. external human present
+      if (external.every((p) => isBlocked(p.email, blocklist))) continue // 4. blocklist
+      const { contactId, companyId } = await resolveParties(t.participants, ourDomain, blocklist)
+      if (!contactId) continue
+      await logOnce('gmail', t.threadId, { type: 'email', subject: t.subject, body: t.snippet, contact_id: contactId, company_id: companyId, via: 'Gmail' })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    errors.push(`Gmail: ${msg}`)
+    console.error(`[crm-sync] ${acct.email} Gmail step failed:`, msg)
   }
 
-  // Calendar
-  const sinceIso = new Date(sinceMs).toISOString()
-  const events = await fetchEvents(calendar, sinceIso, sinceIso)
-  for (const e of events) {
-    if (!e.selfInvolved) continue                        // organizer or accepted
-    const external = e.attendees.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
-    if (external.length === 0) continue
-    if (external.every((p) => isBlocked(p.email, blocklist))) continue
-    const { contactId, companyId } = await resolveParties(e.attendees, ourDomain, blocklist)
-    if (!contactId) continue
-    const body = [e.location && `@ ${e.location}`, new Date(e.at).toLocaleString('en-US')].filter(Boolean).join(' · ')
-    await logOnce('calendar', e.eventId, { type: 'meeting', subject: e.title, body, contact_id: contactId, company_id: companyId, via: 'Calendar' })
+  // Calendar — isolated (calendar.readonly may be unauthorized on delegation).
+  try {
+    const sinceIso = new Date(sinceMs).toISOString()
+    const events = await fetchEvents(calendar, sinceIso, sinceIso)
+    for (const e of events) {
+      if (!e.selfInvolved) continue                        // organizer or accepted
+      const external = e.attendees.filter((p) => isExternal(p.email, ourDomain) && !isJunkSender(p.email))
+      if (external.length === 0) continue
+      if (external.every((p) => isBlocked(p.email, blocklist))) continue
+      const { contactId, companyId } = await resolveParties(e.attendees, ourDomain, blocklist)
+      if (!contactId) continue
+      const body = [e.location && `@ ${e.location}`, new Date(e.at).toLocaleString('en-US')].filter(Boolean).join(' · ')
+      await logOnce('calendar', e.eventId, { type: 'meeting', subject: e.title, body, contact_id: contactId, company_id: companyId, via: 'Calendar' })
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    errors.push(`Calendar: ${msg}`)
+    console.error(`[crm-sync] ${acct.email} Calendar step failed:`, msg)
   }
 
-  await overseerDb.from('crm_sync_accounts').update({ last_sync: new Date().toISOString() }).eq('email', acct.email)
+  // ALWAYS advance last_sync (even Gmail-only). Check the error (was unchecked).
+  const { error: upErr } = await overseerDb.from('crm_sync_accounts')
+    .update({ last_sync: new Date().toISOString() }).eq('email', acct.email)
+  if (upErr) console.error(`[crm-sync] ${acct.email} last_sync update failed:`, upErr.message)
+
+  // Best-effort: record the last error (or clear it) for the Inboxes ⚠️. Separate
+  // + result ignored so a not-yet-migrated last_error column can never block the
+  // last_sync write above.
+  await overseerDb.from('crm_sync_accounts')
+    .update({ last_error: errors.length ? errors.join(' · ') : null }).eq('email', acct.email)
+    .then(() => {}, () => {})
 }
 
 // ── Entry point (scheduled as crm_email_sync) ───────────────────────────────
