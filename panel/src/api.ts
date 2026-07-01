@@ -150,6 +150,7 @@ export interface CrmDeal {
 export interface CrmActivity { id: string; company_id: string; contact_id: string | null; deal_id: string | null; type: string; subject: string | null; body: string | null; due_at: string | null; done: boolean; created_by: string | null; created_at: string }
 export interface CrmPipeline { pipeline: string; stages: Array<{ stage: string; deals: CrmDeal[] }> }
 export interface CompanyDetail { company: CrmCompany; contacts: CrmContact[]; deals: CrmDeal[]; activities: CrmActivity[] }
+export interface ContactDetailData { contact: CrmContact; company: { id: string; name: string } | null; deals: CrmDeal[]; activities: CrmActivity[] }
 
 export interface QuoInbox { id: string; number: string; name?: string; label?: string; enabled?: boolean }
 export interface QuoThread { participant: string; lastText: string; lastAt: string; direction: string; count: number }
@@ -294,6 +295,7 @@ export const api = {
       return request<{ data: CrmCompany[]; meta: { next_cursor: string | null } }>(`/api/crm/companies${qs ? `?${qs}` : ''}`)
     },
     company: (id: string) => request<{ data: CompanyDetail }>(`/api/crm/companies/${id}`).then(r => r.data),
+    contact: (id: string) => request<{ data: ContactDetailData }>(`/api/crm/contacts/${id}`).then(r => r.data),
     createCompany: (c: Partial<CrmCompany>) => request<{ data: CrmCompany }>('/api/crm/companies', { method: 'POST', body: JSON.stringify(c) }).then(r => r.data),
     updateCompany: (id: string, c: Partial<CrmCompany>) => request(`/api/crm/companies/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
     deleteCompany: (id: string) => request(`/api/crm/companies/${id}`, { method: 'DELETE' }),

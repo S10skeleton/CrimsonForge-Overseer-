@@ -185,7 +185,8 @@ export default function CrmTable() {
 
   const rowLink = (r: Record<string, unknown>): string | null => {
     if (object === 'companies') return `/crm/companies/${r.id}`
-    return r.company_id ? `/crm/companies/${r.company_id}` : null
+    if (object === 'contacts') return `/crm/contacts/${r.id}`         // own detail page (P4b)
+    return r.company_id ? `/crm/companies/${r.company_id}` : null      // deals → company
   }
 
   return (

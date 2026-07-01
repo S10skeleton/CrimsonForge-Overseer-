@@ -155,6 +155,21 @@ router.delete('/contacts/:id', async (req: AuthRequest, res) => {
   res.json({ data: { ok: true } })
 })
 
+// Contact detail (P4b) — contact + its company chip + related deals + timeline.
+// Read-gated by crmGuard (contacts path → crm.companies view).
+router.get('/contacts/:id', async (req, res) => {
+  const id = String(req.params.id)
+  const { data: contact } = await overseerDb.from('crm_contacts').select('*').eq('id', id).maybeSingle()
+  if (!contact) { res.status(404).json({ error: 'Contact not found' }); return }
+  const companyId = (contact as { company_id: string | null }).company_id
+  const [company, deals, activities] = await Promise.all([
+    companyId ? overseerDb.from('crm_companies').select('id, name').eq('id', companyId).maybeSingle() : Promise.resolve({ data: null }),
+    companyId ? overseerDb.from('crm_deals').select('*').eq('company_id', companyId).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+    overseerDb.from('crm_activities').select('*').eq('contact_id', id).order('created_at', { ascending: false }).limit(100),
+  ])
+  res.json({ data: { contact, company: company.data ?? null, deals: deals.data ?? [], activities: activities.data ?? [] } })
+})
+
 // ─── Merge duplicates (CRM-FIX2) — POST /:object/merge {keepId, mergeId} ──────
 // object ∈ companies|contacts. Reparents children onto the keeper, fills blank
 // fields from the merged record, then deletes the merged record. Manage-gated
